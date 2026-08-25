@@ -1,7 +1,7 @@
 # CLAUDE.md — Restaurant POS System
 
 **Stack:** Laravel 12 (API + Inertia React back office) · React Native Expo (POS + KDS) · MySQL  
-**Hardware:** Intel NUC + TP-Link Deco M5 · Goojrpt PT-210 thermal printer  
+**Hardware:** Intel NUC + TP-Link Deco M5 · Goojrpt PT-210 thermal printer (Local Deployment after Development of the overall Application)
 **Real-time:** beyondcode/laravel-websockets  
 **Auth:** Laravel Sanctum
 
