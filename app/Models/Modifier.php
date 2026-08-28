@@ -7,29 +7,28 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
-class Item extends Model
+class Modifier extends Model
 {
     use HasFactory;
 
     protected $fillable = [
-        'category_id',
+        'modifier_group_id',
         'name',
-        'base_price',
-        'cost_price',
-        'quantity',
-        'reserved_quantity',
-        'image_url',
         'status',
     ];
 
-    public function category(): BelongsTo
+    protected $attributes = [
+        'status' => 'active',
+    ];
+
+    public function group(): BelongsTo
     {
-        return $this->belongsTo(Category::class);
+        return $this->belongsTo(ModifierGroup::class, 'modifier_group_id');
     }
 
-    public function modifiers(): BelongsToMany
+    public function items(): BelongsToMany
     {
-        return $this->belongsToMany(Modifier::class)
+        return $this->belongsToMany(Item::class)
             ->withPivot(['price_modifier', 'status', 'display_order'])
             ->withTimestamps();
     }
