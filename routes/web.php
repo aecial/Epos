@@ -11,6 +11,10 @@ Route::middleware(['auth'])->group(function () {
     Route::get('dashboard', function () {
         return Inertia::render('dashboard');
     })->name('dashboard');
+
+    Route::get('back-office', function () {
+        return Inertia::render('backOffice');
+    })->name('back-office');
 });
 
 require __DIR__.'/settings.php';
