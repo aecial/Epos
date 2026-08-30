@@ -12,6 +12,11 @@ class User extends Authenticatable
     /** @use HasFactory<\Database\Factories\UserFactory> */
     use HasFactory, Notifiable;
 
+    public function isAdminOrManager(): bool
+    {
+        return in_array($this->role, ['admin', 'manager'], true);
+    }
+
     /**
      * The attributes that are mass assignable.
      *

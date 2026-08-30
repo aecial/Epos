@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Category\CategoryController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -15,6 +16,10 @@ Route::middleware(['auth'])->group(function () {
     Route::get('back-office', function () {
         return Inertia::render('backOffice');
     })->name('back-office');
+
+
+    Route::get('category', [CategoryController::class, 'getCategories']);
+    Route::get('category/{category}', [CategoryController::class, 'getCategory']);
 });
 
 require __DIR__.'/settings.php';
