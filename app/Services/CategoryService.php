@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use App\Http\Requests\Category\UpdateCategoryRequest;
 use App\Models\Category;
 
 class CategoryService
@@ -22,9 +21,9 @@ class CategoryService
         return $category;
     }
 
-    public function UpdateCategory(UpdateCategoryRequest $request, Category $category)
+    public function UpdateCategory(array $data, Category $category)
     {
-        $category->update($request->validated());
+        $category->update($data);
 
         return $category;
     }

@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Category;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Category\CreateCategoryRequest;
+use App\Http\Requests\Category\UpdateCategoryRequest;
 use App\Models\Category;
 use App\Services\CategoryService;
 
@@ -23,5 +25,19 @@ class CategoryController extends Controller
     public function getCategory(Category $category)
     {
         return $this->categoryService->ReadCategory($category);
+    }
+    public function createCategory(CreateCategoryRequest $request)
+    {
+        return $this->categoryService->CreateCategory($request->validated());
+    }
+
+    public function updateCategory(Category $category, UpdateCategoryRequest $request)
+    {
+        return $this->categoryService->UpdateCategory($request->validated(), $category);
+    }
+
+    public function deleteCategory(Category $category)
+    {
+        return $this->categoryService->DeleteCategory($category);
     }
 }
