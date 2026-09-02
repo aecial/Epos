@@ -2,17 +2,16 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Requests\CreateItemRequest;
-use App\Http\Requests\UpdateItemRequest;
+use App\Http\Requests\Item\CreateItemRequest;
+use App\Http\Requests\Item\UpdateItemRequest;
 use App\Models\Item;
 use App\Services\ItemService;
-use Illuminate\Http\Request;
 
 class ItemController extends Controller
 {
     protected ItemService $itemService;
 
-    public function _construct(ItemService $itemService) {
+    public function __construct(ItemService $itemService) {
     $this->itemService = $itemService;
     }
 
