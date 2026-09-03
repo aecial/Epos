@@ -1,6 +1,6 @@
 <?php
 
-use App\Http\Controllers\Category\CategoryController;
+use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\ItemController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;

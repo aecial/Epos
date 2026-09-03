@@ -1,6 +1,6 @@
 <?php
 
-use App\Http\Controllers\Category\CategoryController;
+use App\Http\Controllers\CategoryController;
 use App\Http\Requests\Category\CreateCategoryRequest;
 use App\Http\Requests\Category\UpdateCategoryRequest;
 use App\Models\Category;

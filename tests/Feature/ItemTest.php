@@ -5,7 +5,7 @@ use App\Models\Category;
 use App\Models\Item;
 use App\Models\User;
 
-function authorizeCategoryRequest(string $role): bool
+function authorizeItemRequest(string $role): bool
 {
     $user = User::factory()->create(['role' => $role]);
     auth()->setUser($user);
@@ -43,8 +43,8 @@ test('admin can read a single item', function () {
         ->assertJsonPath('name', 'Fried Itik');
 });
 test('admin and manager can authorize item route request', function() {
-    expect(authorizeCategoryRequest('admin'))->toBeTrue()->and(authorizeCategoryRequest('manager'))->toBeTrue();
+    expect(authorizeItemRequest('admin'))->toBeTrue()->and(authorizeItemRequest('manager'))->toBeTrue();
 });
 test('cashier cant authorize an item route request', function() {
-    expect(authorizeCategoryRequest('cashier'))->toBeFalse();
+    expect(authorizeItemRequest('cashier'))->toBeFalse();
 });
