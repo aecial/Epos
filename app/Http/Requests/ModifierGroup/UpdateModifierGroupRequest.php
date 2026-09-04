@@ -1,11 +1,11 @@
 <?php
 
-namespace App\Http\Requests\Modifier;
+namespace App\Http\Requests\ModifierGroup;
 
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 
-class UpdateModifierRequest extends FormRequest
+class UpdateModifierGroupRequest extends FormRequest
 {
     /**
      * Determine if the user is authorized to make this request.
@@ -23,9 +23,8 @@ class UpdateModifierRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'item_id' => ['sometimes', 'exists:items,id'],
-            'name' => ['sometimes', 'string', 'max:255'],
-            'status' => ['sometimes', 'in:active,inactive'],
+            'name' => ['sometimes', 'string', 'max:255', 'unique:modifier_groups,name'],
+            'is_required' => ['sometimes', 'boolean'],
         ];
     }
 }
