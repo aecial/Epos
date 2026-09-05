@@ -23,7 +23,7 @@ class UpdateModifierRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'item_id' => ['sometimes', 'exists:items,id'],
+            'modifier_group_id' => ['sometimes', 'nullable', 'exists:modifier_groups,id'],
             'name' => ['sometimes', 'string', 'max:255'],
             'status' => ['sometimes', 'in:active,inactive'],
         ];

@@ -23,7 +23,7 @@ class CreateModifierRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'item_id' => ['required', 'exists:items,id'],
+            'modifier_group_id' => ['nullable', 'exists:modifier_groups,id'],
             'name' => ['required', 'string', 'max:255'],
             'status' => ['sometimes', 'in:active,inactive'],
         ];
