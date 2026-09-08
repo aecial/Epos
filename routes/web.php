@@ -21,8 +21,8 @@ Route::middleware(['auth'])->group(function () {
     })->name('back-office');
 
 
-    Route::get('category', [CategoryController::class, 'getCategories']);
-    Route::get('category/{category}', [CategoryController::class, 'getCategory']);
+    Route::get('categories', [CategoryController::class, 'getCategories']);
+    Route::get('categories/{category}', [CategoryController::class, 'getCategory']);
     Route::get('items', [ItemController::class, 'getItems']);
     Route::get('items/{item}', [ItemController::class, 'getItem']);
 
