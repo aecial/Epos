@@ -88,7 +88,7 @@ export default function CategoryManagementPage({ categories }: { categories: Cat
                                 return (
                                     <TableRow key={category.id}>
                                         <TableCell className="font-medium">{category.id}</TableCell>
-                                        <TableCell>{category.name}</TableCell>
+                                        <TableCell className="uppercase">{category.name}</TableCell>
                                         <TableCell className="text-right">{category.items_count ?? 0}</TableCell>
                                         <TableCell>
                                             <button
