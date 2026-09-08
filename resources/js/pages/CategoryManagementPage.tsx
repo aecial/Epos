@@ -22,7 +22,7 @@ type CategoryStatus = 'active' | 'inactive';
 type Category = {
     id: number;
     name: string;
-    itemCount: number;
+    itemCount?: number;
     status: CategoryStatus;
     visibleToPos: boolean;
 };
