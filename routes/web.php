@@ -4,6 +4,7 @@ use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\ItemController;
 use App\Http\Controllers\ModifierController;
 use App\Http\Controllers\ModifierGroupController;
+use App\Models\Category;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -20,7 +21,9 @@ Route::middleware(['auth'])->group(function () {
         return Inertia::render('backOffice');
     })->name('back-office');
     Route::get('category-management', function () {
-        return Inertia::render('CategoryManagementPage');
+        return Inertia::render('CategoryManagementPage', [
+            'categories' => Category::withCount('items')->get(),
+        ]);
     })->name('category-management');
         Route::get('item-management', function () {
         return Inertia::render('ItemManagementPage');
@@ -28,9 +31,13 @@ Route::middleware(['auth'])->group(function () {
         Route::get('modifier-management', function () {
         return Inertia::render('ModifierManagementPage');
     })->name('modifier-management');
+    Route::get('create-category', function () {
+        return Inertia::render('CreateCategoryPage');
+    })->name('create-category');
 
 
     Route::get('categories', [CategoryController::class, 'getCategories']);
+    Route::post('categories', [CategoryController::class, 'createCategory'])->name('categories');
     Route::get('categories/{category}', [CategoryController::class, 'getCategory']);
     Route::get('items', [ItemController::class, 'getItems']);
     Route::get('items/{item}', [ItemController::class, 'getItem']);

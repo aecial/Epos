@@ -2,7 +2,7 @@ import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
-import { Head } from '@inertiajs/react';
+import { Head, Link } from '@inertiajs/react';
 import { Pencil, Plus, Search, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
@@ -22,17 +22,10 @@ type CategoryStatus = 'active' | 'inactive';
 type Category = {
     id: number;
     name: string;
-    itemCount?: number;
+    items_count?: number;
     status: CategoryStatus;
-    visibleToPos: boolean;
+    is_visible_to_pos: boolean;
 };
-
-const categories: Category[] = [
-    { id: 1, name: 'Burgers', itemCount: 8, status: 'active', visibleToPos: true },
-    { id: 2, name: 'Beverages', itemCount: 6, status: 'active', visibleToPos: true },
-    { id: 3, name: 'Side Dishes', itemCount: 5, status: 'active', visibleToPos: true },
-    { id: 4, name: 'Desserts', itemCount: 4, status: 'inactive', visibleToPos: false },
-];
 
 function SearchInput({ value, onChange }: { value: string; onChange: (value: string) => void }) {
     return (
@@ -43,16 +36,19 @@ function SearchInput({ value, onChange }: { value: string; onChange: (value: str
     );
 }
 
-export default function CategoryManagementPage() {
+export default function CategoryManagementPage({ categories }: { categories: Category[] }) {
     const [search, setSearch] = useState('');
     const [statuses, setStatuses] = useState<Record<number, CategoryStatus>>(
         Object.fromEntries(categories.map((category) => [category.id, category.status])),
     );
     const [visibility, setVisibility] = useState<Record<number, boolean>>(
-        Object.fromEntries(categories.map((category) => [category.id, category.visibleToPos])),
+        Object.fromEntries(categories.map((category) => [category.id, category.is_visible_to_pos])),
     );
 
-    const filteredCategories = useMemo(() => categories.filter((category) => category.name.toLowerCase().includes(search.toLowerCase())), [search]);
+    const filteredCategories = useMemo(
+        () => categories.filter((category) => category.name.toLowerCase().includes(search.toLowerCase())),
+        [categories, search],
+    );
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -65,13 +61,13 @@ export default function CategoryManagementPage() {
                                 <TableHead colSpan={6}>
                                     <div className="flex items-center justify-between gap-4">
                                         <SearchInput value={search} onChange={setSearch} />
-                                        <button
-                                            type="button"
+                                        <Link
+                                            href={route('create-category')}
                                             className="bg-primary text-primary-foreground hover:bg-primary/80 inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium"
                                         >
                                             <Plus className="size-4" />
                                             Add New
-                                        </button>
+                                        </Link>
                                     </div>
                                 </TableHead>
                             </TableRow>
@@ -93,7 +89,7 @@ export default function CategoryManagementPage() {
                                     <TableRow key={category.id}>
                                         <TableCell className="font-medium">{category.id}</TableCell>
                                         <TableCell>{category.name}</TableCell>
-                                        <TableCell className="text-right">{category.itemCount}</TableCell>
+                                        <TableCell className="text-right">{category.items_count ?? 0}</TableCell>
                                         <TableCell>
                                             <button
                                                 type="button"

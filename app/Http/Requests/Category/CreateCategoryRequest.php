@@ -2,8 +2,9 @@
 
 namespace App\Http\Requests\Category;
 
-use Illuminate\Contracts\Validation\ValidationRule;
+use App\Models\User;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Support\Facades\Auth;
 
 class CreateCategoryRequest extends FormRequest
 {
@@ -13,7 +14,10 @@ class CreateCategoryRequest extends FormRequest
 
     public function authorize(): bool
     {
-        return auth()->check() && auth()->user()->isAdminOrManager();
+        /** @var User|null $user */
+        $user = Auth::user();
+
+        return $user?->isAdminOrManager() ?? false;
     }
 
     /**
@@ -24,8 +28,8 @@ class CreateCategoryRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'name' => ['required', 'string', 'max:255', 'unique:categories, name'],
-            'status'=> ['sometimes', 'in:active, inactive'],
+            'name' => ['required', 'string', 'max:255', 'unique:categories,name'],
+            'status' => ['sometimes', 'in:active,inactive'],
             'is_visible_to_pos' => ['sometimes', 'boolean']
         ];
     }

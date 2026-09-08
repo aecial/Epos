@@ -27,7 +27,9 @@ class CategoryController extends Controller
     }
     public function createCategory(CreateCategoryRequest $request)
     {
-        return $this->categoryService->CreateCategory($request->validated());
+        $this->categoryService->CreateCategory($request->validated());
+
+        return redirect()->route('category-management');
     }
 
     public function updateCategory(Category $category, UpdateCategoryRequest $request)
