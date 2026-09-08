@@ -113,8 +113,8 @@ export default function BackOffice() {
                                     <TableCell className="font-medium">{item.id}</TableCell>
                                     <TableCell>{item.category}</TableCell>
                                     <TableCell>{item.name}</TableCell>
-                                    <TableCell className="text-right">${item.base_price.toFixed(2)}</TableCell>
-                                    <TableCell className="text-right">${item.cost_price.toFixed(2)}</TableCell>
+                                    <TableCell className="text-right">₱{item.base_price.toFixed(2)}</TableCell>
+                                    <TableCell className="text-right">₱{item.cost_price.toFixed(2)}</TableCell>
                                     <TableCell className="text-right">
                                         {(((item.base_price - item.cost_price) / item.base_price) * 100).toFixed(2)}%
                                     </TableCell>
