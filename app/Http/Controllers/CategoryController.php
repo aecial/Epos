@@ -34,7 +34,9 @@ class CategoryController extends Controller
 
     public function updateCategory(Category $category, UpdateCategoryRequest $request)
     {
-        return $this->categoryService->UpdateCategory($request->validated(), $category);
+        $this->categoryService->UpdateCategory($request->validated(), $category);
+
+        return redirect()->route('category-management');
     }
 
     public function deleteCategory(Category $category)

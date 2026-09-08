@@ -34,11 +34,17 @@ Route::middleware(['auth'])->group(function () {
     Route::get('create-category', function () {
         return Inertia::render('CreateCategoryPage');
     })->name('create-category');
+    Route::get('categories/{category}/edit', function (Category $category) {
+        return Inertia::render('UpdateCategoryPage', [
+            'category' => $category,
+        ]);
+    })->name('categories.edit');
 
 
     Route::get('categories', [CategoryController::class, 'getCategories']);
     Route::post('categories', [CategoryController::class, 'createCategory'])->name('categories');
     Route::get('categories/{category}', [CategoryController::class, 'getCategory']);
+    Route::patch('categories/{category}', [CategoryController::class, 'updateCategory'])->name('categories');
     Route::get('items', [ItemController::class, 'getItems']);
     Route::get('items/{item}', [ItemController::class, 'getItem']);
 

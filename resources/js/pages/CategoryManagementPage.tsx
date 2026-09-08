@@ -119,14 +119,14 @@ export default function CategoryManagementPage({ categories }: { categories: Cat
                                         </TableCell>
                                         <TableCell>
                                             <div className="flex items-center gap-2">
-                                                <button
-                                                    type="button"
+                                                <Link
+                                                    href={route('categories.edit', category.id)}
                                                     aria-label={`Update ${category.name}`}
                                                     className="hover:bg-muted inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium"
                                                 >
                                                     <Pencil className="size-3" />
                                                     Update
-                                                </button>
+                                                </Link>
                                                 <button
                                                     type="button"
                                                     aria-label={`Delete ${category.name}`}
