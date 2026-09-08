@@ -36,7 +36,7 @@ export default function UpdateCategoryPage({ category }: { category: Category })
 
     const submit = (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
-        form.patch(route('categories', category.id));
+        form.patch(route('categories.update', category.id));
     };
 
     return (

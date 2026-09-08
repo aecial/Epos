@@ -2,7 +2,7 @@ import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link } from '@inertiajs/react';
+import { Head, Link, router } from '@inertiajs/react';
 import { Pencil, Plus, Search, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
@@ -38,6 +38,7 @@ function SearchInput({ value, onChange }: { value: string; onChange: (value: str
 
 export default function CategoryManagementPage({ categories }: { categories: Category[] }) {
     const [search, setSearch] = useState('');
+    const [updating, setUpdating] = useState<Record<number, 'status' | 'visibility' | null>>({});
     const [statuses, setStatuses] = useState<Record<number, CategoryStatus>>(
         Object.fromEntries(categories.map((category) => [category.id, category.status])),
     );
@@ -49,6 +50,22 @@ export default function CategoryManagementPage({ categories }: { categories: Cat
         () => categories.filter((category) => category.name.toLowerCase().includes(search.toLowerCase())),
         [categories, search],
     );
+
+    const updateCategory = (categoryId: number, field: 'status' | 'visibility', data: Record<string, string | boolean>) => {
+        setUpdating((current) => ({ ...current, [categoryId]: field }));
+
+        router.patch(route('categories.update', categoryId), data, {
+            preserveScroll: true,
+            onSuccess: () => {
+                if (field === 'status') {
+                    setStatuses((current) => ({ ...current, [categoryId]: data.status as CategoryStatus }));
+                } else {
+                    setVisibility((current) => ({ ...current, [categoryId]: data.is_visible_to_pos as boolean }));
+                }
+            },
+            onFinish: () => setUpdating((current) => ({ ...current, [categoryId]: null })),
+        });
+    };
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -93,11 +110,9 @@ export default function CategoryManagementPage({ categories }: { categories: Cat
                                         <TableCell>
                                             <button
                                                 type="button"
+                                                disabled={updating[category.id] !== undefined && updating[category.id] !== null}
                                                 onClick={() =>
-                                                    setStatuses((current) => ({
-                                                        ...current,
-                                                        [category.id]: status === 'active' ? 'inactive' : 'active',
-                                                    }))
+                                                    updateCategory(category.id, 'status', { status: status === 'active' ? 'inactive' : 'active' })
                                                 }
                                                 className={`rounded-full px-3 py-1 text-xs font-medium text-white capitalize ${
                                                     status === 'active' ? 'bg-green-600' : 'bg-red-600'
@@ -109,7 +124,8 @@ export default function CategoryManagementPage({ categories }: { categories: Cat
                                         <TableCell>
                                             <button
                                                 type="button"
-                                                onClick={() => setVisibility((current) => ({ ...current, [category.id]: !isVisible }))}
+                                                disabled={updating[category.id] !== undefined && updating[category.id] !== null}
+                                                onClick={() => updateCategory(category.id, 'visibility', { is_visible_to_pos: !isVisible })}
                                                 className={`rounded-full px-3 py-1 text-xs font-medium text-white ${
                                                     isVisible ? 'bg-green-600' : 'bg-gray-500'
                                                 }`}

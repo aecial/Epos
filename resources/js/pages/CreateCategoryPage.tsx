@@ -24,7 +24,7 @@ export default function CreateCategoryPage() {
 
     const submit = (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
-        form.post(route('categories'));
+        form.post(route('categories.store'));
     };
 
     return (
