@@ -19,6 +19,15 @@ Route::middleware(['auth'])->group(function () {
     Route::get('back-office', function () {
         return Inertia::render('backOffice');
     })->name('back-office');
+    Route::get('category-management', function () {
+        return Inertia::render('CategoryManagementPage');
+    })->name('category-management');
+        Route::get('item-management', function () {
+        return Inertia::render('ItemManagementPage');
+    })->name('item-management');
+        Route::get('modifier-management', function () {
+        return Inertia::render('ModifierManagementPage');
+    })->name('modifier-management');
 
 
     Route::get('categories', [CategoryController::class, 'getCategories']);

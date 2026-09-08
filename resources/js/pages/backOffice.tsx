@@ -4,13 +4,13 @@ import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
-import { Head } from '@inertiajs/react';
+import { Head, Link } from '@inertiajs/react';
 import { Check, Search, X } from 'lucide-react';
 import { useState } from 'react';
 const breadcrumbs: BreadcrumbItem[] = [
     {
         title: 'Back Office',
-        href: '/back-Office',
+        href: route('back-office'),
     },
 ];
 
@@ -80,9 +80,27 @@ export default function BackOffice() {
             <Head title="Back Office" />
             <div className="flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
                 <div className="grid auto-rows-min gap-4 md:grid-cols-3">
-                    <BackOfficeUpperDiv children={<Button className="h-full w-full cursor-pointer text-xl">Category Management</Button>} />
-                    <BackOfficeUpperDiv children={<Button className="h-full w-full cursor-pointer text-xl">Item Management</Button>} />
-                    <BackOfficeUpperDiv children={<Button className="h-full w-full cursor-pointer text-xl">Modifier Management</Button>} />
+                    <BackOfficeUpperDiv
+                        children={
+                            <Button asChild className="h-full w-full cursor-pointer text-xl">
+                                <Link href={route('category-management')}>Category Management</Link>
+                            </Button>
+                        }
+                    />
+                    <BackOfficeUpperDiv
+                        children={
+                            <Button asChild className="h-full w-full cursor-pointer text-xl">
+                                <Link href={route('item-management')}>Item Management</Link>
+                            </Button>
+                        }
+                    />
+                    <BackOfficeUpperDiv
+                        children={
+                            <Button asChild className="h-full w-full cursor-pointer text-xl">
+                                <Link href={route('modifier-management')}>Modifier Management</Link>
+                            </Button>
+                        }
+                    />
                 </div>
                 <div className="border-sidebar-border/70 dark:border-sidebar-border relative min-h-[100vh] flex-1 rounded-xl border md:min-h-min">
                     <Table>
