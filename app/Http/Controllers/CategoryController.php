@@ -41,6 +41,8 @@ class CategoryController extends Controller
 
     public function deleteCategory(Category $category)
     {
-        return $this->categoryService->DeleteCategory($category);
+        $this->categoryService->DeleteCategory($category);
+
+        return redirect()->route('category-management');
     }
 }

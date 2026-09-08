@@ -1,8 +1,9 @@
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link, router } from '@inertiajs/react';
+import { Head, Link, router, useForm } from '@inertiajs/react';
 import { Pencil, Plus, Search, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
@@ -38,6 +39,8 @@ function SearchInput({ value, onChange }: { value: string; onChange: (value: str
 
 export default function CategoryManagementPage({ categories }: { categories: Category[] }) {
     const [search, setSearch] = useState('');
+    const [categoryToDelete, setCategoryToDelete] = useState<Category | null>(null);
+    const deleteForm = useForm({});
     const [updating, setUpdating] = useState<Record<number, 'status' | 'visibility' | null>>({});
     const [statuses, setStatuses] = useState<Record<number, CategoryStatus>>(
         Object.fromEntries(categories.map((category) => [category.id, category.status])),
@@ -64,6 +67,17 @@ export default function CategoryManagementPage({ categories }: { categories: Cat
                 }
             },
             onFinish: () => setUpdating((current) => ({ ...current, [categoryId]: null })),
+        });
+    };
+
+    const deleteCategory = () => {
+        if (!categoryToDelete) {
+            return;
+        }
+
+        deleteForm.delete(route('categories.destroy', categoryToDelete.id), {
+            preserveScroll: true,
+            onSuccess: () => setCategoryToDelete(null),
         });
     };
 
@@ -146,6 +160,7 @@ export default function CategoryManagementPage({ categories }: { categories: Cat
                                                 <button
                                                     type="button"
                                                     aria-label={`Delete ${category.name}`}
+                                                    onClick={() => setCategoryToDelete(category)}
                                                     className="text-destructive border-destructive/30 hover:bg-destructive/10 inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium"
                                                 >
                                                     <Trash2 className="size-3" />
@@ -160,6 +175,29 @@ export default function CategoryManagementPage({ categories }: { categories: Cat
                     </Table>
                 </div>
             </div>
+            <Dialog open={categoryToDelete !== null} onOpenChange={(open) => !open && setCategoryToDelete(null)}>
+                <DialogContent>
+                    <DialogTitle>Delete {categoryToDelete?.name}?</DialogTitle>
+                    <DialogDescription>
+                        This action cannot be undone. The category and its associated items will be permanently deleted.
+                    </DialogDescription>
+                    <DialogFooter>
+                        <DialogClose asChild>
+                            <button type="button" className="hover:bg-muted rounded-md border px-4 py-2 text-sm font-medium">
+                                Cancel
+                            </button>
+                        </DialogClose>
+                        <button
+                            type="button"
+                            onClick={deleteCategory}
+                            disabled={deleteForm.processing}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90 rounded-md px-4 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                            {deleteForm.processing ? 'Deleting...' : 'Delete category'}
+                        </button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </AppLayout>
     );
 }
