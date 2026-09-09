@@ -12,7 +12,7 @@ class UpdateItemRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        return false;
+        return auth()->check() && auth()->user()->isAdminOrManager();
     }
 
     /**
@@ -27,8 +27,8 @@ class UpdateItemRequest extends FormRequest
             'name' => ['sometimes', 'string', 'max:255'],
             'base_price' => ['sometimes', 'decimal:0,2'],
             'cost_price' => ['sometimes', 'decimal:0,2'],
-            'quantity' => ['sometimes', 'number'],
-            'reserved_quantity' => ['sometimes', 'number'],
+            'quantity' => ['sometimes', 'integer', 'min:0'],
+            'reserved_quantity' => ['sometimes', 'integer', 'min:0'],
             'image_url' => ['sometimes'],
             'status' => ['sometimes', 'in:available,unavailable,hidden'],
         ];

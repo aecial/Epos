@@ -12,7 +12,7 @@ class ItemController extends Controller
     protected ItemService $itemService;
 
     public function __construct(ItemService $itemService) {
-    $this->itemService = $itemService;
+        $this->itemService = $itemService;
     }
 
     public function getItems() {
@@ -21,14 +21,20 @@ class ItemController extends Controller
     public function getItem(Item $item) {
         return $this->itemService->ReadItem($item);
     }
-    public function createItemI(CreateItemRequest $request) {
-        return $this->itemService->CreateItem($request->validated());
+    public function createItem(CreateItemRequest $request) {
+        $this->itemService->CreateItem($request->validated());
+
+        return redirect()->route('item-management');
     }
     public function updateItem(UpdateItemRequest $request, Item $item) {
-        return $this->itemService->UpdateItem($request->validated(), $item);
+        $this->itemService->UpdateItem($request->validated(), $item);
+
+        return redirect()->route('item-management');
     }
     public function deleteItem(Item $item) {
-        return $this->itemService->DeleteItem($item);
+        $this->itemService->DeleteItem($item);
+
+        return redirect()->route('item-management');
     }
 
 }

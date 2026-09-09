@@ -27,8 +27,8 @@ class CreateItemRequest extends FormRequest
             'name' => ['required', 'string', 'max:255'],
             'base_price' => ['required', 'decimal:0,2'],
             'cost_price' => ['sometimes', 'decimal:0,2'],
-            'quantity' => ['sometimes', 'number'],
-            'reserved_quantity' => ['sometimes', 'number'],
+            'quantity' => ['sometimes', 'integer', 'min:0'],
+            'reserved_quantity' => ['sometimes', 'integer', 'min:0'],
             'image_url' => ['sometimes'],
             'status' => ['sometimes', 'in:available,unavailable,hidden'],
         ];

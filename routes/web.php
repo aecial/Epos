@@ -5,6 +5,7 @@ use App\Http\Controllers\ItemController;
 use App\Http\Controllers\ModifierController;
 use App\Http\Controllers\ModifierGroupController;
 use App\Models\Category;
+use App\Models\Item;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -25,8 +26,10 @@ Route::middleware(['auth'])->group(function () {
             'categories' => Category::withCount('items')->get(),
         ]);
     })->name('category-management');
-        Route::get('item-management', function () {
-        return Inertia::render('ItemManagementPage');
+    Route::get('item-management', function () {
+        return Inertia::render('ItemManagementPage', [
+            'items' => Item::with('category')->get(),
+        ]);
     })->name('item-management');
         Route::get('modifier-management', function () {
         return Inertia::render('ModifierManagementPage');
@@ -34,6 +37,11 @@ Route::middleware(['auth'])->group(function () {
     Route::get('create-category', function () {
         return Inertia::render('CreateCategoryPage');
     })->name('create-category');
+    Route::get('create-item', function () {
+        return Inertia::render('CreateItemPage', [
+            'categories' => Category::orderBy('name')->get(['id', 'name']),
+        ]);
+    })->name('create-item');
     Route::get('categories/{category}/edit', function (Category $category) {
         return Inertia::render('UpdateCategoryPage', [
             'category' => $category,
@@ -46,8 +54,17 @@ Route::middleware(['auth'])->group(function () {
     Route::get('categories/{category}', [CategoryController::class, 'getCategory']);
     Route::patch('categories/{category}', [CategoryController::class, 'updateCategory'])->name('categories.update');
     Route::delete('categories/{category}', [CategoryController::class, 'deleteCategory'])->name('categories.destroy');
+    Route::get('items/{item}/edit', function (Item $item) {
+        return Inertia::render('UpdateItemPage', [
+            'item' => $item,
+            'categories' => Category::orderBy('name')->get(['id', 'name']),
+        ]);
+    })->name('items.edit');
     Route::get('items', [ItemController::class, 'getItems']);
     Route::get('items/{item}', [ItemController::class, 'getItem']);
+    Route::post('items', [ItemController::class, 'createItem'])->name('items.store');
+    Route::patch('items/{item}', [ItemController::class, 'updateItem'])->name('items.update');
+    Route::delete('items/{item}', [ItemController::class, 'deleteItem'])->name('items.destroy');
 
     Route::get('modifier-groups', [ModifierGroupController::class, 'getModifierGroups']);
     Route::get('modifier-groups/{modifierGroup}', [ModifierGroupController::class, 'getModifierGroup']);
