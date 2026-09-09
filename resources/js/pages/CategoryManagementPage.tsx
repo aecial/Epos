@@ -42,12 +42,6 @@ export default function CategoryManagementPage({ categories }: { categories: Cat
     const [categoryToDelete, setCategoryToDelete] = useState<Category | null>(null);
     const deleteForm = useForm({});
     const [updating, setUpdating] = useState<Record<number, 'status' | 'visibility' | null>>({});
-    const [statuses, setStatuses] = useState<Record<number, CategoryStatus>>(
-        Object.fromEntries(categories.map((category) => [category.id, category.status])),
-    );
-    const [visibility, setVisibility] = useState<Record<number, boolean>>(
-        Object.fromEntries(categories.map((category) => [category.id, category.is_visible_to_pos])),
-    );
 
     const filteredCategories = useMemo(
         () => categories.filter((category) => category.name.toLowerCase().includes(search.toLowerCase())),
@@ -59,13 +53,6 @@ export default function CategoryManagementPage({ categories }: { categories: Cat
 
         router.patch(route('categories.update', categoryId), data, {
             preserveScroll: true,
-            onSuccess: () => {
-                if (field === 'status') {
-                    setStatuses((current) => ({ ...current, [categoryId]: data.status as CategoryStatus }));
-                } else {
-                    setVisibility((current) => ({ ...current, [categoryId]: data.is_visible_to_pos as boolean }));
-                }
-            },
             onFinish: () => setUpdating((current) => ({ ...current, [categoryId]: null })),
         });
     };
@@ -113,8 +100,7 @@ export default function CategoryManagementPage({ categories }: { categories: Cat
                         </TableHeader>
                         <TableBody>
                             {filteredCategories.map((category) => {
-                                const status = statuses[category.id];
-                                const isVisible = visibility[category.id];
+                                const { status, is_visible_to_pos: isVisible } = category;
 
                                 return (
                                     <TableRow key={category.id}>
@@ -126,7 +112,9 @@ export default function CategoryManagementPage({ categories }: { categories: Cat
                                                 type="button"
                                                 disabled={updating[category.id] !== undefined && updating[category.id] !== null}
                                                 onClick={() =>
-                                                    updateCategory(category.id, 'status', { status: status === 'active' ? 'inactive' : 'active' })
+                                                    updateCategory(category.id, 'status', {
+                                                        status: category.status === 'active' ? 'inactive' : 'active',
+                                                    })
                                                 }
                                                 className={`rounded-full px-3 py-1 text-xs font-medium text-white capitalize ${
                                                     status === 'active' ? 'bg-green-600' : 'bg-red-600'
@@ -139,7 +127,11 @@ export default function CategoryManagementPage({ categories }: { categories: Cat
                                             <button
                                                 type="button"
                                                 disabled={updating[category.id] !== undefined && updating[category.id] !== null}
-                                                onClick={() => updateCategory(category.id, 'visibility', { is_visible_to_pos: !isVisible })}
+                                                onClick={() =>
+                                                    updateCategory(category.id, 'visibility', {
+                                                        is_visible_to_pos: !category.is_visible_to_pos,
+                                                    })
+                                                }
                                                 className={`rounded-full px-3 py-1 text-xs font-medium text-white ${
                                                     isVisible ? 'bg-green-600' : 'bg-gray-500'
                                                 }`}
