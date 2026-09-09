@@ -26,7 +26,7 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
     {
         title: 'Item Management',
-        href: '/item-management',
+        href: route('item-management'),
     },
 ];
 
