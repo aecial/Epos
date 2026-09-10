@@ -4,6 +4,9 @@ use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\ItemController;
 use App\Http\Controllers\ModifierController;
 use App\Http\Controllers\ModifierGroupController;
+use App\Http\Controllers\IngredientController;
+use App\Http\Controllers\IngredientGroupController;
+use App\Http\Controllers\ItemRecipeController;
 use App\Models\Category;
 use App\Models\Item;
 use Illuminate\Support\Facades\Route;
@@ -65,6 +68,20 @@ Route::middleware(['auth'])->group(function () {
     Route::post('items', [ItemController::class, 'createItem'])->name('items.store');
     Route::patch('items/{item}', [ItemController::class, 'updateItem'])->name('items.update');
     Route::delete('items/{item}', [ItemController::class, 'deleteItem'])->name('items.destroy');
+
+    Route::get('ingredient-groups', [IngredientGroupController::class, 'getIngredientGroups'])->name('ingredient-groups.index');
+    Route::post('ingredient-groups', [IngredientGroupController::class, 'createIngredientGroup'])->name('ingredient-groups.store');
+    Route::patch('ingredient-groups/{ingredientGroup}', [IngredientGroupController::class, 'updateIngredientGroup'])->name('ingredient-groups.update');
+    Route::delete('ingredient-groups/{ingredientGroup}', [IngredientGroupController::class, 'deleteIngredientGroup'])->name('ingredient-groups.destroy');
+
+    Route::get('ingredients', [IngredientController::class, 'getIngredients'])->name('ingredients.index');
+    Route::post('ingredients', [IngredientController::class, 'createIngredient'])->name('ingredients.store');
+    Route::get('ingredients/{ingredient}', [IngredientController::class, 'getIngredient'])->name('ingredients.show');
+    Route::patch('ingredients/{ingredient}', [IngredientController::class, 'updateIngredient'])->name('ingredients.update');
+    Route::delete('ingredients/{ingredient}', [IngredientController::class, 'deleteIngredient'])->name('ingredients.destroy');
+
+    Route::get('items/{item}/recipe', [ItemRecipeController::class, 'getItemRecipe'])->name('items.recipe.show');
+    Route::put('items/{item}/recipe', [ItemRecipeController::class, 'updateItemRecipe'])->name('items.recipe.update');
 
     Route::get('modifier-groups', [ModifierGroupController::class, 'getModifierGroups']);
     Route::get('modifier-groups/{modifierGroup}', [ModifierGroupController::class, 'getModifierGroup']);
