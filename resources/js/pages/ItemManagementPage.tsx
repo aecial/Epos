@@ -113,8 +113,8 @@ export default function ItemManagementPage({ items }: { items: Item[] }) {
                             {filteredItems.map((item) => (
                                 <TableRow key={item.id}>
                                     <TableCell className="font-medium">{item.id}</TableCell>
-                                    <TableCell className="font-medium">{item.name}</TableCell>
-                                    <TableCell>{item.category?.name ?? 'Uncategorized'}</TableCell>
+                                    <TableCell className="font-medium uppercase">{item.name}</TableCell>
+                                    <TableCell className="uppercase">{item.category?.name ?? 'Uncategorized'}</TableCell>
                                     <TableCell className="text-right">₱{Number(item.base_price).toFixed(2)}</TableCell>
                                     <TableCell className="text-right">{item.quantity - item.reserved_quantity}</TableCell>
                                     <TableCell>
