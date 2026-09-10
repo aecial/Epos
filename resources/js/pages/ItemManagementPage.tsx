@@ -77,9 +77,9 @@ export default function ItemManagementPage({ items }: { items: Item[] }) {
                     <Table>
                         <TableHeader>
                             <TableRow>
-                                <TableHead colSpan={7}>
+                                <TableHead colSpan={10}>
                                     <div className="flex items-center justify-between gap-4">
-                                        <div className="relative max-w-sm">
+                                        <div className="relative">
                                             <Search className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
                                             <Input
                                                 type="search"
@@ -104,6 +104,8 @@ export default function ItemManagementPage({ items }: { items: Item[] }) {
                                 <TableHead>Item Name</TableHead>
                                 <TableHead>Category</TableHead>
                                 <TableHead className="text-right">Price</TableHead>
+                                <TableHead className="text-right">Cost</TableHead>
+                                <TableHead className="text-right">Margin</TableHead>
                                 <TableHead className="text-right">Stock</TableHead>
                                 <TableHead>Status</TableHead>
                                 <TableHead>Actions</TableHead>
@@ -116,6 +118,10 @@ export default function ItemManagementPage({ items }: { items: Item[] }) {
                                     <TableCell className="font-medium uppercase">{item.name}</TableCell>
                                     <TableCell className="uppercase">{item.category?.name ?? 'Uncategorized'}</TableCell>
                                     <TableCell className="text-right">₱{Number(item.base_price).toFixed(2)}</TableCell>
+                                    <TableCell className="text-right">₱{Number(item.cost_price).toFixed(2)}</TableCell>
+                                    <TableCell className="text-right">
+                                        {(((Number(item.base_price) - Number(item.cost_price)) / Number(item.base_price)) * 100).toFixed(2)}%
+                                    </TableCell>
                                     <TableCell className="text-right">{item.quantity - item.reserved_quantity}</TableCell>
                                     <TableCell>
                                         <button
