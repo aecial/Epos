@@ -38,17 +38,17 @@ docs/
 
 ## Key Business Rules
 
-| Rule                   | Detail                                                                                 |
-| ---------------------- | -------------------------------------------------------------------------------------- |
-| **KDS order**          | Strictly `created_at` ASC (FIFO across all terminals)                                  |
-| **Terminal isolation** | POS only sees its own open tickets                                                     |
+| Rule                   | Detail                                                                                                   |
+| ---------------------- | -------------------------------------------------------------------------------------------------------- |
+| **KDS order**          | Strictly `created_at` ASC (FIFO across all terminals)                                                    |
+| **Terminal isolation** | POS only sees its own open tickets                                                                       |
 | **Inventory**          | Direct items use item stock; recipe items use shared ingredient stock; reserve on add, deduct on payment |
-| **Shift lock**         | One open shift at a time (DB UNIQUE INDEX)                                             |
-| **Split payment**      | Cash + GCash simultaneously on one ticket; one receipt per payment method              |
-| **Notes**              | KDS-only — never printed on customer receipt                                           |
-| **Duplicate names**    | Auto-append within shift: john → john2 → john3                                         |
-| **Passcode**           | 4-digit PIN hashed with bcrypt; required to void item on open ticket or approve refund |
-| **Shift formula**      | Starting Cash + Cash Sales + Additions − Expenses = Expected Cash                      |
+| **Shift lock**         | One open shift at a time (DB UNIQUE INDEX)                                                               |
+| **Split payment**      | Cash + GCash simultaneously on one ticket; one receipt per payment method                                |
+| **Notes**              | KDS-only — never printed on customer receipt                                                             |
+| **Duplicate names**    | Auto-append within shift: john → john2 → john3                                                           |
+| **Passcode**           | 4-digit PIN hashed with bcrypt; required to void item on open ticket or approve refund                   |
+| **Shift formula**      | Starting Cash + Cash Sales + Additions − Expenses = Expected Cash                                        |
 
 ### Inventory Modes
 
@@ -103,11 +103,11 @@ docs/
     - Ingredient groups CRUD
     - Ingredients CRUD and quantity adjustment
     - Recipe assignment for recipe-based items
-  2. Shifts management (planned)
-  3. API layer (planned POS endpoints)
-  4. React Native POS app (planned)
-  5. KDS app (planned)
-  6. Real-time (planned WebSockets)
+2. Shifts management (planned)
+3. API layer (planned POS endpoints)
+4. React Native POS app (planned)
+5. KDS app (planned)
+6. Real-time (planned WebSockets)
 
 ---
 
