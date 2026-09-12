@@ -11,6 +11,7 @@ use App\Models\Category;
 use App\Models\Ingredient;
 use App\Models\IngredientGroup;
 use App\Models\Item;
+use App\Services\InventoryService;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -32,9 +33,23 @@ Route::middleware(['auth'])->group(function () {
         ]);
     })->name('category-management');
     Route::get('item-management', function () {
-        return Inertia::render('ItemManagementPage', [
-            'items' => Item::with('category')->get(),
-        ]);
+        $inventoryService = app(InventoryService::class);
+        $items = Item::with('category')->get()->map(function (Item $item) use ($inventoryService) {
+            $availableStock = null;
+
+            if ($item->inventory_type !== 'none') {
+                try {
+                    $availableStock = $inventoryService->AvailableForItem($item);
+                } catch (\InvalidArgumentException) {
+                }
+            }
+
+            $item->setAttribute('available_stock', $availableStock);
+
+            return $item;
+        });
+
+        return Inertia::render('ItemManagementPage', ['items' => $items]);
     })->name('item-management');
     Route::get('modifier-management', function () {
         return Inertia::render('ModifierManagementPage');
@@ -89,8 +104,9 @@ Route::middleware(['auth'])->group(function () {
     Route::delete('categories/{category}', [CategoryController::class, 'deleteCategory'])->name('categories.destroy');
     Route::get('items/{item}/edit', function (Item $item) {
         return Inertia::render('UpdateItemPage', [
-            'item' => $item,
+            'item' => $item->load('ingredients'),
             'categories' => Category::orderBy('name')->get(['id', 'name']),
+            'ingredients' => Ingredient::where('status', 'active')->orderBy('name')->get(['id', 'name', 'unit']),
         ]);
     })->name('items.edit');
     Route::get('items', [ItemController::class, 'getItems']);

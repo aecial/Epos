@@ -5,6 +5,7 @@ import { type FormEvent } from 'react';
 
 type Category = { id: number; name: string };
 type ItemStatus = 'available' | 'unavailable' | 'hidden';
+type InventoryType = 'direct' | 'recipe' | 'none';
 
 export default function CreateItemPage({ categories }: { categories: Category[] }) {
     const breadcrumbs: BreadcrumbItem[] = [
@@ -18,6 +19,7 @@ export default function CreateItemPage({ categories }: { categories: Category[] 
         base_price: '',
         cost_price: '0',
         quantity: '0',
+        inventory_type: 'direct' as InventoryType,
         image_url: '',
         status: 'available' as ItemStatus,
     });
@@ -63,6 +65,17 @@ export default function CreateItemPage({ categories }: { categories: Category[] 
                                 <option value="available">Available</option>
                                 <option value="unavailable">Unavailable</option>
                                 <option value="hidden">Hidden</option>
+                            </select>
+                        </Field>
+                        <Field label="Inventory type" error={form.errors.inventory_type}>
+                            <select
+                                value={form.data.inventory_type}
+                                onChange={(event) => form.setData('inventory_type', event.target.value as InventoryType)}
+                                className="field"
+                            >
+                                <option value="direct">Direct item stock</option>
+                                <option value="recipe">Recipe ingredients</option>
+                                <option value="none">No inventory tracking</option>
                             </select>
                         </Field>
                         <Field label="Base price" error={form.errors.base_price}>

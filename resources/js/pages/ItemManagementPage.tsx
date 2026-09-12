@@ -8,6 +8,7 @@ import { Pencil, Plus, Search, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 type ItemStatus = 'available' | 'unavailable' | 'hidden';
+type InventoryType = 'direct' | 'recipe' | 'none';
 
 type Item = {
     id: number;
@@ -17,6 +18,8 @@ type Item = {
     cost_price: number | string;
     quantity: number;
     reserved_quantity: number;
+    inventory_type: InventoryType;
+    available_stock: number | null;
     status: ItemStatus;
 };
 const breadcrumbs: BreadcrumbItem[] = [
@@ -106,6 +109,7 @@ export default function ItemManagementPage({ items }: { items: Item[] }) {
                                 <TableHead className="text-right">Price</TableHead>
                                 <TableHead className="text-right">Cost</TableHead>
                                 <TableHead className="text-right">Margin</TableHead>
+                                <TableHead>Inventory</TableHead>
                                 <TableHead className="text-right">Stock</TableHead>
                                 <TableHead>Status</TableHead>
                                 <TableHead>Actions</TableHead>
@@ -122,7 +126,10 @@ export default function ItemManagementPage({ items }: { items: Item[] }) {
                                     <TableCell className="text-right">
                                         {(((Number(item.base_price) - Number(item.cost_price)) / Number(item.base_price)) * 100).toFixed(2)}%
                                     </TableCell>
-                                    <TableCell className="text-right">{item.quantity - item.reserved_quantity}</TableCell>
+                                    <TableCell className="capitalize">{item.inventory_type}</TableCell>
+                                    <TableCell className="text-right">
+                                        {item.inventory_type === 'none' ? 'Unlimited' : (item.available_stock ?? 'No recipe')}
+                                    </TableCell>
                                     <TableCell>
                                         <button
                                             type="button"

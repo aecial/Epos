@@ -5,6 +5,13 @@ import { type FormEvent } from 'react';
 
 type Category = { id: number; name: string };
 type ItemStatus = 'available' | 'unavailable' | 'hidden';
+type InventoryType = 'direct' | 'recipe' | 'none';
+type RecipeIngredient = { id: number; name: string; unit: 'piece' | 'kg' | 'gram' | 'liter' | 'ml' };
+type ItemRecipeRow = {
+    ingredient_id: number;
+    quantity_required: string;
+    unit: RecipeIngredient['unit'];
+};
 type Item = {
     id: number;
     name: string;
@@ -14,9 +21,11 @@ type Item = {
     quantity: number;
     image_url?: string;
     status: ItemStatus;
+    inventory_type: InventoryType;
+    ingredients?: Array<RecipeIngredient & { pivot: { quantity_required: number | string; unit: RecipeIngredient['unit'] } }>;
 };
 
-export default function UpdateItemPage({ item, categories }: { item: Item; categories: Category[] }) {
+export default function UpdateItemPage({ item, categories, ingredients }: { item: Item; categories: Category[]; ingredients: RecipeIngredient[] }) {
     const breadcrumbs: BreadcrumbItem[] = [
         { title: 'Back Office', href: route('back-office') },
         { title: 'Item Management', href: route('item-management') },
@@ -30,10 +39,26 @@ export default function UpdateItemPage({ item, categories }: { item: Item; categ
         quantity: String(item.quantity),
         image_url: item.image_url ?? '',
         status: item.status,
+        inventory_type: item.inventory_type,
+        ingredients: (item.ingredients ?? []).map((ingredient) => ({
+            ingredient_id: ingredient.id,
+            quantity_required: String(ingredient.pivot.quantity_required),
+            unit: ingredient.pivot.unit,
+        })),
     });
     const submit = (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
         form.patch(route('items.update', item.id));
+    };
+
+    const addRecipeRow = () => {
+        const ingredient = ingredients.find((candidate) => !form.data.ingredients.some((row) => row.ingredient_id === candidate.id));
+
+        if (!ingredient) {
+            return;
+        }
+
+        form.setData('ingredients', [...form.data.ingredients, { ingredient_id: ingredient.id, quantity_required: '1', unit: ingredient.unit }]);
     };
 
     return (
@@ -71,6 +96,17 @@ export default function UpdateItemPage({ item, categories }: { item: Item; categ
                                 <option value="available">Available</option>
                                 <option value="unavailable">Unavailable</option>
                                 <option value="hidden">Hidden</option>
+                            </select>
+                        </Field>
+                        <Field label="Inventory type" error={form.errors.inventory_type}>
+                            <select
+                                value={form.data.inventory_type}
+                                onChange={(event) => form.setData('inventory_type', event.target.value as InventoryType)}
+                                className="field"
+                            >
+                                <option value="direct">Direct item stock</option>
+                                <option value="recipe">Recipe ingredients</option>
+                                <option value="none">No inventory tracking</option>
                             </select>
                         </Field>
                         <Field label="Base price" error={form.errors.base_price}>
@@ -112,7 +148,80 @@ export default function UpdateItemPage({ item, categories }: { item: Item; categ
                                 className="field"
                             />
                         </Field>
-                        <FormActions processing={form.processing} label="Update item" />
+                        {form.data.inventory_type === 'recipe' && (
+                            <div className="space-y-4 border-t pt-6 sm:col-span-2">
+                                <div>
+                                    <h2 className="font-semibold">Recipe ingredients</h2>
+                                    <p className="text-muted-foreground mt-1 text-sm">Define the shared stock consumed by one serving.</p>
+                                </div>
+                                {form.data.ingredients.map((row: ItemRecipeRow, index: number) => {
+                                    const selectedIngredient = ingredients.find((ingredient) => ingredient.id === row.ingredient_id);
+
+                                    return (
+                                        <div key={`${row.ingredient_id}-${index}`} className="grid gap-3 sm:grid-cols-[1fr_140px_auto]">
+                                            <select
+                                                value={row.ingredient_id}
+                                                onChange={(event) => {
+                                                    const nextIngredient = ingredients.find(
+                                                        (ingredient) => ingredient.id === Number(event.target.value),
+                                                    );
+                                                    const nextRows = [...form.data.ingredients];
+                                                    nextRows[index] = {
+                                                        ...row,
+                                                        ingredient_id: Number(event.target.value),
+                                                        unit: nextIngredient?.unit ?? row.unit,
+                                                    };
+                                                    form.setData('ingredients', nextRows);
+                                                }}
+                                                className="field"
+                                            >
+                                                {ingredients.map((ingredient) => (
+                                                    <option key={ingredient.id} value={ingredient.id}>
+                                                        {ingredient.name}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                            <input
+                                                type="number"
+                                                min="0.001"
+                                                step="0.001"
+                                                value={row.quantity_required}
+                                                onChange={(event) => {
+                                                    const nextRows = [...form.data.ingredients];
+                                                    nextRows[index] = { ...row, quantity_required: event.target.value };
+                                                    form.setData('ingredients', nextRows);
+                                                }}
+                                                className="field"
+                                            />
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-muted-foreground min-w-12 text-sm">{selectedIngredient?.unit ?? row.unit}</span>
+                                                <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                        form.setData(
+                                                            'ingredients',
+                                                            form.data.ingredients.filter((_, rowIndex) => rowIndex !== index),
+                                                        )
+                                                    }
+                                                    className="text-destructive border-destructive/30 hover:bg-destructive/10 rounded-md border px-2 py-1 text-xs font-medium"
+                                                >
+                                                    Remove
+                                                </button>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                                {form.errors.ingredients && <p className="text-destructive text-sm">{form.errors.ingredients}</p>}
+                                <button
+                                    type="button"
+                                    onClick={addRecipeRow}
+                                    className="hover:bg-muted rounded-md border px-3 py-2 text-sm font-medium"
+                                >
+                                    Add ingredient
+                                </button>
+                            </div>
+                        )}
+                        <FormActions processing={form.processing} label="Save changes" />
                     </form>
                 </div>
             </div>
