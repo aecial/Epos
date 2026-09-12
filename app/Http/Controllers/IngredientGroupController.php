@@ -23,12 +23,15 @@ class IngredientGroupController extends Controller
 
     public function createIngredientGroup(CreateIngredientGroupRequest $request)
     {
-        return $this->ingredientGroupService->CreateIngredientGroup($request->validated());
+        $this->ingredientGroupService->CreateIngredientGroup($request->validated());
+        return redirect()->route('ingredient-management');
     }
 
     public function updateIngredientGroup(UpdateIngredientGroupRequest $request, IngredientGroup $ingredientGroup)
     {
-        return $this->ingredientGroupService->UpdateIngredientGroup($request->validated(), $ingredientGroup);
+        $this->ingredientGroupService->UpdateIngredientGroup($request->validated(), $ingredientGroup);
+
+        return redirect()->route('ingredient-management');
     }
 
     public function deleteIngredientGroup(IngredientGroup $ingredientGroup)

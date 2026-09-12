@@ -8,6 +8,8 @@ use App\Http\Controllers\IngredientController;
 use App\Http\Controllers\IngredientGroupController;
 use App\Http\Controllers\ItemRecipeController;
 use App\Models\Category;
+use App\Models\Ingredient;
+use App\Models\IngredientGroup;
 use App\Models\Item;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -34,9 +36,37 @@ Route::middleware(['auth'])->group(function () {
             'items' => Item::with('category')->get(),
         ]);
     })->name('item-management');
-        Route::get('modifier-management', function () {
+    Route::get('modifier-management', function () {
         return Inertia::render('ModifierManagementPage');
     })->name('modifier-management');
+    Route::get('ingredient-management', function () {
+        return Inertia::render('IngredientManagementPage', [
+            'ingredientGroups' => IngredientGroup::withCount('ingredients')->orderBy('name')->get(),
+            'ingredients' => Ingredient::with('ingredientGroup')->orderBy('name')->get(),
+        ]);
+    })->name('ingredient-management');
+    Route::get('create-ingredient-group', function () {
+        return Inertia::render('CreateIngredientGroupPage');
+    })->name('create-ingredient-group');
+    Route::get('create-ingredient', function () {
+        return Inertia::render('CreateIngredientPage', [
+            'ingredientGroups' => IngredientGroup::orderBy('name')->get(['id', 'name']),
+        ]);
+    })->name('create-ingredient');
+    Route::get('ingredient-groups/{ingredientGroup}/edit', function (IngredientGroup $ingredientGroup) {
+        return Inertia::render('UpdateIngredientGroupPage', [
+            'ingredientGroup' => $ingredientGroup,
+        ]);
+    })->name('ingredient-groups.edit');
+    Route::get('ingredients/{ingredient}/edit', function (Ingredient $ingredient) {
+        return Inertia::render('UpdateIngredientPage', [
+            'ingredient' => $ingredient->load('ingredientGroup'),
+            'ingredientGroups' => IngredientGroup::orderBy('name')->get(['id', 'name']),
+        ]);
+    })->name('ingredients.edit');
+
+
+
     Route::get('create-category', function () {
         return Inertia::render('CreateCategoryPage');
     })->name('create-category');

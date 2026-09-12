@@ -28,12 +28,16 @@ class IngredientController extends Controller
 
     public function createIngredient(CreateIngredientRequest $request)
     {
-        return $this->ingredientService->CreateIngredient($request->validated());
+         $this->ingredientService->CreateIngredient($request->validated());
+         return redirect()->route('ingredient-management');
     }
 
     public function updateIngredient(UpdateIngredientRequest $request, Ingredient $ingredient)
     {
-        return $this->ingredientService->UpdateIngredient($request->validated(), $ingredient);
+        $this->ingredientService->UpdateIngredient($request->validated(), $ingredient);
+
+        return redirect()->route('ingredient-management');
+
     }
 
     public function deleteIngredient(Ingredient $ingredient)
