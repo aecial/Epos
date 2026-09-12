@@ -1,8 +1,10 @@
-# Restaurant POS & Back Office System — ENHANCED SPECIFICATION (v1.0 Final)
+# Restaurant POS & Back Office System — ENHANCED SPECIFICATION (v1.1)
 
 **Project Name:** Restaurant POS + Back Office Admin Panel + KDS  
-**Status:** Ready for Development  
-**Last Updated:** August 2026
+**Status:** Back-office inventory and recipe management implemented; POS/KDS scope remains planned
+**Last Updated:** September 2026
+
+> This document contains the product specification and planned POS/KDS workflows. The current implementation is Laravel 12 with Inertia React authenticated web routes. Laravel migrations and application code are authoritative when this document differs from the repository.
 
 ---
 
@@ -11,8 +13,9 @@
 A complete point-of-sale (POS), kitchen display system (KDS), and restaurant management system designed to run on a local area network (LAN) via Intel NUC with optional cloud fallback.
 
 ### System Components
-1. **Laravel REST API** — Backend serving menu data, tickets, shifts, and inventory
-2. **Next.js Back Office** — Admin panel for managing menu, employees, and shift analytics
+1. **Laravel web application** — Current authenticated back-office pages and services
+2. **Laravel REST API** — Planned backend for POS/KDS clients
+3. **Inertia React Back Office** — Current admin panel for managing menu, employees, ingredients, and recipes
 3. **React Native POS** — Tablet-based point-of-sale for taking orders (multiple terminals)
 4. **KDS Screen** — Kitchen Display System showing live orders with timers
 5. **Receipt Printer** — Thermal printer (Goojrpt PT-210) + digital receipt history
@@ -48,12 +51,23 @@ shifts (service sessions)
 categories (menu groups)
 └─ has many → items
 
-items (menu items with inventory)
+items (menu items with direct, recipe, or no inventory)
 ├─ has many → modifiers
 ├─ has many → ticket_items
-├─ tracks → quantity (actual stock)
-├─ tracks → reserved_quantity (pending orders)
+├─ tracks → quantity/reserved_quantity for direct inventory
+├─ uses → ingredient recipe requirements when inventory_type = recipe
 └─ tracks → cost_price (for margin calculation)
+
+ingredient_groups (ingredient categories)
+└─ has many → ingredients
+
+ingredients (shared raw-material stock)
+├─ belongs to → ingredient_group
+├─ tracks → decimal quantity/reserved_quantity
+└─ connects to → items through item_ingredient
+
+item_ingredient (recipe pivot)
+└─ stores → quantity_required and matching unit per item/ingredient pair
 
 modifiers (item adjustments: sizes, flavors)
 └─ selected in → ticket_items (with price modifier)
@@ -85,7 +99,8 @@ refunds (refund tracking with approval)
 ### Core Constraints
 - One active shift at a time (`shifts.status = 'open'`)
 - Unique customer name per open shift per terminal (auto-append: john → john2 → john3)
-- Available qty = `quantity - reserved_quantity` (can display negative with warning)
+- Available qty = `quantity - reserved_quantity`; insufficient stock rejects reservations
+- Recipe availability is the minimum complete-serving count across all linked ingredients
 - Charge sum must equal ticket total before payment processing
 - Ticket merge: keep both order numbers, update ticket totals
 

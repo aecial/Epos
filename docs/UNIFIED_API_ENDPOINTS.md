@@ -1,4 +1,8 @@
-# Restaurant POS API — Unified Endpoints (v1.0 Final)
+# Restaurant POS API — Unified Endpoints (v1.1 Planned)
+
+> **Status:** Planned API contract. These `/api` endpoints are not the current back-office routes. The current implementation uses authenticated Laravel web routes and Inertia pages. Confirm an endpoint exists in `routes/api.php` before treating this document as an implemented interface.
+
+The current inventory implementation supports `direct`, `recipe`, and `none` item modes. Recipe items consume shared ingredients through `item_ingredient`; they do not decrement `items.quantity`.
 
 **Base URL:** `http://nuc-ip:8000/api`  
 **Authentication:** Bearer token via Laravel Sanctum (except login/register)  
