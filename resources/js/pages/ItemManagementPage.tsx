@@ -16,6 +16,7 @@ type Item = {
     category?: { id: number; name: string };
     base_price: number | string;
     cost_price: number | string;
+    calculated_cost_price: number | string | null;
     quantity: number;
     reserved_quantity: number;
     inventory_type: InventoryType;
@@ -116,59 +117,62 @@ export default function ItemManagementPage({ items }: { items: Item[] }) {
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {filteredItems.map((item) => (
-                                <TableRow key={item.id}>
-                                    <TableCell className="font-medium">{item.id}</TableCell>
-                                    <TableCell className="font-medium uppercase">{item.name}</TableCell>
-                                    <TableCell className="uppercase">{item.category?.name ?? 'Uncategorized'}</TableCell>
-                                    <TableCell className="text-right">₱{Number(item.base_price).toFixed(2)}</TableCell>
-                                    <TableCell className="text-right">₱{Number(item.cost_price).toFixed(2)}</TableCell>
-                                    <TableCell className="text-right">
-                                        {(((Number(item.base_price) - Number(item.cost_price)) / Number(item.base_price)) * 100).toFixed(2)}%
-                                    </TableCell>
-                                    <TableCell className="capitalize">{item.inventory_type}</TableCell>
-                                    <TableCell className="text-right">
-                                        {item.inventory_type === 'none' ? 'Unlimited' : (item.available_stock ?? 'No recipe')}
-                                    </TableCell>
-                                    <TableCell>
-                                        <button
-                                            type="button"
-                                            disabled={updating === item.id}
-                                            onClick={() => updateStatus(item)}
-                                            className={`rounded-full px-3 py-1 text-xs font-medium text-white capitalize ${
-                                                item.status === 'available'
-                                                    ? 'bg-green-600'
-                                                    : item.status === 'unavailable'
-                                                      ? 'bg-yellow-600'
-                                                      : 'bg-gray-500'
-                                            }`}
-                                        >
-                                            {item.status}
-                                        </button>
-                                    </TableCell>
-                                    <TableCell>
-                                        <div className="flex items-center gap-2">
-                                            <Link
-                                                href={route('items.edit', item.id)}
-                                                aria-label={`Update ${item.name}`}
-                                                className="hover:bg-muted inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium"
-                                            >
-                                                <Pencil className="size-3" />
-                                                Update
-                                            </Link>
+                            {filteredItems.map((item) => {
+                                const cost = item.inventory_type === 'recipe' ? item.calculated_cost_price : item.cost_price;
+                                const margin = cost === null ? null : ((Number(item.base_price) - Number(cost)) / Number(item.base_price)) * 100;
+
+                                return (
+                                    <TableRow key={item.id}>
+                                        <TableCell className="font-medium">{item.id}</TableCell>
+                                        <TableCell className="font-medium uppercase">{item.name}</TableCell>
+                                        <TableCell className="uppercase">{item.category?.name ?? 'Uncategorized'}</TableCell>
+                                        <TableCell className="text-right">₱{Number(item.base_price).toFixed(2)}</TableCell>
+                                        <TableCell className="text-right">{cost === null ? '—' : `₱${Number(cost).toFixed(2)}`}</TableCell>
+                                        <TableCell className="text-right">{margin === null ? '—' : `${margin.toFixed(2)}%`}</TableCell>
+                                        <TableCell className="capitalize">{item.inventory_type}</TableCell>
+                                        <TableCell className="text-right">
+                                            {item.inventory_type === 'none' ? 'Unlimited' : (item.available_stock ?? 'No recipe')}
+                                        </TableCell>
+                                        <TableCell>
                                             <button
                                                 type="button"
-                                                aria-label={`Delete ${item.name}`}
-                                                onClick={() => setItemToDelete(item)}
-                                                className="text-destructive border-destructive/30 hover:bg-destructive/10 inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium"
+                                                disabled={updating === item.id}
+                                                onClick={() => updateStatus(item)}
+                                                className={`rounded-full px-3 py-1 text-xs font-medium text-white capitalize ${
+                                                    item.status === 'available'
+                                                        ? 'bg-green-600'
+                                                        : item.status === 'unavailable'
+                                                          ? 'bg-yellow-600'
+                                                          : 'bg-gray-500'
+                                                }`}
                                             >
-                                                <Trash2 className="size-3" />
-                                                Delete
+                                                {item.status}
                                             </button>
-                                        </div>
-                                    </TableCell>
-                                </TableRow>
-                            ))}
+                                        </TableCell>
+                                        <TableCell>
+                                            <div className="flex items-center gap-2">
+                                                <Link
+                                                    href={route('items.edit', item.id)}
+                                                    aria-label={`Update ${item.name}`}
+                                                    className="hover:bg-muted inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium"
+                                                >
+                                                    <Pencil className="size-3" />
+                                                    Update
+                                                </Link>
+                                                <button
+                                                    type="button"
+                                                    aria-label={`Delete ${item.name}`}
+                                                    onClick={() => setItemToDelete(item)}
+                                                    className="text-destructive border-destructive/30 hover:bg-destructive/10 inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium"
+                                                >
+                                                    <Trash2 className="size-3" />
+                                                    Delete
+                                                </button>
+                                            </div>
+                                        </TableCell>
+                                    </TableRow>
+                                );
+                            })}
                         </TableBody>
                     </Table>
                 </div>

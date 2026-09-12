@@ -34,8 +34,15 @@ Route::middleware(['auth'])->group(function () {
     })->name('category-management');
     Route::get('item-management', function () {
         $inventoryService = app(InventoryService::class);
-        $items = Item::with('category')->get()->map(function (Item $item) use ($inventoryService) {
+        $items = Item::with(['category', 'ingredients'])->get()->map(function (Item $item) use ($inventoryService) {
             $availableStock = null;
+            $recipeCost = null;
+
+            if ($item->inventory_type === 'recipe' && $item->ingredients->isNotEmpty()) {
+                $recipeCost = $item->ingredients->sum(function ($ingredient): float {
+                    return (float) $ingredient->cost_per_unit * (float) $ingredient->pivot->quantity_required;
+                });
+            }
 
             if ($item->inventory_type !== 'none') {
                 try {
@@ -45,6 +52,7 @@ Route::middleware(['auth'])->group(function () {
             }
 
             $item->setAttribute('available_stock', $availableStock);
+            $item->setAttribute('calculated_cost_price', $recipeCost);
 
             return $item;
         });
