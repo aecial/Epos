@@ -77,7 +77,7 @@ export default function ItemManagementPage({ items }: { items: Item[] }) {
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Item Management" />
             <div className="flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
-                <div className="border-sidebar-border/70 dark:border-sidebar-border relative min-h-[100vh] flex-1 overflow-hidden rounded-xl border md:min-h-min">
+                <div className="border-sidebar-border/70 dark:border-sidebar-border relative max-h-[calc(100vh-8rem)] min-h-0 flex-1 overflow-auto rounded-xl border">
                     <Table>
                         <TableHeader>
                             <TableRow>

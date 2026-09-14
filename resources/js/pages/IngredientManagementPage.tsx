@@ -115,8 +115,8 @@ export default function IngredientManagementPage({
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Ingredient Management" />
             <div className="flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
-                <div className="grid min-h-[100vh] flex-1 grid-cols-1 gap-4 md:min-h-min xl:grid-cols-2">
-                    <section className="border-sidebar-border/70 dark:border-sidebar-border overflow-hidden rounded-xl border">
+                <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 xl:grid-cols-2">
+                    <section className="border-sidebar-border/70 dark:border-sidebar-border max-h-[calc(100vh-8rem)] min-h-0 overflow-auto rounded-xl border">
                         <Table>
                             <TableHeader>
                                 <TableRow>
@@ -192,7 +192,7 @@ export default function IngredientManagementPage({
                         </Table>
                     </section>
 
-                    <section className="border-sidebar-border/70 dark:border-sidebar-border overflow-hidden rounded-xl border">
+                    <section className="border-sidebar-border/70 dark:border-sidebar-border max-h-[calc(100vh-8rem)] min-h-0 overflow-auto rounded-xl border">
                         <Table>
                             <TableHeader>
                                 <TableRow>
