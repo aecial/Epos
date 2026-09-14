@@ -121,7 +121,7 @@ export default function IngredientManagementPage({
                             <TableHeader>
                                 <TableRow>
                                     <TableHead colSpan={5}>
-                                        <div className="flex items-center gap-3">
+                                        <div className="flex items-center gap-3 p-5">
                                             <Layers3 className="text-muted-foreground size-5 shrink-0" />
                                             <div className="flex min-w-0 flex-1 items-center justify-between gap-4">
                                                 <div>
@@ -197,7 +197,7 @@ export default function IngredientManagementPage({
                             <TableHeader>
                                 <TableRow>
                                     <TableHead colSpan={7}>
-                                        <div className="flex items-center gap-3">
+                                        <div className="flex items-center gap-3 p-5">
                                             <Wheat className="text-muted-foreground size-5 shrink-0" />
                                             <div className="flex min-w-0 flex-1 items-center justify-between gap-4">
                                                 <div>

@@ -1,5 +1,6 @@
-import AppLayout from '@/layouts/app-layout';
 import { Input } from '@/components/ui/input';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/react';
 import { Layers3, Pencil, Plus, Search, SlidersHorizontal, Trash2 } from 'lucide-react';
@@ -68,9 +69,7 @@ export default function ModifierManagementPage({ modifierGroups, modifiers }: { 
 
     const filteredModifiers = useMemo(() => {
         const search = modifierSearch.toLowerCase();
-        return modifiers.filter(
-            (modifier) => modifier.name.toLowerCase().includes(search) || modifier.group?.name.toLowerCase().includes(search),
-        );
+        return modifiers.filter((modifier) => modifier.name.toLowerCase().includes(search) || modifier.group?.name.toLowerCase().includes(search));
     }, [modifiers, modifierSearch]);
 
     const updateStatus = (modifier: Modifier) => {
@@ -92,70 +91,147 @@ export default function ModifierManagementPage({ modifierGroups, modifiers }: { 
             <div className="flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
                 <div className="grid min-h-[100vh] flex-1 grid-cols-1 gap-4 md:min-h-min xl:grid-cols-2">
                     <section className="border-sidebar-border/70 dark:border-sidebar-border overflow-hidden rounded-xl border">
-                        <table className="w-full caption-bottom text-sm">
-                            <thead>
-                                <tr className="border-b">
-                                    <th colSpan={5} className="p-4 text-left">
-                                        <div className="flex items-center gap-3">
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead colSpan={5}>
+                                        <div className="flex items-center gap-3 p-5">
                                             <Layers3 className="text-muted-foreground size-5 shrink-0" />
                                             <div className="flex min-w-0 flex-1 items-center justify-between gap-4">
                                                 <div>
                                                     <h2 className="font-semibold">Modifier Groups</h2>
                                                     <p className="text-muted-foreground text-xs">Define reusable option sets.</p>
                                                 </div>
-                                                <Link href={route('create-modifier-group')} className="bg-primary text-primary-foreground inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium hover:opacity-90">
+                                                <Link
+                                                    href={route('create-modifier-group')}
+                                                    className="bg-primary text-primary-foreground inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium hover:opacity-90"
+                                                >
                                                     <Plus className="size-4" /> Add New
                                                 </Link>
                                             </div>
                                         </div>
-                                    </th>
-                                </tr>
-                                <tr className="border-b"><th colSpan={5} className="p-4"><SearchInput value={groupSearch} onChange={setGroupSearch} placeholder="Search modifier groups" /></th></tr>
-                                <tr className="border-b text-left"><th className="p-4">ID</th><th className="p-4">Group Name</th><th className="p-4 text-right">Modifiers</th><th className="p-4">Required</th><th className="p-4">Actions</th></tr>
-                            </thead>
-                            <tbody>
+                                    </TableHead>
+                                </TableRow>
+                                <TableRow>
+                                    <TableHead colSpan={5}>
+                                        <SearchInput value={groupSearch} onChange={setGroupSearch} placeholder="Search modifier groups" />
+                                    </TableHead>
+                                </TableRow>
+                                <TableRow>
+                                    <TableHead>ID</TableHead>
+                                    <TableHead>Group Name</TableHead>
+                                    <TableHead className="text-right">Modifiers</TableHead>
+                                    <TableHead>Required</TableHead>
+                                    <TableHead>Actions</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
                                 {filteredGroups.map((group) => (
-                                    <tr key={group.id} className="border-b last:border-0">
-                                        <td className="p-4 font-medium">{group.id}</td>
-                                        <td className="p-4 font-medium uppercase">{group.name}</td>
-                                        <td className="p-4 text-right">{group.modifiers_count ?? 0}</td>
-                                        <td className="p-4">{group.is_required ? 'Yes' : 'No'}</td>
-                                        <td className="p-4"><div className="flex items-center gap-2"><Link href={route('modifier-groups.edit', group.id)} aria-label={`Update ${group.name}`} className="hover:bg-muted inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium"><Pencil className="size-3" /> Update</Link><button type="button" aria-label={`Delete ${group.name}`} onClick={() => deleteRecord('group', group.id)} className="text-destructive border-destructive/30 hover:bg-destructive/10 inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium"><Trash2 className="size-3" /> Delete</button></div></td>
-                                    </tr>
+                                    <TableRow key={group.id}>
+                                        <TableCell className="font-medium">{group.id}</TableCell>
+                                        <TableCell className="font-medium uppercase">{group.name}</TableCell>
+                                        <TableCell className="text-right">{group.modifiers_count ?? 0}</TableCell>
+                                        <TableCell>{group.is_required ? 'Yes' : 'No'}</TableCell>
+                                        <TableCell>
+                                            <div className="flex items-center gap-2">
+                                                <Link
+                                                    href={route('modifier-groups.edit', group.id)}
+                                                    aria-label={`Update ${group.name}`}
+                                                    className="hover:bg-muted inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium"
+                                                >
+                                                    <Pencil className="size-3" />
+                                                    Update
+                                                </Link>
+                                                <button
+                                                    type="button"
+                                                    aria-label={`Delete ${group.name}`}
+                                                    onClick={() => deleteRecord('group', group.id)}
+                                                    className="text-destructive border-destructive/30 hover:bg-destructive/10 inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium"
+                                                >
+                                                    <Trash2 className="size-3" />
+                                                    Delete
+                                                </button>
+                                            </div>
+                                        </TableCell>
+                                    </TableRow>
                                 ))}
-                            </tbody>
-                        </table>
+                            </TableBody>
+                        </Table>
                     </section>
 
                     <section className="border-sidebar-border/70 dark:border-sidebar-border overflow-hidden rounded-xl border">
-                        <table className="w-full caption-bottom text-sm">
-                            <thead>
-                                <tr className="border-b">
-                                    <th colSpan={6} className="p-4 text-left">
-                                        <div className="flex items-center gap-3">
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead colSpan={5}>
+                                        <div className="flex items-center gap-3 p-5">
                                             <SlidersHorizontal className="text-muted-foreground size-5 shrink-0" />
                                             <div className="flex min-w-0 flex-1 items-center justify-between gap-4">
-                                                <div><h2 className="font-semibold">Modifiers</h2><p className="text-muted-foreground text-xs">Manage the choices available to menu items.</p></div>
-                                                <Link href={route('create-modifier')} className="bg-primary text-primary-foreground inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium hover:opacity-90"><Plus className="size-4" /> Add New</Link>
+                                                <div>
+                                                    <h2 className="font-semibold">Modifiers</h2>
+                                                    <p className="text-muted-foreground text-xs">Manage the choices available to menu items.</p>
+                                                </div>
+                                                <Link
+                                                    href={route('create-modifier')}
+                                                    className="bg-primary text-primary-foreground inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium hover:opacity-90"
+                                                >
+                                                    <Plus className="size-4" /> Add New
+                                                </Link>
                                             </div>
                                         </div>
-                                    </th>
-                                </tr>
-                                <tr className="border-b"><th colSpan={6} className="p-4"><SearchInput value={modifierSearch} onChange={setModifierSearch} placeholder="Search modifiers or groups" /></th></tr>
-                                <tr className="border-b text-left"><th className="p-4">ID</th><th className="p-4">Modifier</th><th className="p-4">Group</th><th className="p-4">Status</th><th className="p-4">Actions</th></tr>
-                            </thead>
-                            <tbody>
+                                    </TableHead>
+                                </TableRow>
+                                <TableRow>
+                                    <TableHead colSpan={5}>
+                                        <SearchInput value={modifierSearch} onChange={setModifierSearch} placeholder="Search modifiers or groups" />
+                                    </TableHead>
+                                </TableRow>
+                                <TableRow>
+                                    <TableHead>ID</TableHead>
+                                    <TableHead>Modifier</TableHead>
+                                    <TableHead>Group</TableHead>
+                                    <TableHead>Status</TableHead>
+                                    <TableHead>Actions</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
                                 {filteredModifiers.map((modifier) => (
-                                    <tr key={modifier.id} className="border-b last:border-0">
-                                        <td className="p-4 font-medium">{modifier.id}</td>
-                                        <td className="p-4 font-medium uppercase">{modifier.name}</td>
-                                        <td className="p-4 uppercase">{modifier.group?.name ?? 'Unassigned'}</td>
-                                        <td className="p-4"><StatusButton status={modifier.status} disabled={updating === modifier.id} onClick={() => updateStatus(modifier)} /></td>
-                                        <td className="p-4"><div className="flex items-center gap-2"><Link href={route('modifiers.edit', modifier.id)} aria-label={`Update ${modifier.name}`} className="hover:bg-muted inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium"><Pencil className="size-3" /> Update</Link><button type="button" aria-label={`Delete ${modifier.name}`} onClick={() => deleteRecord('modifier', modifier.id)} className="text-destructive border-destructive/30 hover:bg-destructive/10 inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium"><Trash2 className="size-3" /> Delete</button></div></td>
-                                    </tr>
+                                    <TableRow key={modifier.id}>
+                                        <TableCell className="font-medium">{modifier.id}</TableCell>
+                                        <TableCell className="font-medium uppercase">{modifier.name}</TableCell>
+                                        <TableCell className="uppercase">{modifier.group?.name ?? 'Unassigned'}</TableCell>
+                                        <TableCell>
+                                            <StatusButton
+                                                status={modifier.status}
+                                                disabled={updating === modifier.id}
+                                                onClick={() => updateStatus(modifier)}
+                                            />
+                                        </TableCell>
+                                        <TableCell>
+                                            <div className="flex items-center gap-2">
+                                                <Link
+                                                    href={route('modifiers.edit', modifier.id)}
+                                                    aria-label={`Update ${modifier.name}`}
+                                                    className="hover:bg-muted inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium"
+                                                >
+                                                    <Pencil className="size-3" />
+                                                    Update
+                                                </Link>
+                                                <button
+                                                    type="button"
+                                                    aria-label={`Delete ${modifier.name}`}
+                                                    onClick={() => deleteRecord('modifier', modifier.id)}
+                                                    className="text-destructive border-destructive/30 hover:bg-destructive/10 inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium"
+                                                >
+                                                    <Trash2 className="size-3" />
+                                                    Delete
+                                                </button>
+                                            </div>
+                                        </TableCell>
+                                    </TableRow>
                                 ))}
-                            </tbody>
-                        </table>
+                            </TableBody>
+                        </Table>
                     </section>
                 </div>
             </div>
