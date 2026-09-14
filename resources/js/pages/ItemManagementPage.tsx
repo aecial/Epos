@@ -4,7 +4,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/react';
-import { Pencil, Plus, Search, Trash2 } from 'lucide-react';
+import { Pencil, Plus, Search, Trash2, Utensils } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 type ItemStatus = 'available' | 'unavailable' | 'hidden';
@@ -82,24 +82,35 @@ export default function ItemManagementPage({ items }: { items: Item[] }) {
                         <TableHeader>
                             <TableRow>
                                 <TableHead colSpan={10}>
-                                    <div className="flex items-center justify-between gap-4">
-                                        <div className="relative">
-                                            <Search className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
-                                            <Input
-                                                type="search"
-                                                value={search}
-                                                onChange={(event) => setSearch(event.target.value)}
-                                                placeholder="Search items"
-                                                className="pl-9"
-                                            />
+                                    <div className="flex items-center gap-3 p-5">
+                                        <Utensils className="text-muted-foreground size-5 shrink-0" />
+                                        <div className="flex min-w-0 flex-1 items-center justify-between gap-4">
+                                            <div>
+                                                <h2 className="font-semibold">Items</h2>
+                                                <p className="text-muted-foreground text-xs">Manage menu items and their inventory.</p>
+                                            </div>
+                                            <Link
+                                                href={route('create-item')}
+                                                className="bg-primary text-primary-foreground inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium hover:opacity-90"
+                                            >
+                                                <Plus className="size-4" />
+                                                Add New
+                                            </Link>
                                         </div>
-                                        <Link
-                                            href={route('create-item')}
-                                            className="bg-primary text-primary-foreground hover:bg-primary/80 inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium"
-                                        >
-                                            <Plus className="size-4" />
-                                            Add New
-                                        </Link>
+                                    </div>
+                                </TableHead>
+                            </TableRow>
+                            <TableRow>
+                                <TableHead colSpan={10}>
+                                    <div className="relative">
+                                        <Search className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
+                                        <Input
+                                            type="search"
+                                            value={search}
+                                            onChange={(event) => setSearch(event.target.value)}
+                                            placeholder="Search items"
+                                            className="pl-9"
+                                        />
                                     </div>
                                 </TableHead>
                             </TableRow>

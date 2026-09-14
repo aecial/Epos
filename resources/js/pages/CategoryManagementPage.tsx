@@ -4,7 +4,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/react';
-import { Pencil, Plus, Search, Trash2 } from 'lucide-react';
+import { Pencil, Plus, Search, Tags, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -77,16 +77,27 @@ export default function CategoryManagementPage({ categories }: { categories: Cat
                         <TableHeader>
                             <TableRow>
                                 <TableHead colSpan={6}>
-                                    <div className="flex items-center justify-between gap-4">
-                                        <SearchInput value={search} onChange={setSearch} />
-                                        <Link
-                                            href={route('create-category')}
-                                            className="bg-primary text-primary-foreground hover:bg-primary/80 inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium"
-                                        >
-                                            <Plus className="size-4" />
-                                            Add New
-                                        </Link>
+                                    <div className="flex items-center gap-3 p-5">
+                                        <Tags className="text-muted-foreground size-5 shrink-0" />
+                                        <div className="flex min-w-0 flex-1 items-center justify-between gap-4">
+                                            <div>
+                                                <h2 className="font-semibold">Categories</h2>
+                                                <p className="text-muted-foreground text-xs">Organize menu items by category.</p>
+                                            </div>
+                                            <Link
+                                                href={route('create-category')}
+                                                className="bg-primary text-primary-foreground inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium hover:opacity-90"
+                                            >
+                                                <Plus className="size-4" />
+                                                Add New
+                                            </Link>
+                                        </div>
                                     </div>
+                                </TableHead>
+                            </TableRow>
+                            <TableRow>
+                                <TableHead colSpan={6}>
+                                    <SearchInput value={search} onChange={setSearch} />
                                 </TableHead>
                             </TableRow>
                             <TableRow>
