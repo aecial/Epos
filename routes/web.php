@@ -11,6 +11,8 @@ use App\Models\Category;
 use App\Models\Ingredient;
 use App\Models\IngredientGroup;
 use App\Models\Item;
+use App\Models\ModifierGroup;
+use App\Models\Modifier;
 use App\Services\InventoryService;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -60,8 +62,30 @@ Route::middleware(['auth'])->group(function () {
         return Inertia::render('ItemManagementPage', ['items' => $items]);
     })->name('item-management');
     Route::get('modifier-management', function () {
-        return Inertia::render('ModifierManagementPage');
+        return Inertia::render('ModifierManagementPage', [
+            'modifierGroups' => ModifierGroup::withCount('modifiers')->with('modifiers')->orderBy('name')->get(),
+            'modifiers' => Modifier::with('group')->orderBy('name')->get(),
+        ]);
     })->name('modifier-management');
+    Route::get('create-modifier-group', function () {
+        return Inertia::render('CreateModifierGroupPage');
+    })->name('create-modifier-group');
+    Route::get('create-modifier', function () {
+        return Inertia::render('CreateModifierPage', [
+            'modifierGroups' => ModifierGroup::orderBy('name')->get(['id', 'name']),
+        ]);
+    })->name('create-modifier');
+    Route::get('modifier-groups/{modifierGroup}/edit', function (ModifierGroup $modifierGroup) {
+        return Inertia::render('UpdateModifierGroupPage', [
+            'modifierGroup' => $modifierGroup,
+        ]);
+    })->name('modifier-groups.edit');
+    Route::get('modifiers/{modifier}/edit', function (Modifier $modifier) {
+        return Inertia::render('UpdateModifierPage', [
+            'modifier' => $modifier->load('group'),
+            'modifierGroups' => ModifierGroup::orderBy('name')->get(['id', 'name']),
+        ]);
+    })->name('modifiers.edit');
     Route::get('ingredient-management', function () {
         return Inertia::render('IngredientManagementPage', [
             'ingredientGroups' => IngredientGroup::withCount('ingredients')->orderBy('name')->get(),
@@ -137,17 +161,17 @@ Route::middleware(['auth'])->group(function () {
     Route::get('items/{item}/recipe', [ItemRecipeController::class, 'getItemRecipe'])->name('items.recipe.show');
     Route::put('items/{item}/recipe', [ItemRecipeController::class, 'updateItemRecipe'])->name('items.recipe.update');
 
-    Route::get('modifier-groups', [ModifierGroupController::class, 'getModifierGroups']);
-    Route::get('modifier-groups/{modifierGroup}', [ModifierGroupController::class, 'getModifierGroup']);
-    Route::post('modifier-groups', [ModifierGroupController::class, 'createModifierGroup']);
-    Route::put('modifier-groups/{modifierGroup}', [ModifierGroupController::class, 'updateModifierGroup']);
-    Route::delete('modifier-groups/{modifierGroup}', [ModifierGroupController::class, 'deleteModifierGroup']);
+    Route::get('modifier-groups', [ModifierGroupController::class, 'getModifierGroups'])->name('modifier-groups.index');
+    Route::get('modifier-groups/{modifierGroup}', [ModifierGroupController::class, 'getModifierGroup'])->name('modifier-groups.show');
+    Route::post('modifier-groups', [ModifierGroupController::class, 'createModifierGroup'])->name('modifier-groups.store');
+    Route::patch('modifier-groups/{modifierGroup}', [ModifierGroupController::class, 'updateModifierGroup'])->name('modifier-groups.update');
+    Route::delete('modifier-groups/{modifierGroup}', [ModifierGroupController::class, 'deleteModifierGroup'])->name('modifier-groups.destroy');
 
-    Route::get('modifiers', [ModifierController::class, 'getModifiers']);
-    Route::get('modifiers/{modifier}', [ModifierController::class, 'getModifier']);
-    Route::post('modifiers', [ModifierController::class, 'createModifier']);
-    Route::put('modifiers/{modifier}', [ModifierController::class, 'updateModifier']);
-    Route::delete('modifiers/{modifier}', [ModifierController::class, 'deleteModifier']);
+    Route::get('modifiers', [ModifierController::class, 'getModifiers'])->name('modifiers.index');
+    Route::get('modifiers/{modifier}', [ModifierController::class, 'getModifier'])->name('modifiers.show');
+    Route::post('modifiers', [ModifierController::class, 'createModifier'])->name('modifiers.store');
+    Route::patch('modifiers/{modifier}', [ModifierController::class, 'updateModifier'])->name('modifiers.update');
+    Route::delete('modifiers/{modifier}', [ModifierController::class, 'deleteModifier'])->name('modifiers.destroy');
 });
 
 require __DIR__.'/settings.php';
