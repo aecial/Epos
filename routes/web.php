@@ -67,6 +67,9 @@ Route::middleware(['auth'])->group(function () {
             'modifiers' => Modifier::with('group')->orderBy('name')->get(),
         ]);
     })->name('modifier-management');
+    Route::get('employee-management', function () {
+        return Inertia::render('EmployeeManagementPage');
+    })->name('employee-management');
     Route::get('create-modifier-group', function () {
         return Inertia::render('CreateModifierGroupPage');
     })->name('create-modifier-group');
