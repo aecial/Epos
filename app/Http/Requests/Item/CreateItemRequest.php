@@ -29,6 +29,7 @@ class CreateItemRequest extends FormRequest
             'cost_price' => ['sometimes', 'decimal:0,2'],
             'quantity' => ['sometimes', 'integer', 'min:0'],
             'reserved_quantity' => ['sometimes', 'integer', 'min:0'],
+            'inventory_type' => ['sometimes', 'in:direct,recipe,none'],
             'image_url' => ['sometimes'],
             'status' => ['sometimes', 'in:available,unavailable,hidden'],
         ];

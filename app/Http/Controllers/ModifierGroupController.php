@@ -28,16 +28,22 @@ class ModifierGroupController extends Controller
 
     public function createModifierGroup(CreateModifierGroupRequest $request)
     {
-        return $this->modifierGroupService->CreateModifierGroup($request->validated());
+        $this->modifierGroupService->CreateModifierGroup($request->validated());
+
+        return redirect()->route('modifier-management');
     }
 
     public function updateModifierGroup(ModifierGroup $modifierGroup, UpdateModifierGroupRequest $request)
     {
-        return $this->modifierGroupService->UpdateModifierGroup($request->validated(), $modifierGroup);
+        $this->modifierGroupService->UpdateModifierGroup($request->validated(), $modifierGroup);
+
+        return redirect()->route('modifier-management');
     }
 
     public function deleteModifierGroup(ModifierGroup $modifierGroup)
     {
-        return $this->modifierGroupService->DeleteModifierGroup($modifierGroup);
+        $this->modifierGroupService->DeleteModifierGroup($modifierGroup);
+
+        return redirect()->route('modifier-management');
     }
 }

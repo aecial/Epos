@@ -29,8 +29,13 @@ class UpdateItemRequest extends FormRequest
             'cost_price' => ['sometimes', 'decimal:0,2'],
             'quantity' => ['sometimes', 'integer', 'min:0'],
             'reserved_quantity' => ['sometimes', 'integer', 'min:0'],
+            'inventory_type' => ['sometimes', 'in:direct,recipe,none'],
             'image_url' => ['sometimes'],
             'status' => ['sometimes', 'in:available,unavailable,hidden'],
+            'ingredients' => ['required_if:inventory_type,recipe', 'array', 'min:1'],
+            'ingredients.*.ingredient_id' => ['required_if:inventory_type,recipe', 'integer', 'distinct', 'exists:ingredients,id'],
+            'ingredients.*.quantity_required' => ['required_if:inventory_type,recipe', 'numeric', 'gt:0'],
+            'ingredients.*.unit' => ['required_if:inventory_type,recipe', 'in:piece,kg,gram,liter,ml'],
         ];
     }
 }

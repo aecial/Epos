@@ -1,8 +1,10 @@
 -- ============================================================================
--- Restaurant POS + KDS Database Schema (v1.1)
+-- Restaurant POS + KDS Database Schema (v1.1 reference)
 -- ============================================================================
 -- MySQL 8.0+
--- Updated: username-based auth, passcode, category visibility, item status
+-- Updated: username-based auth, passcode, category visibility, item status,
+--          inventory modes, ingredient groups, ingredients, and recipes
+-- Laravel migrations are authoritative. This file is a reference snapshot.
 -- ============================================================================
 
 SET FOREIGN_KEY_CHECKS = 0;
@@ -78,6 +80,8 @@ CREATE TABLE `items` (
     `cost_price` DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
     `quantity` INT NOT NULL DEFAULT 0,
     `reserved_quantity` INT NOT NULL DEFAULT 0,
+    -- direct: item stock, recipe: ingredient recipe, none: no inventory tracking
+    `inventory_type` ENUM('direct', 'recipe', 'none') NOT NULL DEFAULT 'direct',
     `image_url` VARCHAR(255) NULL,
     -- available: orderable on POS
     -- unavailable: visible on POS but cannot be ordered (greyed out)
@@ -93,7 +97,54 @@ CREATE TABLE `items` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================================
--- 5. MODIFIERS TABLE (Item add-ons / variants)
+-- 5. INGREDIENT GROUPS TABLE
+-- ============================================================================
+CREATE TABLE `ingredient_groups` (
+    `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    `name` VARCHAR(255) NOT NULL UNIQUE,
+    `status` ENUM('active', 'inactive') NOT NULL DEFAULT 'active',
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================================
+-- 6. INGREDIENTS TABLE (Shared raw-material stock)
+-- ============================================================================
+CREATE TABLE `ingredients` (
+    `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    `ingredient_group_id` BIGINT UNSIGNED NOT NULL,
+    `name` VARCHAR(255) NOT NULL,
+    `unit` ENUM('piece', 'kg', 'gram', 'liter', 'ml') NOT NULL,
+    `quantity` DECIMAL(12, 3) NOT NULL DEFAULT 0.000,
+    `reserved_quantity` DECIMAL(12, 3) NOT NULL DEFAULT 0.000,
+    `cost_per_unit` DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+    `status` ENUM('active', 'inactive') NOT NULL DEFAULT 'active',
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    FOREIGN KEY `fk_ingredients_group_id` (`ingredient_group_id`) REFERENCES `ingredient_groups` (`id`) ON DELETE RESTRICT,
+    UNIQUE INDEX `idx_ingredient_group_name` (`ingredient_group_id`, `name`),
+    INDEX `idx_ingredients_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================================
+-- 7. ITEM INGREDIENTS TABLE (Recipe requirements)
+-- ============================================================================
+CREATE TABLE `item_ingredient` (
+    `item_id` BIGINT UNSIGNED NOT NULL,
+    `ingredient_id` BIGINT UNSIGNED NOT NULL,
+    `quantity_required` DECIMAL(12, 3) NOT NULL,
+    `unit` ENUM('piece', 'kg', 'gram', 'liter', 'ml') NOT NULL,
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (`item_id`, `ingredient_id`),
+    FOREIGN KEY `fk_item_ingredient_item_id` (`item_id`) REFERENCES `items` (`id`) ON DELETE CASCADE,
+    FOREIGN KEY `fk_item_ingredient_ingredient_id` (`ingredient_id`) REFERENCES `ingredients` (`id`) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================================
+-- 8. MODIFIERS TABLE (Item add-ons / variants)
 -- ============================================================================
 CREATE TABLE `modifiers` (
     `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -110,7 +161,7 @@ CREATE TABLE `modifiers` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================================
--- 6. TICKETS TABLE (Open/Paid Orders)
+-- 9. TICKETS TABLE (Open/Paid Orders)
 -- ============================================================================
 CREATE TABLE `tickets` (
     `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,

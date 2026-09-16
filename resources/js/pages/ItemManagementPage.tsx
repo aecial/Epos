@@ -4,10 +4,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/react';
-import { Pencil, Plus, Search, Trash2 } from 'lucide-react';
+import { Pencil, Plus, Search, Trash2, Utensils } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 type ItemStatus = 'available' | 'unavailable' | 'hidden';
+type InventoryType = 'direct' | 'recipe' | 'none';
 
 type Item = {
     id: number;
@@ -15,8 +16,11 @@ type Item = {
     category?: { id: number; name: string };
     base_price: number | string;
     cost_price: number | string;
+    calculated_cost_price: number | string | null;
     quantity: number;
     reserved_quantity: number;
+    inventory_type: InventoryType;
+    available_stock: number | null;
     status: ItemStatus;
 };
 const breadcrumbs: BreadcrumbItem[] = [
@@ -73,29 +77,40 @@ export default function ItemManagementPage({ items }: { items: Item[] }) {
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Item Management" />
             <div className="flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
-                <div className="border-sidebar-border/70 dark:border-sidebar-border relative min-h-[100vh] flex-1 overflow-hidden rounded-xl border md:min-h-min">
+                <div className="border-sidebar-border/70 dark:border-sidebar-border relative max-h-[calc(100vh-8rem)] min-h-0 flex-1 overflow-auto rounded-xl border">
                     <Table>
                         <TableHeader>
                             <TableRow>
                                 <TableHead colSpan={10}>
-                                    <div className="flex items-center justify-between gap-4">
-                                        <div className="relative">
-                                            <Search className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
-                                            <Input
-                                                type="search"
-                                                value={search}
-                                                onChange={(event) => setSearch(event.target.value)}
-                                                placeholder="Search items"
-                                                className="pl-9"
-                                            />
+                                    <div className="flex items-center gap-3 p-5">
+                                        <Utensils className="text-muted-foreground size-5 shrink-0" />
+                                        <div className="flex min-w-0 flex-1 items-center justify-between gap-4">
+                                            <div>
+                                                <h2 className="font-semibold">Items</h2>
+                                                <p className="text-muted-foreground text-xs">Manage menu items and their inventory.</p>
+                                            </div>
+                                            <Link
+                                                href={route('create-item')}
+                                                className="bg-primary text-primary-foreground inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium hover:opacity-90"
+                                            >
+                                                <Plus className="size-4" />
+                                                Add New
+                                            </Link>
                                         </div>
-                                        <Link
-                                            href={route('create-item')}
-                                            className="bg-primary text-primary-foreground hover:bg-primary/80 inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium"
-                                        >
-                                            <Plus className="size-4" />
-                                            Add New
-                                        </Link>
+                                    </div>
+                                </TableHead>
+                            </TableRow>
+                            <TableRow>
+                                <TableHead colSpan={10}>
+                                    <div className="relative">
+                                        <Search className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
+                                        <Input
+                                            type="search"
+                                            value={search}
+                                            onChange={(event) => setSearch(event.target.value)}
+                                            placeholder="Search items"
+                                            className="pl-9"
+                                        />
                                     </div>
                                 </TableHead>
                             </TableRow>
@@ -106,62 +121,69 @@ export default function ItemManagementPage({ items }: { items: Item[] }) {
                                 <TableHead className="text-right">Price</TableHead>
                                 <TableHead className="text-right">Cost</TableHead>
                                 <TableHead className="text-right">Margin</TableHead>
+                                <TableHead>Inventory</TableHead>
                                 <TableHead className="text-right">Stock</TableHead>
                                 <TableHead>Status</TableHead>
                                 <TableHead>Actions</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {filteredItems.map((item) => (
-                                <TableRow key={item.id}>
-                                    <TableCell className="font-medium">{item.id}</TableCell>
-                                    <TableCell className="font-medium uppercase">{item.name}</TableCell>
-                                    <TableCell className="uppercase">{item.category?.name ?? 'Uncategorized'}</TableCell>
-                                    <TableCell className="text-right">₱{Number(item.base_price).toFixed(2)}</TableCell>
-                                    <TableCell className="text-right">₱{Number(item.cost_price).toFixed(2)}</TableCell>
-                                    <TableCell className="text-right">
-                                        {(((Number(item.base_price) - Number(item.cost_price)) / Number(item.base_price)) * 100).toFixed(2)}%
-                                    </TableCell>
-                                    <TableCell className="text-right">{item.quantity - item.reserved_quantity}</TableCell>
-                                    <TableCell>
-                                        <button
-                                            type="button"
-                                            disabled={updating === item.id}
-                                            onClick={() => updateStatus(item)}
-                                            className={`rounded-full px-3 py-1 text-xs font-medium text-white capitalize ${
-                                                item.status === 'available'
-                                                    ? 'bg-green-600'
-                                                    : item.status === 'unavailable'
-                                                      ? 'bg-yellow-600'
-                                                      : 'bg-gray-500'
-                                            }`}
-                                        >
-                                            {item.status}
-                                        </button>
-                                    </TableCell>
-                                    <TableCell>
-                                        <div className="flex items-center gap-2">
-                                            <Link
-                                                href={route('items.edit', item.id)}
-                                                aria-label={`Update ${item.name}`}
-                                                className="hover:bg-muted inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium"
-                                            >
-                                                <Pencil className="size-3" />
-                                                Update
-                                            </Link>
+                            {filteredItems.map((item) => {
+                                const cost = item.inventory_type === 'recipe' ? item.calculated_cost_price : item.cost_price;
+                                const margin = cost === null ? null : ((Number(item.base_price) - Number(cost)) / Number(item.base_price)) * 100;
+
+                                return (
+                                    <TableRow key={item.id}>
+                                        <TableCell className="font-medium">{item.id}</TableCell>
+                                        <TableCell className="font-medium uppercase">{item.name}</TableCell>
+                                        <TableCell className="uppercase">{item.category?.name ?? 'Uncategorized'}</TableCell>
+                                        <TableCell className="text-right">₱{Number(item.base_price).toFixed(2)}</TableCell>
+                                        <TableCell className="text-right">{cost === null ? '—' : `₱${Number(cost).toFixed(2)}`}</TableCell>
+                                        <TableCell className="text-right">{margin === null ? '—' : `${margin.toFixed(2)}%`}</TableCell>
+                                        <TableCell className="capitalize">{item.inventory_type}</TableCell>
+                                        <TableCell className="text-right">
+                                            {item.inventory_type === 'none' ? 'Unlimited' : (item.available_stock ?? 'No recipe')}
+                                        </TableCell>
+                                        <TableCell>
                                             <button
                                                 type="button"
-                                                aria-label={`Delete ${item.name}`}
-                                                onClick={() => setItemToDelete(item)}
-                                                className="text-destructive border-destructive/30 hover:bg-destructive/10 inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium"
+                                                disabled={updating === item.id}
+                                                onClick={() => updateStatus(item)}
+                                                className={`rounded-full px-3 py-1 text-xs font-medium text-white capitalize ${
+                                                    item.status === 'available'
+                                                        ? 'bg-green-600'
+                                                        : item.status === 'unavailable'
+                                                          ? 'bg-yellow-600'
+                                                          : 'bg-gray-500'
+                                                }`}
                                             >
-                                                <Trash2 className="size-3" />
-                                                Delete
+                                                {item.status}
                                             </button>
-                                        </div>
-                                    </TableCell>
-                                </TableRow>
-                            ))}
+                                        </TableCell>
+                                        <TableCell>
+                                            <div className="flex items-center gap-2">
+                                                <Link
+                                                    href={route('items.edit', item.id)}
+                                                    aria-label={`Update ${item.name}`}
+                                                    className="hover:bg-muted inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium"
+                                                >
+                                                    <Pencil className="size-3" />
+                                                    Update
+                                                </Link>
+                                                <button
+                                                    type="button"
+                                                    aria-label={`Delete ${item.name}`}
+                                                    onClick={() => setItemToDelete(item)}
+                                                    className="text-destructive border-destructive/30 hover:bg-destructive/10 inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium"
+                                                >
+                                                    <Trash2 className="size-3" />
+                                                    Delete
+                                                </button>
+                                            </div>
+                                        </TableCell>
+                                    </TableRow>
+                                );
+                            })}
                         </TableBody>
                     </Table>
                 </div>

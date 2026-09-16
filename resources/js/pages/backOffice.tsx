@@ -79,7 +79,7 @@ export default function BackOffice() {
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Back Office" />
             <div className="flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
-                <div className="grid auto-rows-min gap-4 md:grid-cols-3">
+                <div className="grid auto-rows-min gap-4 md:grid-cols-4">
                     <BackOfficeUpperDiv
                         children={
                             <Button asChild className="h-full w-full cursor-pointer text-xl">
@@ -98,6 +98,13 @@ export default function BackOffice() {
                         children={
                             <Button asChild className="h-full w-full cursor-pointer text-xl">
                                 <Link href={route('modifier-management')}>Modifier Management</Link>
+                            </Button>
+                        }
+                    />
+                    <BackOfficeUpperDiv
+                        children={
+                            <Button asChild className="h-full w-full cursor-pointer text-xl">
+                                <Link href={route('ingredient-management')}>Ingredient Management</Link>
                             </Button>
                         }
                     />

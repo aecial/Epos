@@ -5,7 +5,9 @@ namespace App\Http\Controllers;
 use App\Http\Requests\Item\CreateItemRequest;
 use App\Http\Requests\Item\UpdateItemRequest;
 use App\Models\Item;
+use App\Services\ItemRecipeService;
 use App\Services\ItemService;
+use Illuminate\Support\Facades\DB;
 
 class ItemController extends Controller
 {
@@ -26,8 +28,18 @@ class ItemController extends Controller
 
         return redirect()->route('item-management');
     }
-    public function updateItem(UpdateItemRequest $request, Item $item) {
-        $this->itemService->UpdateItem($request->validated(), $item);
+    public function updateItem(UpdateItemRequest $request, Item $item, ItemRecipeService $itemRecipeService) {
+        $data = $request->validated();
+        $ingredients = $data['ingredients'] ?? null;
+        unset($data['ingredients']);
+
+        DB::transaction(function () use ($data, $ingredients, $item, $itemRecipeService): void {
+            $this->itemService->UpdateItem($data, $item);
+
+            if ($item->inventory_type === 'recipe' && $ingredients !== null) {
+                $itemRecipeService->ReplaceItemRecipe($item->refresh(), $ingredients);
+            }
+        });
 
         return redirect()->route('item-management');
     }

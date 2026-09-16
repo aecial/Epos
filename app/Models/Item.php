@@ -18,6 +18,7 @@ class Item extends Model
         'cost_price',
         'quantity',
         'reserved_quantity',
+        'inventory_type',
         'image_url',
         'status',
     ];
@@ -31,6 +32,13 @@ class Item extends Model
     {
         return $this->belongsToMany(Modifier::class)
             ->withPivot(['price_modifier', 'status', 'display_order'])
+            ->withTimestamps();
+    }
+
+    public function ingredients(): BelongsToMany
+    {
+        return $this->belongsToMany(Ingredient::class, 'item_ingredient')
+            ->withPivot(['quantity_required', 'unit'])
             ->withTimestamps();
     }
 }

@@ -4,6 +4,7 @@ namespace App\Http\Requests\ModifierGroup;
 
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class UpdateModifierGroupRequest extends FormRequest
 {
@@ -23,7 +24,12 @@ class UpdateModifierGroupRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'name' => ['sometimes', 'string', 'max:255', 'unique:modifier_groups,name'],
+            'name' => [
+                'sometimes',
+                'string',
+                'max:255',
+                Rule::unique('modifier_groups', 'name')->ignore($this->route('modifierGroup')),
+            ],
             'is_required' => ['sometimes', 'boolean'],
         ];
     }

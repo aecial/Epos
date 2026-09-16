@@ -28,16 +28,22 @@ class ModifierController extends Controller
 
     public function createModifier(CreateModifierRequest $request)
     {
-        return $this->modifierService->CreateModifier($request->validated());
+        $this->modifierService->CreateModifier($request->validated());
+
+        return redirect()->route('modifier-management');
     }
 
     public function updateModifier(Modifier $modifier, UpdateModifierRequest $request)
     {
-        return $this->modifierService->UpdateModifier($request->validated(), $modifier);
+        $this->modifierService->UpdateModifier($request->validated(), $modifier);
+
+        return redirect()->route('modifier-management');
     }
 
     public function deleteModifier(Modifier $modifier)
     {
-        return $this->modifierService->DeleteModifier($modifier);
+        $this->modifierService->DeleteModifier($modifier);
+
+        return redirect()->route('modifier-management');
     }
 }
