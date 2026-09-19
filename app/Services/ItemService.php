@@ -13,8 +13,10 @@ class ItemService
     public function CreateItem(array $itemData) {
         return Item::create($itemData);
     }
-    public function ReadAllItem() {
-        return Item::all();
+    public function ReadAllItem(?int $categoryId = null) {
+        return Item::query()
+            ->when($categoryId !== null, fn ($query) => $query->where('category_id', $categoryId))
+            ->get();
     }
     public function ReadItem(Item $item) {
         return $item;

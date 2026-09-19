@@ -40,6 +40,23 @@ test('service returns all items', function () {
 
 });
 
+test('service filters items by category', function () {
+    $otherCategory = Category::create([
+        'name' => 'Pork',
+        'status' => 'active',
+        'is_visible_to_pos' => true,
+    ]);
+
+    $service = new ItemService();
+
+    $service->CreateItem(['category_id' => $this->category->id, 'name' => 'Fried Itik', 'base_price' => 295, 'cost_price' => 150, 'quantity' => 10, 'status' => 'available']);
+    $service->CreateItem(['category_id' => $otherCategory->id, 'name' => 'Pork Sisig', 'base_price' => 209, 'cost_price' => 120, 'quantity' => 10, 'status' => 'available']);
+
+    $names = $service->ReadAllItem($this->category->id)->pluck('name')->all();
+
+    expect($names)->toBe(['Fried Itik']);
+});
+
 test('service can read a single item', function () {
     $item = Item::create(['category_id' => $this->category->id, 'name' => 'Fried Itik', 'base_price' => 295, 'cost_price' => 150, 'quantity' => 10, 'status' => 'available']);
 

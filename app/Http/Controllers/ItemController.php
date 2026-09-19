@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\Item\CreateItemRequest;
+use App\Http\Requests\Item\GetItemsRequest;
 use App\Http\Requests\Item\UpdateItemRequest;
 use App\Models\Item;
 use App\Services\ItemRecipeService;
@@ -17,8 +18,8 @@ class ItemController extends Controller
         $this->itemService = $itemService;
     }
 
-    public function getItems() {
-        return $this->itemService->ReadAllItem();
+    public function getItems(GetItemsRequest $request) {
+        return $this->itemService->ReadAllItem($request->validated('category_id'));
     }
     public function getItem(Item $item) {
         return $this->itemService->ReadItem($item);
