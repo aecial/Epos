@@ -7,12 +7,14 @@ use App\Http\Controllers\ModifierGroupController;
 use App\Http\Controllers\IngredientController;
 use App\Http\Controllers\IngredientGroupController;
 use App\Http\Controllers\ItemRecipeController;
+use App\Http\Controllers\UserController;
 use App\Models\Category;
 use App\Models\Ingredient;
 use App\Models\IngredientGroup;
 use App\Models\Item;
 use App\Models\ModifierGroup;
 use App\Models\Modifier;
+use App\Models\User;
 use App\Services\InventoryService;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -67,9 +69,16 @@ Route::middleware(['auth'])->group(function () {
             'modifiers' => Modifier::with('group')->orderBy('name')->get(),
         ]);
     })->name('modifier-management');
-    Route::get('employee-management', function () {
-        return Inertia::render('EmployeeManagementPage');
-    })->name('employee-management');
+    Route::get('employee-management', [UserController::class, 'index'])->name('employee-management');
+    Route::get('users/create', [UserController::class, 'create'])->name('users.create');
+    Route::post('users', [UserController::class, 'store'])->name('users.store');
+    Route::get('users/{user}/edit', function (User $user) {
+        abort_if($user->role === 'admin', 403);
+
+        return Inertia::render('UpdateUserPage', ['user' => $user]);
+    })->name('users.edit');
+    Route::patch('users/{user}', [UserController::class, 'update'])->name('users.update');
+    Route::delete('users/{user}', [UserController::class, 'destroy'])->name('users.destroy');
     Route::get('create-modifier-group', function () {
         return Inertia::render('CreateModifierGroupPage');
     })->name('create-modifier-group');
