@@ -69,16 +69,16 @@ Route::middleware(['auth'])->group(function () {
             'modifiers' => Modifier::with('group')->orderBy('name')->get(),
         ]);
     })->name('modifier-management');
-    Route::get('employee-management', [UserController::class, 'index'])->name('employee-management');
-    Route::get('users/create', [UserController::class, 'create'])->name('users.create');
-    Route::post('users', [UserController::class, 'store'])->name('users.store');
+    Route::get('employee-management', [UserController::class, 'getUsers'])->name('employee-management');
+    Route::get('users/create', [UserController::class, 'getCreateUser'])->name('users.create');
+    Route::post('users', [UserController::class, 'createUser'])->name('users.store');
     Route::get('users/{user}/edit', function (User $user) {
         abort_if($user->role === 'admin', 403);
 
         return Inertia::render('UpdateUserPage', ['user' => $user]);
     })->name('users.edit');
-    Route::patch('users/{user}', [UserController::class, 'update'])->name('users.update');
-    Route::delete('users/{user}', [UserController::class, 'destroy'])->name('users.destroy');
+    Route::patch('users/{user}', [UserController::class, 'updateUser'])->name('users.update');
+    Route::delete('users/{user}', [UserController::class, 'deleteUser'])->name('users.destroy');
     Route::get('create-modifier-group', function () {
         return Inertia::render('CreateModifierGroupPage');
     })->name('create-modifier-group');

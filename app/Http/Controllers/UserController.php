@@ -11,26 +11,26 @@ use Inertia\Response;
 
 class UserController extends Controller
 {
-    public function index(): Response
+    public function getUsers(): Response
     {
         return Inertia::render('EmployeeManagementPage', [
             'users' => User::where('role', '!=', 'admin')->orderBy('name')->get(),
         ]);
     }
 
-    public function create(): Response
+    public function getCreateUser(): Response
     {
         return Inertia::render('CreateUserPage');
     }
 
-    public function store(CreateUserRequest $request): RedirectResponse
+    public function createUser(CreateUserRequest $request): RedirectResponse
     {
         User::create($request->validated() + ['status' => $request->validated('status', 'active')]);
 
         return redirect()->route('employee-management');
     }
 
-    public function update(UpdateUserRequest $request, User $user): RedirectResponse
+    public function updateUser(UpdateUserRequest $request, User $user): RedirectResponse
     {
         abort_if($user->role === 'admin', 403);
 
@@ -49,7 +49,7 @@ class UserController extends Controller
         return redirect()->route('employee-management');
     }
 
-    public function destroy(User $user): RedirectResponse
+    public function deleteUser(User $user): RedirectResponse
     {
         abort_if($user->role === 'admin', 403);
 
