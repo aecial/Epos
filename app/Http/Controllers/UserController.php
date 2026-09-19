@@ -40,6 +40,10 @@ class UserController extends Controller
             unset($data['password']);
         }
 
+        if (($data['role'] ?? $user->role) !== 'manager') {
+            $data['passcode'] = null;
+        }
+
         $user->update($data);
 
         return redirect()->route('employee-management');
