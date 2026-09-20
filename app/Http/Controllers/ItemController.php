@@ -24,8 +24,18 @@ class ItemController extends Controller
     public function getItem(Item $item) {
         return $this->itemService->ReadItem($item);
     }
-    public function createItem(CreateItemRequest $request) {
-        $this->itemService->CreateItem($request->validated());
+    public function createItem(CreateItemRequest $request, ItemRecipeService $itemRecipeService) {
+        $data = $request->validated();
+        $ingredients = $data['ingredients'] ?? null;
+        unset($data['ingredients']);
+
+        DB::transaction(function () use ($data, $ingredients, $itemRecipeService): void {
+            $item = $this->itemService->CreateItem($data);
+
+            if ($item->inventory_type === 'recipe' && $ingredients !== null) {
+                $itemRecipeService->ReplaceItemRecipe($item, $ingredients);
+            }
+        });
 
         return redirect()->route('item-management');
     }

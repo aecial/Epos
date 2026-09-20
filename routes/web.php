@@ -132,6 +132,7 @@ Route::middleware(['auth'])->group(function () {
     Route::get('create-item', function () {
         return Inertia::render('CreateItemPage', [
             'categories' => Category::orderBy('name')->get(['id', 'name']),
+            'ingredients' => Ingredient::where('status', 'active')->orderBy('name')->get(['id', 'name', 'unit']),
         ]);
     })->name('create-item');
     Route::get('categories/{category}/edit', function (Category $category) {
