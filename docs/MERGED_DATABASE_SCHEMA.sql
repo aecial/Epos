@@ -176,6 +176,7 @@ CREATE TABLE `tickets` (
     `discount_percent` DECIMAL(5, 2) DEFAULT 0.00,
     `subtotal` DECIMAL(12, 2) DEFAULT 0.00,
     `total` DECIMAL(12, 2) DEFAULT 0.00,
+    `notes` TEXT NULL,
     `merged_into_ticket_id` BIGINT UNSIGNED NULL,
     `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `closed_at` TIMESTAMP NULL,
