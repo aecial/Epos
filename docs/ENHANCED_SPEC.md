@@ -302,7 +302,8 @@ EXPECTED TOTAL CASH:        ₱6,550
 | Login                          | ✅    | ✅      | ✅      |
 | Create Users                   | ✅    | ❌      | ❌      |
 | Manage Menu (Items/Categories) | ✅    | ❌      | ❌      |
-| Open/Close Shifts              | ✅    | ✅      | ❌      |
+| Open Shift                     | ✅    | ✅      | ✅      |
+| Close Shift                    | ✅    | ✅      | ✅      |
 | Create Tickets (Orders)        | ❌    | ❌      | ✅      |
 | View Own Terminal Orders       | ❌    | ❌      | ✅      |
 | View All Orders (Back Office)  | ✅    | ✅      | ❌      |
