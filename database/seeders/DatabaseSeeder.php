@@ -28,5 +28,12 @@ class DatabaseSeeder extends Seeder
             'role' => 'cashier',
             'status' => 'active',
         ]);
+        User::updateOrCreate(['username' => 'admin'], [
+            'name' => 'Admin',
+            'password' => 'pass1234',
+            'passcode' => '5046',
+            'role' => 'admin',
+            'status' => 'active',
+        ]);
     }
 }
