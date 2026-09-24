@@ -22,7 +22,6 @@ class Item extends Model
         'image_url',
         'status',
     ];
-
     public function category(): BelongsTo
     {
         return $this->belongsTo(Category::class);

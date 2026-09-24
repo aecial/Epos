@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\V1\AuthController;
+use App\Http\Controllers\Api\V1\ItemController;
 use App\Http\Controllers\Api\V1\PaymentController;
 use App\Http\Controllers\Api\V1\ReceiptController;
 use App\Http\Controllers\Api\V1\RefundController;
@@ -13,9 +14,15 @@ Route::post('auth/login', [AuthController::class, 'login'])
     ->middleware('throttle:6,1')
     ->name('api.v1.auth.login');
 
+Route::get('items', [ItemController::class, 'getItems'])->name('api.v1.items.index');
+    Route::get('items/{item}', [ItemController::class, 'getItem'])->name('api.v1.items.show');
+    
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('auth/me', [AuthController::class, 'me'])->name('api.v1.auth.me');
     Route::post('auth/logout', [AuthController::class, 'logout'])->name('api.v1.auth.logout');
+
+    // Route::get('items', [ItemController::class, 'getItems'])->name('api.v1.items.index');
+    // Route::get('items/{item}', [ItemController::class, 'getItem'])->name('api.v1.items.show');
 
     Route::post('shifts', [ShiftController::class, 'openShift'])->name('api.v1.shifts.open');
     Route::get('shifts/active', [ShiftController::class, 'getActiveShift'])->name('api.v1.shifts.active');
