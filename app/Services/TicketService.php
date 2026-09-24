@@ -185,6 +185,106 @@ class TicketService
         });
     }
 
+    /**
+     * Merge one or more open tickets into $target. Lines are physically moved onto the
+     * target so it becomes the single bill; the sources stay as history with status
+     * 'merged'. Reservations are per item, not per ticket, so inventory is untouched.
+     *
+     * @param  array<int, int>  $sourceIds
+     */
+    public function MergeTickets(Ticket $target, array $sourceIds, User $mergedBy): Ticket
+    {
+        $sourceIds = array_values(array_unique(array_map('intval', $sourceIds)));
+
+        if ($sourceIds === []) {
+            throw new InvalidArgumentException('At least one ticket to merge is required.');
+        }
+
+        if (in_array((int) $target->id, $sourceIds, true)) {
+            throw new InvalidArgumentException('A ticket cannot be merged into itself.');
+        }
+
+        return DB::transaction(function () use ($target, $sourceIds, $mergedBy): Ticket {
+            // Lock every ticket involved in ascending id order. A fixed order means two
+            // merges that touch overlapping tickets queue up instead of deadlocking.
+            $ids = array_merge($sourceIds, [(int) $target->id]);
+            sort($ids);
+
+            $tickets = Ticket::query()->whereIn('id', $ids)->orderBy('id')->lockForUpdate()->get()->keyBy('id');
+
+            if ($tickets->count() !== count($ids)) {
+                throw new InvalidArgumentException('One or more tickets to merge were not found.');
+            }
+
+            // Re-check under the lock: the state we validated before may be stale.
+            foreach ($tickets as $ticket) {
+                if (! $ticket->isOpen()) {
+                    throw new InvalidArgumentException("Ticket {$ticket->order_number} is not open and cannot be merged.");
+                }
+
+                if ((int) $ticket->shift_id !== (int) $target->shift_id) {
+                    throw new InvalidArgumentException('Tickets must belong to the same shift to be merged.');
+                }
+            }
+
+            $lockedTarget = $tickets[(int) $target->id];
+            $sources = $tickets->except((int) $target->id);
+
+            // Carry every ticket's discount over as one fixed amount. Each ticket's
+            // effective discount is simply subtotal - total (it already reflects the
+            // percent-vs-amount rule), so no rule needs re-implementing here.
+            $combinedDiscount = round((float) $tickets->sum(
+                fn (Ticket $ticket): float => (float) $ticket->subtotal - (float) $ticket->total
+            ), 2);
+
+            $notes = collect([$lockedTarget->notes])
+                ->merge($sources->map(fn (Ticket $source): ?string => filled($source->notes)
+                    ? "{$source->order_number}: {$source->notes}"
+                    : null))
+                ->filter(fn (?string $note): bool => filled($note))
+                ->implode("\n");
+
+            foreach ($sources as $source) {
+                // Remember where each line came from, but never overwrite an earlier origin
+                // (A merged into B, then B into C: A's lines should still say "from A").
+                TicketItem::query()
+                    ->where('ticket_id', $source->id)
+                    ->whereNull('merged_from_ticket_id')
+                    ->update(['merged_from_ticket_id' => $source->id]);
+
+                TicketItem::query()->where('ticket_id', $source->id)->update(['ticket_id' => $lockedTarget->id]);
+
+                // Flatten chains: tickets already merged into this source now point at the
+                // target, so merged_tickets on the target is always the complete list.
+                Ticket::query()
+                    ->where('merged_into_ticket_id', $source->id)
+                    ->update(['merged_into_ticket_id' => $lockedTarget->id]);
+
+                $source->update([
+                    'status' => 'merged',
+                    'merged_into_ticket_id' => $lockedTarget->id,
+                    'merged_by' => $mergedBy->id,
+                    'merged_at' => now(),
+                    // Zeroed so the money now lives only on the target.
+                    'subtotal' => 0,
+                    'discount_amount' => 0,
+                    'discount_percent' => 0,
+                    'total' => 0,
+                ]);
+            }
+
+            $lockedTarget->update([
+                'discount_amount' => $combinedDiscount,
+                'discount_percent' => 0,
+                'notes' => $notes === '' ? null : $notes,
+            ]);
+
+            $this->recalculateTotals($lockedTarget);
+
+            return $lockedTarget->fresh(['items.modifiers', 'mergedTickets']);
+        });
+    }
+
     private function nextOrderNumber(Shift $shift): string
     {
         $maxNumber = Ticket::query()

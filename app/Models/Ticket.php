@@ -25,6 +25,8 @@ class Ticket extends Model
         'total',
         'notes',
         'merged_into_ticket_id',
+        'merged_by',
+        'merged_at',
         'cancelled_by',
         'cancelled_at',
         'closed_at',
@@ -33,9 +35,15 @@ class Ticket extends Model
     protected function casts(): array
     {
         return [
+            'merged_at' => 'datetime',
             'cancelled_at' => 'datetime',
             'closed_at' => 'datetime',
         ];
+    }
+
+    public function mergedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'merged_by');
     }
 
     public function shift(): BelongsTo

@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\PaymentController;
+use App\Http\Controllers\Api\V1\ReceiptController;
 use App\Http\Controllers\Api\V1\RefundController;
 use App\Http\Controllers\Api\V1\ShiftController;
 use App\Http\Controllers\Api\V1\ShiftTransactionController;
@@ -32,9 +33,14 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('tickets/{ticket}/items', [TicketController::class, 'addItem'])->name('api.v1.tickets.items.store');
     Route::delete('tickets/{ticket}/items/{ticketItem}', [TicketController::class, 'voidItem'])->name('api.v1.tickets.items.void');
     Route::patch('tickets/{ticket}/discount', [TicketController::class, 'setDiscount'])->name('api.v1.tickets.discount');
+    Route::post('tickets/{ticket}/merge', [TicketController::class, 'mergeTickets'])->name('api.v1.tickets.merge');
     Route::post('tickets/{ticket}/cancel', [TicketController::class, 'cancelTicket'])->name('api.v1.tickets.cancel');
 
     Route::post('tickets/{ticket}/charges', [PaymentController::class, 'chargeTicket'])->name('api.v1.tickets.charges.store');
+
+    Route::get('receipts', [ReceiptController::class, 'getReceipts'])->name('api.v1.receipts.index');
+    Route::get('receipts/{receipt}', [ReceiptController::class, 'getReceipt'])->name('api.v1.receipts.show');
+    Route::post('receipts/{receipt}/reprint', [ReceiptController::class, 'reprintReceipt'])->name('api.v1.receipts.reprint');
 
     Route::get('refunds', [RefundController::class, 'getRefunds'])->name('api.v1.refunds.index');
     Route::get('refunds/{refund}', [RefundController::class, 'getRefund'])->name('api.v1.refunds.show');

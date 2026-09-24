@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Ticket\AddTicketItemRequest;
 use App\Http\Requests\Ticket\CreateTicketRequest;
 use App\Http\Requests\Ticket\GetTicketsRequest;
+use App\Http\Requests\Ticket\MergeTicketsRequest;
 use App\Http\Requests\Ticket\SetTicketDiscountRequest;
 use App\Http\Requests\Ticket\VoidTicketItemRequest;
 use App\Models\Item;
@@ -54,7 +55,7 @@ class TicketController extends Controller
 
     public function getTicket(Ticket $ticket): JsonResponse
     {
-        return $this->success($ticket->load(['items.modifiers', 'charges']));
+        return $this->success($ticket->load(['items.modifiers', 'charges.receipt', 'mergedTickets']));
     }
 
     public function createTicket(CreateTicketRequest $request): JsonResponse
@@ -111,6 +112,17 @@ class TicketController extends Controller
         );
 
         return $this->success($updated);
+    }
+
+    public function mergeTickets(MergeTicketsRequest $request, Ticket $ticket): JsonResponse
+    {
+        $merged = $this->ticketService->MergeTickets(
+            $ticket,
+            $request->validated('merge_from_ticket_ids'),
+            $request->user(),
+        );
+
+        return $this->success($merged);
     }
 
     public function cancelTicket(Ticket $ticket): JsonResponse

@@ -28,10 +28,11 @@ return new class extends Migration
             $table->timestamp('closed_at')->nullable();
             $table->timestamps();
 
-            // Generated column: 1 while open, NULL once closed. MySQL's UNIQUE index ignores
+            // Generated column: 1 while open, NULL once closed. A UNIQUE index ignores
             // NULLs, so this enforces "at most one open shift" without blocking closed history.
+            // CASE (not MySQL's IF()) so the same migration also runs on the SQLite test DB.
             $table->unsignedTinyInteger('is_open')
-                ->storedAs("IF(status = 'open', 1, NULL)")
+                ->storedAs("CASE WHEN status = 'open' THEN 1 ELSE NULL END")
                 ->nullable();
             $table->unique('is_open', 'idx_shifts_one_active_shift');
 

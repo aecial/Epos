@@ -32,8 +32,9 @@ return new class extends Migration
             // Generated column: holds customer_name only while the ticket is open, else NULL.
             // Backs the "no duplicate open name per shift" rule (john -> john2 -> john3)
             // across all terminals, without blocking the same name being reused once paid.
+            // CASE (not MySQL's IF()) so the same migration also runs on the SQLite test DB.
             $table->string('open_name')
-                ->storedAs("IF(status = 'open', customer_name, NULL)")
+                ->storedAs("CASE WHEN status = 'open' THEN customer_name ELSE NULL END")
                 ->nullable();
             $table->unique(['shift_id', 'open_name'], 'idx_tickets_shift_open_name');
 

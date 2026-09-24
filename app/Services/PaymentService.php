@@ -12,7 +12,10 @@ use InvalidArgumentException;
 
 class PaymentService
 {
-    public function __construct(private InventoryService $inventoryService) {}
+    public function __construct(
+        private InventoryService $inventoryService,
+        private ReceiptService $receiptService,
+    ) {}
 
     /**
      * Charges are amounts-only (no item assignment / charge_items) — each charge
@@ -55,16 +58,21 @@ class PaymentService
                 : $discountAmount;
             $total = max(0, round($subtotal - $effectiveDiscount, 2));
 
-            $sumCharges = round((float) array_sum(array_column($charges, 'amount')), 2);
+            // Compare in whole centavos and require an exact match. (An earlier version
+            // tolerated 1 centavo, but receipt proration needs the charges to add up to
+            // the ticket total exactly.)
+            $sumCharges = (int) round((float) array_sum(array_column($charges, 'amount')) * 100);
 
-            if (abs($sumCharges - $total) > 0.01) {
+            if ($sumCharges !== (int) round($total * 100)) {
                 throw new ChargeAmountMismatchException;
             }
+
+            $createdCharges = collect();
 
             foreach ($charges as $chargeData) {
                 $tendered = $chargeData['tendered_amount'] ?? null;
 
-                Charge::create([
+                $createdCharges->push(Charge::create([
                     'ticket_id' => $lockedTicket->id,
                     'payment_method' => $chargeData['payment_method'],
                     'amount' => $chargeData['amount'],
@@ -74,7 +82,7 @@ class PaymentService
                     'payment_reference' => $chargeData['payment_reference'] ?? null,
                     'created_by' => $cashier->id,
                     'paid_at' => now(),
-                ]);
+                ]));
             }
 
             foreach ($items as $ticketItem) {
@@ -88,7 +96,11 @@ class PaymentService
                 'closed_at' => now(),
             ]);
 
-            return $lockedTicket->fresh(['charges']);
+            // Same transaction as the payment: if receipt generation fails, the whole
+            // payment (charges, inventory deduction, paid status) rolls back with it.
+            $this->receiptService->GenerateReceipts($lockedTicket, $createdCharges, $cashier);
+
+            return $lockedTicket->fresh(['charges.receipt']);
         });
     }
 }

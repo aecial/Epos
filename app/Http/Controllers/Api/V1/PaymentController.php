@@ -23,6 +23,8 @@ class PaymentController extends Controller
             $request->validated('charges'),
         );
 
-        return $this->success($paid->load('charges'));
+        // Each charge carries its receipt (with the full printable payload), so the POS can
+        // print immediately without a second request.
+        return $this->success($paid->load('charges.receipt'));
     }
 }

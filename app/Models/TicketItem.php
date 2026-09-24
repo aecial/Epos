@@ -13,6 +13,7 @@ class TicketItem extends Model
 
     protected $fillable = [
         'ticket_id',
+        'merged_from_ticket_id',
         'item_id',
         'item_name',
         'item_cost_price',
@@ -35,6 +36,11 @@ class TicketItem extends Model
     public function ticket(): BelongsTo
     {
         return $this->belongsTo(Ticket::class);
+    }
+
+    public function mergedFromTicket(): BelongsTo
+    {
+        return $this->belongsTo(Ticket::class, 'merged_from_ticket_id');
     }
 
     public function item(): BelongsTo

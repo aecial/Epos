@@ -1369,19 +1369,16 @@ OR
 
 **Description:** List receipts (all terminals visible on POS, filterable on back office)
 
-**Query Params (POS):**
+**Query Params (all optional, combinable — POS and back office use the same endpoint):**
 
-- `?terminal_id=POS-01` (optional, shows own if not specified)
-- `?shift_id={id}`
-- `?page=1&per_page=20`
+- `?terminal_id=POS-01` (filter only; every terminal can see every receipt)
+- `?shift_id={id}` · `?ticket_id={id}`
+- `?date_from=2026-08-10` · `?date_to=2026-08-11` (inclusive, by issue date)
+- `?payment_method=cash|gcash`
+- `?search=john` (matches order number, customer name, or receipt number)
+- `?page=1&per_page=20` (max 100)
 
-**Query Params (Back Office):**
-
-- `?shift_id={id}`
-- `?date_from=2026-08-10`
-- `?date_to=2026-08-11`
-- `?payment_method=cash`
-- `?page=1&per_page=20`
+Newest first. Rows do not include the receipt `payload`; fetch `GET /receipts/{id}` for that.
 
 **Response:**
 
@@ -1397,12 +1394,22 @@ OR
             "payment_method": "cash",
             "amount": 175.0,
             "terminal_id": "POS-01",
-            "printed_at": "2026-08-10T14:35:00Z",
-            "is_reprint": false
+            "shift_id": 1,
+            "ticket_id": 1,
+            "issued_at": "2026-08-10T14:35:00Z",
+            "reprint_count": 0
         }
-    ]
+    ],
+    "meta": { "total": 1, "per_page": 20, "current_page": 1, "last_page": 1 }
 }
 ```
+
+**Notes:**
+
+- One receipt is issued per paid charge, inside the payment transaction, and returned with the
+  payment response (`POST /tickets/{id}/charges` → `data.charges[].receipt`).
+- Receipt numbers are a per-day running sequence: `REC-{YYYY-MM-DD}-{NNN}`.
+- A receipt is an immutable snapshot (`payload`); it never changes after issue.
 
 **Auth:** Required
 
@@ -1410,9 +1417,10 @@ OR
 
 ### GET `/receipts/{receipt_id}`
 
-**Description:** Get full receipt details
-
-**Response:** (Same as `/charges/{charge_id}/receipt`)
+**Description:** Get the full stored receipt. `payload` holds everything needed to print: order
+number(s) (`merged_from` lists merged tickets), items with modifiers (never kitchen notes), this
+charge's prorated `subtotal` / `discount` / `total`, and payment details. `prints` is the print log
+(first entry = original print, later entries = reprints, each with who printed it).
 
 **Auth:** Required
 
@@ -1420,18 +1428,19 @@ OR
 
 ### POST `/receipts/{receipt_id}/reprint`
 
-**Description:** Reprint receipt (marks as reprint, adds watermark)
+**Description:** Log a duplicate print and return the receipt to render with a watermark. The
+printer itself is driven by the POS app; the API only records the print and supplies the data.
 
-**Response:**
+**Response:** the full receipt (as `GET /receipts/{id}`) plus:
 
 ```json
 {
     "success": true,
-    "message": "Receipt sent to printer",
     "data": {
         "receipt_number": "REC-2026-08-10-001",
         "is_reprint": true,
-        "printed_at": "2026-08-10T15:00:00Z"
+        "watermark": "DUPLICATE RECEIPT",
+        "reprint_count": 1
     }
 }
 ```
@@ -1440,9 +1449,9 @@ OR
 
 **Backend Logic:**
 
-- Create new receipt_history entry with `is_reprint = true`
-- Send to thermal printer with "DUPLICATE RECEIPT" watermark
-- Display on POS screen
+- Append a `receipt_prints` row (`is_reprint = true`, `printed_by` = caller)
+- The receipt row and its number are never changed or duplicated
+- The POS prints `payload` with the `watermark` text
 
 ---
 
