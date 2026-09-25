@@ -38,7 +38,7 @@ Route::middleware(['auth'])->group(function () {
     })->name('category-management');
     Route::get('item-management', function () {
         $inventoryService = app(InventoryService::class);
-        $items = Item::with(['category', 'ingredients'])->get()->map(function (Item $item) use ($inventoryService) {
+        $items = Item::with(['category', 'ingredients'])->withCount('modifiers')->get()->map(function (Item $item) use ($inventoryService) {
             $availableStock = null;
             $recipeCost = null;
 
@@ -133,6 +133,11 @@ Route::middleware(['auth'])->group(function () {
         return Inertia::render('CreateItemPage', [
             'categories' => Category::orderBy('name')->get(['id', 'name']),
             'ingredients' => Ingredient::where('status', 'active')->orderBy('name')->get(['id', 'name', 'unit']),
+            'modifierGroups' => ModifierGroup::query()
+                ->with(['modifiers' => fn ($query) => $query->where('status', 'active')->orderBy('name')])
+                ->whereHas('modifiers', fn ($query) => $query->where('status', 'active'))
+                ->orderBy('name')
+                ->get(['id', 'name', 'is_required']),
         ]);
     })->name('create-item');
     Route::get('categories/{category}/edit', function (Category $category) {
@@ -149,9 +154,14 @@ Route::middleware(['auth'])->group(function () {
     Route::delete('categories/{category}', [CategoryController::class, 'deleteCategory'])->name('categories.destroy');
     Route::get('items/{item}/edit', function (Item $item) {
         return Inertia::render('UpdateItemPage', [
-            'item' => $item->load('ingredients'),
+            'item' => $item->load(['ingredients', 'modifiers']),
             'categories' => Category::orderBy('name')->get(['id', 'name']),
             'ingredients' => Ingredient::where('status', 'active')->orderBy('name')->get(['id', 'name', 'unit']),
+            'modifierGroups' => ModifierGroup::query()
+                ->with(['modifiers' => fn ($query) => $query->where('status', 'active')->orderBy('name')])
+                ->whereHas('modifiers', fn ($query) => $query->where('status', 'active'))
+                ->orderBy('name')
+                ->get(['id', 'name', 'is_required']),
         ]);
     })->name('items.edit');
     Route::get('items', [ItemController::class, 'getItems']);

@@ -12,8 +12,23 @@ type ItemRecipeRow = {
     quantity_required: string;
     unit: RecipeIngredient['unit'];
 };
+type ModifierOption = { id: number; name: string };
+type ModifierGroupOption = { id: number; name: string; is_required: boolean; modifiers: ModifierOption[] };
+type ItemModifierRow = {
+    modifier_id: number;
+    price_modifier: string;
+    display_order: number;
+};
 
-export default function CreateItemPage({ categories, ingredients }: { categories: Category[]; ingredients: RecipeIngredient[] }) {
+export default function CreateItemPage({
+    categories,
+    ingredients,
+    modifierGroups,
+}: {
+    categories: Category[];
+    ingredients: RecipeIngredient[];
+    modifierGroups: ModifierGroupOption[];
+}) {
     const breadcrumbs: BreadcrumbItem[] = [
         { title: 'Back Office', href: route('back-office') },
         { title: 'Item Management', href: route('item-management') },
@@ -29,6 +44,7 @@ export default function CreateItemPage({ categories, ingredients }: { categories
         image_url: '',
         status: 'available' as ItemStatus,
         ingredients: [] as ItemRecipeRow[],
+        modifiers: [] as ItemModifierRow[],
     });
 
     const submit = (event: FormEvent<HTMLFormElement>) => {
@@ -44,6 +60,30 @@ export default function CreateItemPage({ categories, ingredients }: { categories
         }
 
         form.setData('ingredients', [...form.data.ingredients, { ingredient_id: ingredient.id, quantity_required: '1', unit: ingredient.unit }]);
+    };
+
+    const toggleModifier = (modifierId: number) => {
+        const isSelected = form.data.modifiers.some((row) => row.modifier_id === modifierId);
+
+        if (isSelected) {
+            form.setData(
+                'modifiers',
+                form.data.modifiers.filter((row) => row.modifier_id !== modifierId),
+            );
+            return;
+        }
+
+        form.setData('modifiers', [
+            ...form.data.modifiers,
+            { modifier_id: modifierId, price_modifier: '0', display_order: form.data.modifiers.length },
+        ]);
+    };
+
+    const updateModifierPrice = (modifierId: number, price: string) => {
+        form.setData(
+            'modifiers',
+            form.data.modifiers.map((row) => (row.modifier_id === modifierId ? { ...row, price_modifier: price } : row)),
+        );
     };
 
     return (
@@ -206,6 +246,58 @@ export default function CreateItemPage({ categories, ingredients }: { categories
                                 >
                                     Add ingredient
                                 </button>
+                            </div>
+                        )}
+                        {modifierGroups.length > 0 && (
+                            <div className="space-y-4 border-t pt-6 sm:col-span-2">
+                                <div>
+                                    <h2 className="font-semibold">Modifiers</h2>
+                                    <p className="text-muted-foreground mt-1 text-sm">
+                                        Choose the variant options customers can pick for this item on POS.
+                                    </p>
+                                </div>
+                                <div className="space-y-4">
+                                    {modifierGroups.map((group) => (
+                                        <div key={group.id} className="space-y-2">
+                                            <p className="text-sm font-medium">
+                                                {group.name}
+                                                {group.is_required && (
+                                                    <span className="text-muted-foreground ml-1 text-xs font-normal">(required group)</span>
+                                                )}
+                                            </p>
+                                            <div className="space-y-2">
+                                                {group.modifiers.map((modifier) => {
+                                                    const row = form.data.modifiers.find((candidate) => candidate.modifier_id === modifier.id);
+
+                                                    return (
+                                                        <div key={modifier.id} className="flex items-center gap-3">
+                                                            <label className="flex flex-1 items-center gap-2 text-sm">
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={!!row}
+                                                                    onChange={() => toggleModifier(modifier.id)}
+                                                                    className="size-4"
+                                                                />
+                                                                {modifier.name}
+                                                            </label>
+                                                            {row && (
+                                                                <input
+                                                                    type="number"
+                                                                    step="0.01"
+                                                                    value={row.price_modifier}
+                                                                    onChange={(event) => updateModifierPrice(modifier.id, event.target.value)}
+                                                                    placeholder="+0.00"
+                                                                    className="field w-28"
+                                                                />
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                                {form.errors.modifiers && <p className="text-destructive text-sm">{form.errors.modifiers}</p>}
                             </div>
                         )}
                         <FormActions processing={form.processing} label="Create item" />

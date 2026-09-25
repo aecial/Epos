@@ -36,6 +36,10 @@ class CreateItemRequest extends FormRequest
             'ingredients.*.ingredient_id' => ['required_if:inventory_type,recipe', 'integer', 'distinct', 'exists:ingredients,id'],
             'ingredients.*.quantity_required' => ['required_if:inventory_type,recipe', 'numeric', 'gt:0'],
             'ingredients.*.unit' => ['required_if:inventory_type,recipe', 'in:piece,kg,gram,liter,ml'],
+            'modifiers' => ['sometimes', 'array'],
+            'modifiers.*.modifier_id' => ['required', 'integer', 'distinct', 'exists:modifiers,id'],
+            'modifiers.*.price_modifier' => ['sometimes', 'nullable', 'decimal:0,2'],
+            'modifiers.*.display_order' => ['sometimes', 'nullable', 'integer', 'min:0'],
         ];
     }
 }
