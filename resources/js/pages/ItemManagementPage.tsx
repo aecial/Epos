@@ -22,6 +22,7 @@ type Item = {
     inventory_type: InventoryType;
     available_stock: number | null;
     status: ItemStatus;
+    modifiers_count?: number;
 };
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -81,7 +82,7 @@ export default function ItemManagementPage({ items }: { items: Item[] }) {
                     <Table>
                         <TableHeader>
                             <TableRow>
-                                <TableHead colSpan={10}>
+                                <TableHead colSpan={11}>
                                     <div className="flex items-center gap-3 p-5">
                                         <Utensils className="text-muted-foreground size-5 shrink-0" />
                                         <div className="flex min-w-0 flex-1 items-center justify-between gap-4">
@@ -101,7 +102,7 @@ export default function ItemManagementPage({ items }: { items: Item[] }) {
                                 </TableHead>
                             </TableRow>
                             <TableRow>
-                                <TableHead colSpan={10}>
+                                <TableHead colSpan={11}>
                                     <div className="relative">
                                         <Search className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
                                         <Input
@@ -124,6 +125,7 @@ export default function ItemManagementPage({ items }: { items: Item[] }) {
                                 <TableHead>Inventory</TableHead>
                                 <TableHead className="text-right">Stock</TableHead>
                                 <TableHead>Status</TableHead>
+                                <TableHead>Modifiers</TableHead>
                                 <TableHead>Actions</TableHead>
                             </TableRow>
                         </TableHeader>
@@ -159,6 +161,9 @@ export default function ItemManagementPage({ items }: { items: Item[] }) {
                                             >
                                                 {item.status}
                                             </button>
+                                        </TableCell>
+                                        <TableCell className="text-muted-foreground text-sm">
+                                            {item.modifiers_count ? `${item.modifiers_count} attached` : '—'}
                                         </TableCell>
                                         <TableCell>
                                             <div className="flex items-center gap-2">
