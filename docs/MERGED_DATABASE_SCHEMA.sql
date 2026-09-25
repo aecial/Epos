@@ -5,6 +5,22 @@
 -- Updated: username-based auth, passcode, category visibility, item status,
 --          inventory modes, ingredient groups, ingredients, and recipes
 -- Laravel migrations are authoritative. This file is a reference snapshot.
+--
+-- NOTE (drift): this snapshot predates the implemented POS tables. Where it
+-- differs from database/migrations, the migrations win. Known differences:
+--   * `charge_items` was dropped: charges are amounts-only (no item assignment).
+--   * Added by migrations: `receipts`, `receipt_prints`, `refund_items`,
+--     `modifier_groups`, `item_modifier` (per-item modifier price), and
+--     `ticket_item_modifier` (snapshotted modifier name/price).
+--   * `modifiers` no longer has `item_id`; modifiers are reusable and attach to
+--     items through `item_modifier`.
+--   * `shifts` has a generated `is_open` column + UNIQUE index, plus
+--     `closed_by`, `total_additions`, `total_expenses`, `total_refunds`.
+--   * `tickets` has `open_name` (unique per shift while open), `merged_by`,
+--     `merged_at`, `cancelled_by`, `cancelled_at`; `ticket_items` snapshots
+--     `item_name`/`item_cost_price` and has `merged_from_ticket_id`,
+--     `voided_at`, `voided_by`, `voided_requested_by`.
+--   * `charges` has `tendered_amount`, `change_due`, `payment_reference`.
 -- ============================================================================
 
 SET FOREIGN_KEY_CHECKS = 0;

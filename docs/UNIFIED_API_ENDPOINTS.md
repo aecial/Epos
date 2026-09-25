@@ -1,2020 +1,688 @@
-# Restaurant POS API — Unified Endpoints (v1.1 Planned)
+# Restaurant POS API — Endpoints (v1)
 
-> **Status:** Planned API contract. These `/api` endpoints are not the current back-office routes. The current implementation uses authenticated Laravel web routes and Inertia pages. Confirm an endpoint exists in `routes/api.php` before treating this document as an implemented interface.
+> **Status:** Implemented. This document describes the REST API in `routes/api_v1.php`, which is what the React Native POS talks to. Routes, controllers, requests and services are authoritative if this document differs. Things in the original plan that do **not** exist yet are listed in [§13 Not implemented](#13-not-implemented-yet).
+>
+> The back office is **not** served by this API. It uses session-authenticated Laravel web routes and Inertia pages (`routes/web.php`). See `ENHANCED_SPEC.md` §7.
 
-The current inventory implementation supports `direct`, `recipe`, and `none` item modes. Recipe items consume shared ingredients through `item_ingredient`; they do not decrement `items.quantity`.
-
-**Base URL:** `http://nuc-ip:8000/api`  
-**Authentication:** Bearer token via Laravel Sanctum (except login/register)  
-**Response Format:** Standard JSON with success flag
+**Base URL:** `http://nuc-ip:8000/api/v1`
+**Authentication:** Bearer token via Laravel Sanctum (everything except `POST /auth/login`)
+**Content type:** `Accept: application/json` on every request
 
 ---
 
-## RESPONSE FORMAT (All Endpoints)
+## 0. CONVENTIONS
 
-### Success Response
+### Response envelope
+
+Success:
 
 ```json
-{
-    "success": true,
-    "data": {
-        /* payload */
-    },
-    "message": "Optional success message"
-}
+{ "success": true, "data": { "...": "..." }, "meta": { "...": "..." } }
 ```
 
-### Error Response
+`meta` is present only when there is something to put in it (pagination, `ticket_item_id`).
+
+Error:
 
 ```json
 {
     "success": false,
     "message": "User-friendly error message",
-    "errors": {
-        "field_name": ["Validation error message"]
-    }
+    "errors": { "field_name": ["Validation error message"] }
 }
 ```
+
+`errors` is present only on `422`.
+
+### Status codes
+
+| Code | Meaning                                                                                                      |
+| ---- | ------------------------------------------------------------------------------------------------------------ |
+| 200  | OK                                                                                                           |
+| 201  | Created (login, open shift, create ticket/transaction/refund, add item)                                      |
+| 401  | Missing/invalid token — `Unauthenticated.`                                                                   |
+| 403  | Role not allowed, or a bad/insufficient passcode (`Passcode is invalid or the approver lacks permission.`)   |
+| 404  | Unknown id, or no active shift where one is required                                                         |
+| 409  | Business-rule conflict: no active shift, shift already open, open tickets block close, charge total mismatch, insufficient stock, ticket not open, refund already decided, etc. |
+| 422  | Validation failed                                                                                            |
+| 429  | Login throttled (6 attempts per minute)                                                                      |
+
+Any domain rule a service rejects with `InvalidArgumentException` (for example "Ticket is not open.") is returned as **409** with that message.
+
+### Money and dates
+
+- Money columns are Laravel `decimal` columns with no cast, so **model-backed responses (tickets, charges, refunds, shifts, transactions, items) serialize money as decimal strings** on MySQL, e.g. `"175.00"`. Parse before doing math.
+- Computed values (live shift totals, receipt `payload`) are JSON numbers.
+- Send amounts as numbers. Charges and refunds compare in whole centavos.
+- Timestamps are ISO-8601 UTC.
+
+### Roles
+
+`admin`, `manager`, `cashier`. A token belongs to one user. Role checks are noted per endpoint; "any staff" means any authenticated user.
 
 ---
 
-## 1. AUTHENTICATION ENDPOINTS
-
-### POST `/auth/register`
-
-**Description:** Create new user (admin-only in production)
-
-**Body:**
-
-```json
-{
-    "name": "John Doe",
-    "email": "john@restaurant.com",
-    "password": "securepassword",
-    "role": "cashier"
-}
-```
-
-**Response:**
-
-```json
-{
-    "success": true,
-    "data": {
-        "user": { "id": 1, "name": "John Doe", "email": "john@...", "role": "cashier" },
-        "token": "sanctum_token_here"
-    }
-}
-```
-
-**Auth:** None (middleware enforces admin in production)
-
----
+## 1. AUTHENTICATION
 
 ### POST `/auth/login`
 
-**Description:** Authenticate user and get token
+Log in with `username` (not email) and password. Throttled: 6 requests per minute.
 
-**Body:**
+**Body**
 
 ```json
-{
-    "email": "john@restaurant.com",
-    "password": "securepassword"
-}
+{ "username": "dangbi", "password": "pass1234", "device_name": "POS-01" }
 ```
 
-**Response:**
+`device_name` is optional (default `pos`); it labels the token so a manager can tell tablets apart.
+
+**Response `201`**
 
 ```json
 {
     "success": true,
     "data": {
-        "user": { "id": 1, "name": "John Doe", "role": "cashier" },
-        "token": "sanctum_token_here"
+        "token": "1|abcdef...",
+        "user": { "id": 2, "name": "Dangbi", "username": "dangbi", "role": "cashier", "status": "active" }
     }
 }
 ```
 
-**Auth:** None
+`password` and `passcode` are never serialized.
 
----
+**Errors:** `422` `username: These credentials do not match our records.` for bad credentials, or `username: This account is inactive.` for an inactive user.
 
 ### GET `/auth/me`
 
-**Description:** Get current authenticated user
-
-**Response:**
-
-```json
-{
-    "success": true,
-    "data": {
-        "id": 1,
-        "name": "John Doe",
-        "email": "john@...",
-        "role": "cashier",
-        "status": "active"
-    }
-}
-```
-
-**Auth:** Required
-
----
+Returns the current user (same shape as `data.user` above).
 
 ### POST `/auth/logout`
 
-**Description:** Logout (revoke token)
+Revokes the current token only. Returns `{ "success": true, "data": { "message": "Logged out." } }`.
 
-**Response:**
-
-```json
-{
-    "success": true,
-    "message": "Logged out successfully"
-}
-```
-
-**Auth:** Required
+There is no `/auth/register`. Users are created in the back office (§ENHANCED_SPEC 7).
 
 ---
 
-## 2. SHIFT ENDPOINTS
+## 2. MENU (POS)
 
-### POST `/shifts`
+Feeds the MenuScreen. Replaces the old `/menu` endpoint.
 
-**Description:** Open new shift (manager/admin only)
-
-**Body:**
-
-```json
-{
-    "starting_cash": 5000.0
-}
-```
-
-**Response:**
-
-```json
-{
-    "success": true,
-    "data": {
-        "id": 1,
-        "opened_by": 2,
-        "status": "open",
-        "starting_cash": 5000.0,
-        "opened_at": "2026-08-10T14:00:00Z",
-        "total_revenue": 0.0,
-        "total_cash": 0.0,
-        "total_gcash": 0.0
-    }
-}
-```
-
-**Auth:** Required (manager, admin)
-
-**Backend Logic:**
-
-- Validate only one active shift exists
-- Enforce UNIQUE INDEX on status='open'
-- Set `opened_by = current_user.id`
-- Return shift_id immediately (POS needs it for menu sync)
-
----
-
-### GET `/shifts/active`
-
-**Description:** Get currently open shift
-
-**Response:**
-
-```json
-{
-    "success": true,
-    "data": {
-        "id": 1,
-        "opened_by": 2,
-        "status": "open",
-        "starting_cash": 5000.0,
-        "opened_at": "2026-08-10T14:00:00Z"
-    }
-}
-```
-
-**Returns:** 404 if no shift open
-
-**Auth:** Required
-
----
-
-### GET `/shifts/{id}`
-
-**Description:** Get shift details with totals
-
-**Response:**
-
-```json
-{
-    "success": true,
-    "data": {
-        "id": 1,
-        "opened_by": 2,
-        "status": "open",
-        "starting_cash": 5000.0,
-        "opened_at": "2026-08-10T14:00:00Z",
-        "closed_at": null,
-        "total_revenue": 1250.0,
-        "total_cash": 750.0,
-        "total_gcash": 500.0,
-        "ticket_count": 5
-    }
-}
-```
-
-**Auth:** Required
-
----
-
-### PUT `/shifts/{id}/close`
-
-**Description:** Close shift and calculate totals (including expenses/additions)
-
-**Body:**
-
-```json
-{
-    "closing_cash": 8200.0
-}
-```
-
-**Response:**
-
-```json
-{
-    "success": true,
-    "data": {
-        "id": 1,
-        "status": "closed",
-        "closed_at": "2026-08-10T22:00:00Z",
-        "starting_cash": 5000.0,
-        "total_revenue": 1250.0,
-        "total_cash": 750.0,
-        "total_gcash": 500.0,
-        "total_additions": 500.0,
-        "total_expenses": 200.0,
-        "expected_cash": 6550.0,
-        "closing_cash": 8200.0,
-        "discrepancy": 1650.0
-    }
-}
-```
-
-**Auth:** Required (manager, admin)
-
-**Backend Logic:**
-
-- Set `status = 'closed'`, `closed_at = now()`
-- Calculate totals:
-    - `total_revenue` = SUM(tickets.total WHERE status = 'paid')
-    - `total_cash` = SUM(charges.amount WHERE payment_method = 'cash')
-    - `total_gcash` = SUM(charges.amount WHERE payment_method = 'gcash')
-    - `total_additions` = SUM(shift_transactions.amount WHERE type = 'addition' AND deleted_at IS NULL)
-    - `total_expenses` = SUM(shift_transactions.amount WHERE type = 'expense' AND deleted_at IS NULL)
-    - `expected_cash` = starting_cash + total_cash + total_additions - total_expenses
-- Validate all open tickets are paid or merged
-- Wrap in transaction
-
----
-
-## 3. SHIFT TRANSACTIONS ENDPOINTS (Expenses & Cash Additions)
-
-### POST `/shifts/{id}/transactions`
-
-**Description:** Add expense or cash addition to shift (manager/admin only, POS only)
-
-**Body:**
-
-```json
-{
-    "type": "expense",
-    "amount": 500.0,
-    "reason": "Supplies purchase - rice and oil"
-}
-```
-
-OR
-
-```json
-{
-    "type": "addition",
-    "amount": 1000.0,
-    "reason": "Owner cash deposit"
-}
-```
-
-**Response:**
-
-```json
-{
-    "success": true,
-    "data": {
-        "id": 1,
-        "shift_id": 1,
-        "type": "expense",
-        "amount": 500.0,
-        "reason": "Supplies purchase",
-        "created_by": 2,
-        "created_by_name": "Manager User",
-        "created_at": "2026-08-10T14:30:00Z"
-    }
-}
-```
-
-**Auth:** Required (manager, admin only)
-
-**Backend Logic:**
-
-- Validate shift exists and status = 'open'
-- Create shift_transaction record
-- Set `created_by = current_user.id`
-- Calculate new totals for display (no broadcast to other terminals)
-
----
-
-### GET `/shifts/{id}/transactions`
-
-**Description:** Get all expenses and cash additions for a shift
-
-**Query Params:** `?page=1&per_page=50`
-
-**Response:**
-
-```json
-{
-    "success": true,
-    "data": [
-        {
-            "id": 1,
-            "type": "addition",
-            "amount": 500.0,
-            "reason": "Owner cash deposit",
-            "created_by": 2,
-            "created_by_name": "Manager User",
-            "created_at": "2026-08-10T14:20:00Z",
-            "deleted_at": null
-        },
-        {
-            "id": 2,
-            "type": "expense",
-            "amount": 200.0,
-            "reason": "Supplies purchase",
-            "created_by": 2,
-            "created_by_name": "Manager User",
-            "created_at": "2026-08-10T14:30:00Z",
-            "deleted_at": null
-        }
-    ],
-    "meta": {
-        "total": 2,
-        "per_page": 50,
-        "current_page": 1
-    }
-}
-```
-
-**Auth:** Required (manager, admin)
-
----
-
-### PUT `/shifts/{shift_id}/transactions/{id}`
-
-**Description:** Edit expense or cash addition (manager/admin only)
-
-**Body:**
-
-```json
-{
-    "amount": 600.0,
-    "reason": "Supplies purchase - rice, oil, and spices"
-}
-```
-
-**Response:**
-
-```json
-{
-    "success": true,
-    "data": {
-        "id": 2,
-        "type": "expense",
-        "amount": 600.0,
-        "reason": "Supplies purchase - rice, oil, and spices",
-        "created_by": 2,
-        "updated_at": "2026-08-10T14:35:00Z"
-    }
-}
-```
-
-**Auth:** Required (manager, admin only)
-
----
-
-### DELETE `/shifts/{shift_id}/transactions/{id}`
-
-**Description:** Delete expense or cash addition (soft-delete, excludes from totals)
-
-**Response:**
-
-```json
-{
-    "success": true,
-    "message": "Transaction deleted"
-}
-```
-
-**Auth:** Required (manager, admin only)
-
-**Backend Logic:**
-
-- Soft-delete: set `deleted_at = now()`
-- Not shown in shift totals (WHERE deleted_at IS NULL)
-- Can be restored by re-opening if needed
-
----
-
-## 4. MENU MANAGEMENT ENDPOINTS (Admin/Back Office)
-
-### GET `/categories`
-
-**Description:** List all categories
-
-**Query Params:** `?status=active`
-
-**Response:**
-
-```json
-{
-    "success": true,
-    "data": [
-        { "id": 1, "name": "Mains", "display_order": 1, "status": "active" },
-        { "id": 2, "name": "Sides", "display_order": 2, "status": "active" }
-    ]
-}
-```
-
-**Auth:** Required
-
----
-
-### POST `/categories`
-
-**Description:** Create category
-
-**Body:**
-
-```json
-{
-    "name": "Drinks",
-    "icon_url": "https://...",
-    "display_order": 3
-}
-```
-
-**Auth:** Required (admin only)
-
----
-
-### PUT `/categories/{id}`
-
-**Description:** Update category
-
-**Body:** Same as create
-
-**Auth:** Required (admin only)
-
----
-
-### DELETE `/categories/{id}`
-
-**Description:** Delete category
-
-**Auth:** Required (admin only)
-
-**Backend Logic:**
-
-- Soft-delete or prevent if items exist
-
----
+> **Auth:** intended to require a token (`ItemApiTest` asserts this). See [§13](#13-not-implemented-yet): the route is currently registered outside the `auth:sanctum` group.
 
 ### GET `/items`
 
-**Description:** List all items with modifiers
+Optional query: `category_id` (must exist).
 
-**Query Params:** `?category_id=1` `?status=active` `?page=1&per_page=20`
+Returns every item the POS is allowed to show, **sorted by name**:
 
-**Response:**
+- `hidden` items are never returned.
+- Items in a category with `is_visible_to_pos = false` are never returned.
+- `available` items are orderable; `unavailable` items are returned so the POS can grey them out.
 
 ```json
 {
     "success": true,
     "data": [
         {
-            "id": 1,
-            "name": "Fried Itik",
-            "category_id": 1,
-            "base_price": 100.0,
-            "cost_price": 40.0,
-            "quantity": 5,
-            "reserved_quantity": 2,
-            "available": 3,
-            "status": "active",
-            "modifiers": [{ "id": 5, "name": "Large", "price_modifier": 50.0 }]
+            "id": 12,
+            "category_id": 3,
+            "category": { "id": 3, "name": "Mains" },
+            "name": "Fried Itik (Large)",
+            "base_price": "150.00",
+            "status": "available",
+            "inventory_type": "recipe",
+            "image_url": null,
+            "available_stock": 7,
+            "modifiers": [
+                {
+                    "id": 5,
+                    "name": "Extra crispy",
+                    "price_modifier": "10.00",
+                    "group": { "id": 1, "name": "Cooking", "is_required": false }
+                }
+            ]
         }
-    ],
-    "meta": {
-        "total": 25,
-        "per_page": 20,
-        "current_page": 1
-    }
-}
-```
-
-**Auth:** Required
-
----
-
-### POST `/items`
-
-**Description:** Create menu item
-
-**Body:**
-
-```json
-{
-    "category_id": 1,
-    "name": "Fried Itik",
-    "description": "Crispy fried duck",
-    "base_price": 100.0,
-    "cost_price": 40.0,
-    "quantity": 20,
-    "image_url": "https://..."
-}
-```
-
-**Auth:** Required (admin only)
-
----
-
-### PUT `/items/{id}`
-
-**Description:** Update item
-
-**Body:** Same as create
-
-**Auth:** Required (admin only)
-
----
-
-### DELETE `/items/{id}`
-
-**Description:** Delete item
-
-**Auth:** Required (admin only)
-
----
-
-### PATCH `/items/{id}/quantity`
-
-**Description:** Adjust item inventory (mid-shift restocking)
-
-**Body:**
-
-```json
-{
-    "quantity": 25
-}
-```
-
-**Response:**
-
-```json
-{
-    "success": true,
-    "data": {
-        "id": 1,
-        "name": "Fried Itik",
-        "quantity": 25,
-        "reserved_quantity": 2,
-        "available": 23
-    }
-}
-```
-
-**Auth:** Required (manager, admin)
-
-**Backend Logic:**
-
-- Direct quantity adjustment (for corrections/restocking)
-- Note: Modifies `quantity`, not `reserved_quantity`
-
----
-
-### GET `/items/{id}/modifiers`
-
-**Description:** Get all modifiers for an item
-
-**Response:**
-
-```json
-{
-    "success": true,
-    "data": [
-        { "id": 5, "name": "Small", "price_modifier": 0.0, "display_order": 1 },
-        { "id": 6, "name": "Medium", "price_modifier": 20.0, "display_order": 2 },
-        { "id": 7, "name": "Large", "price_modifier": 50.0, "display_order": 3 }
     ]
 }
 ```
 
-**Auth:** Required
+Notes:
+
+- `cost_price` and the raw `quantity` / `reserved_quantity` are deliberately **not** exposed.
+- `available_stock` is what can be sold right now: `quantity − reserved_quantity` for `direct`; the smallest complete-serving count across ingredients for `recipe`; `null` for `none` (untracked/unlimited) and for a recipe item with no ingredients configured yet.
+- `modifiers` lists only the item's **active** modifiers, in the configured display order. `group` is `null` for an ungrouped modifier. `price_modifier` is the per-item price from the `item_modifier` pivot.
+- A category filter with no matching items returns `[]`.
+
+### GET `/items/{id}`
+
+One item, same shape. A hidden item or one in a POS-hidden category is a clean `404`.
+
+There is no categories endpoint for the POS yet (see §13); derive the category pills from `category` on the items.
 
 ---
 
-### POST `/items/{id}/modifiers`
+## 3. SHIFTS
 
-**Description:** Create modifier for item
+Only one shift can be open at a time (DB unique index on a generated `is_open` column, plus an application check).
 
-**Body:**
+### POST `/shifts`
 
-```json
-{
-    "name": "Large",
-    "price_modifier": 50.0,
-    "display_order": 3
-}
-```
+Open a shift. **Any staff** may open (the code allows all authenticated users).
 
-**Auth:** Required (admin only)
+**Body:** `{ "starting_cash": 5000 }` (`numeric`, `>= 0`)
 
----
-
-### PUT `/modifiers/{id}`
-
-**Description:** Update modifier
-
-**Body:**
-
-```json
-{
-    "name": "Extra Large",
-    "price_modifier": 75.0
-}
-```
-
-**Auth:** Required (admin only)
-
----
-
-### DELETE `/modifiers/{id}`
-
-**Description:** Delete modifier
-
-**Auth:** Required (admin only)
-
----
-
-## 5. POS MENU ENDPOINT (Fetch for Tablets)
-
-### GET `/menu`
-
-**Description:** Get complete menu for POS (all items + modifiers with inventory state)
-
-**Query Params:** `?shift_id={id}` (required)
-
-**Response:**
+**Response `201`:** the shift as created — only the fields set at creation (re-fetch with `GET /shifts/active` for the full row and live totals).
 
 ```json
 {
     "success": true,
     "data": {
-        "shift_id": 1,
-        "categories": [
-            {
-                "id": 1,
-                "name": "Mains",
-                "display_order": 1,
-                "items": [
-                    {
-                        "id": 1,
-                        "name": "Fried Itik",
-                        "base_price": 100.0,
-                        "quantity": 5,
-                        "reserved_quantity": 2,
-                        "available": 3,
-                        "image_url": "https://...",
-                        "modifiers": [
-                            {
-                                "id": 5,
-                                "name": "Large",
-                                "price_modifier": 50.0,
-                                "display_order": 1
-                            }
-                        ]
-                    }
-                ]
-            }
-        ]
+        "id": 1, "opened_by": 2, "status": "open", "starting_cash": 5000,
+        "opened_at": "2026-09-25T06:00:00.000000Z",
+        "created_at": "2026-09-25T06:00:00.000000Z", "updated_at": "2026-09-25T06:00:00.000000Z"
     }
 }
 ```
 
-**Auth:** Required
+**Errors:** `409` if a shift is already open.
 
-**Backend Logic:**
+### GET `/shifts/active`
 
-- Return all active items grouped by category
-- Include inventory state (quantity, reserved_quantity, available)
-- Include all modifiers for each item
-- Order by display_order
+The open shift, **with live totals merged in**. `404` (`No active shift is open.`) if none.
 
----
-
-## 6. TICKET ENDPOINTS (Core POS — Terminal-Specific)
-
-### POST `/tickets`
-
-**Description:** Create new open ticket (POS-specific)
-
-**Body:**
+Live totals (numbers) overwrite the snapshot columns:
 
 ```json
 {
-    "shift_id": 1,
-    "terminal_id": "POS-01",
-    "customer_name": "john",
-    "order_type": "dine_in"
+    "id": 1, "status": "open", "starting_cash": "5000.00",
+    "total_revenue": 1250.0, "total_cash": 750.0, "total_gcash": 500.0,
+    "total_additions": 500.0, "total_expenses": 200.0,
+    "total_refunds": 0.0, "total_cash_refunds": 0.0,
+    "expected_cash": 6050.0
 }
 ```
 
-**Response:**
+### GET `/shifts/{shift}`
+
+Same as above for an open shift (live totals). For a closed shift, returns the stored row with the snapshot written at close.
+
+### PUT `/shifts/{shift}/close`
+
+Close a shift. **Any staff** may close (deliberate: cashiers included).
+
+**Body:** `{ "closing_cash": 8200 }` — the cash counted in the drawer.
+
+**Rules**
+
+- `409` `Shift is already closed.` if not open.
+- `409` if any ticket in the shift is still `open` (paid, merged and cancelled tickets do not block).
+- Runs in a transaction with the shift row locked.
+
+**Response:** the closed shift with the totals snapshotted. Values written by the close are JSON numbers in this response; re-fetching later via `GET /shifts/{shift}` returns them as decimal strings.
 
 ```json
 {
-    "success": true,
-    "data": {
-        "id": 1,
-        "shift_id": 1,
-        "terminal_id": "POS-01",
-        "order_number": "#001",
-        "customer_name": "john",
-        "order_type": "dine_in",
-        "status": "open",
-        "subtotal": 0.0,
-        "discount_amount": 0.0,
-        "total": 0.0,
-        "created_at": "2026-08-10T14:30:00Z"
-    }
+    "id": 1, "status": "closed", "closed_by": 2, "closed_at": "2026-09-25T14:00:00.000000Z",
+    "starting_cash": "5000.00", "closing_cash": 6000,
+    "total_revenue": 1250, "total_cash": 750, "total_gcash": 500,
+    "total_additions": 500, "total_expenses": 200, "total_refunds": 0,
+    "expected_cash": 6050, "discrepancy": -50
 }
 ```
 
-**Auth:** Required (cashier+)
+### How totals are computed
 
-**Backend Logic:**
+```
+total_revenue       = SUM(tickets.total)        WHERE status = 'paid'
+total_cash          = SUM(charges.amount)       WHERE method = cash  AND status = paid
+total_gcash         = SUM(charges.amount)       WHERE method = gcash AND status = paid
+total_additions     = SUM(shift_transactions)   WHERE type = addition AND not deleted
+total_expenses      = SUM(shift_transactions)   WHERE type = expense  AND not deleted
+total_refunds       = SUM(refunds.amount)       WHERE status = approved
+total_cash_refunds  = SUM(refunds.amount)       WHERE status = approved AND charge is cash
 
-- Validate active shift exists
-- **Auto-check** for duplicate customer_name in open tickets (same shift):
-    - If "john" exists → create "john2"
-    - If "john2" exists → create "john3"
-    - Use UNIQUE INDEX for enforcement
-- Generate auto-increment order_number
-- Set `created_by = current_user.id`
-- Set `terminal_id` from request (crucial for isolation)
-- Initialize `status = 'open'`, `subtotal = 0`, `total = 0`
-- Broadcast: `ticket.created` event to `shift.{shift_id}`
+expected_cash = starting_cash + total_cash + total_additions − total_expenses − total_cash_refunds
+discrepancy   = closing_cash − expected_cash
+```
+
+Only **cash** refunds reduce expected cash; a GCash refund never touched the drawer. `total_cash_refunds` is returned only by the live view; the closed row stores `total_refunds` (all methods).
 
 ---
+
+## 4. SHIFT TRANSACTIONS (Expenses & Cash Additions)
+
+**Manager/admin only** for create and update. Only on an **open** shift.
+
+### GET `/shifts/{shift}/transactions`
+
+All non-deleted transactions for the shift, newest first. Any staff. (Soft-deleted rows are excluded.)
+
+### POST `/shifts/{shift}/transactions`
+
+```json
+{ "type": "expense", "amount": 200, "reason": "Supply purchase" }
+```
+
+- `type`: `expense` | `addition`
+- `amount`: numeric `> 0`
+- `reason`: required string, max 255
+
+`201` with the transaction (records `created_by`). `409` if the shift is closed. `403` for a cashier.
+
+### PUT `/shifts/{shift}/transactions/{transaction}`
+
+Body: `amount`, `reason` (type cannot change). Records `updated_by`. `404` if the transaction belongs to a different shift; `409` if the shift is closed. `403` for a cashier.
+
+### DELETE `/shifts/{shift}/transactions/{transaction}`
+
+Soft delete (`deleted_at`, `deleted_by`); excluded from totals afterwards. `409` if the shift is closed. **Note:** unlike create/update, this action has no role check in code — any authenticated staff member can call it (see §13).
+
+---
+
+## 5. TICKETS
+
+A ticket is one customer's open order. Statuses: `open` → `paid` | `cancelled` | `merged`.
 
 ### GET `/tickets`
 
-**Description:** List open tickets (terminal-specific on POS, all on back office)
+Query (all optional):
 
-**Query Params:**
+| Param         | Notes                                                                                                   |
+| ------------- | ------------------------------------------------------------------------------------------------------- |
+| `shift_id`    | Defaults to the active shift. `404` if none is open.                                                    |
+| `terminal_id` | POS terminals should always send their own id for isolation. Back office omits it to see every terminal. |
+| `status`      | `open` (default), `paid`, `merged`, `cancelled`                                                         |
 
-- `?shift_id={id}` (required)
-- `?terminal_id={id}` (filters by terminal — used by POS)
-- `?status=open` (default)
-- `?page=1&per_page=20`
+Returns tickets ordered by `created_at` ascending, each with `items_count` (non-voided lines only).
 
-**Response (POS Terminal 1):**
+> Terminal isolation is a **client-supplied filter**; the server does not enforce it from the token (see §13).
+
+### POST `/tickets`
+
+Create a ticket on the active shift. Any staff.
 
 ```json
-{
-    "success": true,
-    "data": [
-        {
-            "id": 1,
-            "order_number": "#001",
-            "customer_name": "john",
-            "order_type": "dine_in",
-            "status": "open",
-            "terminal_id": "POS-01",
-            "item_count": 3,
-            "total": 350.0,
-            "created_at": "2026-08-10T14:30:00Z",
-            "elapsed_seconds": 145
-        },
-        {
-            "id": 2,
-            "order_number": "#002",
-            "customer_name": "john2",
-            "order_type": "takeout",
-            "status": "open",
-            "terminal_id": "POS-01",
-            "item_count": 2,
-            "total": 150.0,
-            "created_at": "2026-08-10T14:35:00Z",
-            "elapsed_seconds": 95
-        }
-    ]
-}
+{ "terminal_id": "POS-01", "customer_name": "john", "order_type": "dine_in" }
 ```
 
-**Auth:** Required
+- `terminal_id`: required string, max 50
+- `customer_name`: required string, max 255
+- `order_type`: `dine_in` | `takeout`
 
-**Backend Logic:**
+**Behavior**
 
-- **POS:** Filter by `terminal_id` to show only own orders
-- **Back Office:** Ignore `terminal_id`, show all
-- Calculate `elapsed_seconds` from `created_at`
+- `order_number` is `#001`, `#002`, … and **resets each shift**.
+- Duplicate names among **open** tickets in the shift (across all terminals) are auto-suffixed: `john` → `john2` → `john3`. A name can be reused once the earlier ticket is no longer open. Enforced by a DB unique index on `(shift_id, open_name)` as well.
+- `409` if no shift is open.
 
----
-
-### GET `/tickets/{id}`
-
-**Description:** Get single ticket with all items and charges
-
-**Response:**
+**Response `201`:** the ticket as created (re-fetch with `GET /tickets/{ticket}` for every column).
 
 ```json
 {
     "success": true,
     "data": {
-        "id": 1,
-        "order_number": "#001",
-        "customer_name": "john",
-        "order_type": "dine_in",
-        "terminal_id": "POS-01",
-        "status": "open",
-        "subtotal": 400.0,
-        "discount_amount": 50.0,
-        "discount_percent": 12.5,
-        "total": 350.0,
-        "items": [
-            {
-                "id": 10,
-                "ticket_item_id": 10,
-                "item_id": 1,
-                "name": "Fried Itik",
-                "quantity": 2,
-                "unit_price": 100.0,
-                "modifier": {
-                    "id": 5,
-                    "name": "Large",
-                    "price_modifier": 50.0
-                },
-                "line_total": 300.0,
-                "notes": "Extra crispy"
-            },
-            {
-                "id": 11,
-                "ticket_item_id": 11,
-                "item_id": 2,
-                "name": "Rice",
-                "quantity": 2,
-                "unit_price": 50.0,
-                "modifier": null,
-                "line_total": 100.0,
-                "notes": null
-            }
-        ],
-        "charges": [],
-        "created_at": "2026-08-10T14:30:00Z"
+        "id": 10, "shift_id": 1, "created_by": 2, "terminal_id": "POS-01",
+        "customer_name": "john2", "order_number": "#002", "order_type": "dine_in",
+        "status": "open", "subtotal": 0, "total": 0,
+        "created_at": "2026-09-25T06:10:00.000000Z", "updated_at": "2026-09-25T06:10:00.000000Z"
     }
 }
 ```
 
-**Auth:** Required
+### GET `/tickets/{ticket}`
+
+The ticket with `items` (each with `modifiers`, including voided lines — check `voided_at`), `charges` (each with its `receipt`), and `merged_tickets`.
+
+### POST `/tickets/{ticket}/items`
+
+Add a line and **reserve stock**. Any staff. Ticket must be `open`.
+
+```json
+{ "item_id": 12, "quantity": 2, "modifier_ids": [5], "notes": "Extra crispy" }
+```
+
+- `quantity`: integer `>= 1`
+- `modifier_ids`: optional; ids must exist and be attached to the item (others are ignored)
+- `notes`: optional, max 500. **KDS/back-office only — never printed on a receipt.**
+
+Line price = `(base_price + Σ modifier price_modifier) × quantity`. The item name, cost price, unit price and modifier names/prices are **snapshotted** onto the line so later menu edits don't change history.
+
+**Response `201`:** the refreshed ticket with `items.modifiers`; `meta.ticket_item_id` is the new line's id.
+
+**Errors:** `409` `Insufficient stock for item …` (nothing is reserved), `409` if the ticket is not open.
+
+### DELETE `/tickets/{ticket}/items/{ticketItem}`
+
+Void a line and **release its reservation**. Requires a manager/admin **passcode**.
+
+```json
+{ "approver_id": 1, "passcode": "0428" }
+```
+
+- The signed-in user (usually a cashier) is recorded as `voided_requested_by`; the approver as `voided_by`.
+- `403` if the approver isn't admin/manager or the 4-digit PIN doesn't match.
+- The line is kept (with `voided_at`); it is excluded from totals and receipts.
+- `404` if the line belongs to another ticket; `409` if already voided or the ticket isn't open.
+
+Returns the refreshed ticket. There is no endpoint to change a line's quantity — void and re-add (see §13).
+
+### PATCH `/tickets/{ticket}/discount`
+
+Any staff. Ticket must be `open`.
+
+```json
+{ "discount_amount": 25 }
+```
+or
+```json
+{ "discount_percent": 10 }
+```
+
+- `discount_amount`: numeric `>= 0`; `discount_percent`: numeric `0–100`
+- If `discount_percent > 0` it **takes precedence** over `discount_amount`.
+- `total = max(0, subtotal − discount)`.
+- Sending both fields replaces both; a field you omit resets to `0`. To clear the discount, send `{ "discount_amount": 0 }`.
+
+Returns the updated ticket.
+
+### POST `/tickets/{ticket}/merge`
+
+Merge other open tickets **into** the ticket in the URL (the target).
+
+```json
+{ "merge_from_ticket_ids": [11, 12] }
+```
+
+**Rules** (checked under row locks; a rejected merge changes nothing):
+
+- All tickets must be `open` and in the **same shift**; the target can't be in its own list → `409`.
+- Source lines are physically moved onto the target and remember their origin in `merged_from_ticket_id` (an earlier origin is never overwritten on chained merges).
+- Sources become `merged` (`merged_into_ticket_id`, `merged_by`, `merged_at`) with all money zeroed, so the amount lives only on the target.
+- Discounts from every ticket combine into **one fixed `discount_amount`** on the target; `discount_percent` becomes `0`.
+- Notes are concatenated, prefixed by source order number (`#002: no onions`).
+- Chained merges are flattened so the target's `merged_tickets` is the complete list.
+- Inventory is untouched (reservations belong to items, not tickets).
+- Merged sources don't block closing the shift.
+
+Returns the target with `items.modifiers` and `merged_tickets`.
+
+### POST `/tickets/{ticket}/cancel`
+
+Cancel an open ticket: **releases every reservation**, sets `status = cancelled`, `cancelled_by`, `cancelled_at`. `409` if not open. No passcode required.
 
 ---
 
-### POST `/tickets/{id}/items`
+## 6. PAYMENT
 
-**Description:** Add item to open ticket (reserves inventory)
+### POST `/tickets/{ticket}/charges`
 
-**Body:**
-
-```json
-{
-    "item_id": 1,
-    "quantity": 2,
-    "modifier_id": 5,
-    "notes": "Extra crispy"
-}
-```
-
-**Response:**
-
-```json
-{
-    "success": true,
-    "data": {
-        "ticket_item_id": 10,
-        "item_id": 1,
-        "name": "Fried Itik",
-        "quantity": 2,
-        "unit_price": 100.0,
-        "modifier_price": 50.0,
-        "line_total": 300.0,
-        "ticket": {
-            "id": 1,
-            "subtotal": 400.0,
-            "total": 350.0,
-            "discount_amount": 50.0
-        }
-    }
-}
-```
-
-**Auth:** Required (cashier+)
-
-**Backend Logic:**
-
-- Validate ticket exists and status = 'open'
-- Validate available qty (qty - reserved_qty) ≥ requested quantity
-- Allow going negative in reserved state (with warning on frontend)
-- **Reserve inventory:** `item.reserved_quantity += qty`
-- Create ticket_item record
-- Recalculate ticket.subtotal
-- Wrap in transaction
-- Broadcast: `ticket.updated` event
-
----
-
-### PATCH `/tickets/{id}/items/{ticket_item_id}`
-
-**Description:** Update item quantity in ticket
-
-**Body:**
-
-```json
-{
-    "quantity": 3
-}
-```
-
-**Response:**
-
-```json
-{
-    "success": true,
-    "data": {
-        "ticket_item_id": 10,
-        "quantity": 3,
-        "line_total": 450.0,
-        "ticket": {
-            "subtotal": 550.0,
-            "total": 500.0
-        }
-    }
-}
-```
-
-**Auth:** Required (cashier+)
-
-**Backend Logic:**
-
-- Validate item exists in ticket
-- Calculate difference: new_qty - old_qty
-- Update reserved: `item.reserved_qty += diff`
-- Update line_total and ticket subtotal
-- Broadcast: `inventory.updated` event
-
----
-
-### DELETE `/tickets/{id}/items/{ticket_item_id}`
-
-**Description:** Remove item from ticket (unreserve inventory)
-
-**Response:**
-
-```json
-{
-    "success": true,
-    "data": {
-        "ticket": {
-            "subtotal": 100.0,
-            "total": 50.0
-        }
-    }
-}
-```
-
-**Auth:** Required (cashier+)
-
-**Backend Logic:**
-
-- Delete ticket_item
-- Unreserve inventory: `item.reserved_qty -= qty`
-- Recalculate ticket totals
-- Broadcast: `inventory.updated` event
-
----
-
-### PATCH `/tickets/{id}/discount`
-
-**Description:** Apply discount to ticket
-
-**Body:**
-
-```json
-{
-    "discount_amount": 50.0
-}
-```
-
-OR
-
-```json
-{
-    "discount_percent": 10.0
-}
-```
-
-**Response:**
-
-```json
-{
-    "success": true,
-    "data": {
-        "subtotal": 400.0,
-        "discount_amount": 50.0,
-        "discount_percent": 12.5,
-        "total": 350.0
-    }
-}
-```
-
-**Auth:** Required (cashier+)
-
-**Backend Logic:**
-
-- Accept either amount or percent
-- Recalculate total
-- Both can be sent; use one (amount takes precedence if both)
-- Broadcast: `ticket.updated` event
-
----
-
-### POST `/tickets/{id}/merge`
-
-**Description:** Merge two or more tickets into one
-
-**Body:**
-
-```json
-{
-    "merge_from_ticket_ids": [2, 3]
-}
-```
-
-**Response:**
-
-```json
-{
-    "success": true,
-    "data": {
-        "id": 1,
-        "order_number": "#001",
-        "status": "open",
-        "subtotal": 750.0,
-        "total": 700.0,
-        "merged_tickets": [
-            { "id": 2, "order_number": "#002" },
-            { "id": 3, "order_number": "#003" }
-        ],
-        "items": [
-            /* combined items from all three tickets */
-        ]
-    }
-}
-```
-
-**Auth:** Required (cashier+)
-
-**Backend Logic:**
-
-- Validate all tickets exist, same shift, all open
-- Move all items from `merge_from` to main ticket
-- Recalculate main ticket totals
-- Set merged tickets' `status = 'merged'` and `merged_into_ticket_id = {main_id}`
-- Keep original order numbers visible on receipt
-- Wrap in transaction
-- Broadcast: `ticket.merged` event
-
----
-
-### POST `/tickets/{id}/cancel`
-
-**Description:** Cancel open ticket (unreserve all items)
-
-**Body:**
-
-```json
-{
-    "reason": "Customer cancelled"
-}
-```
-
-**Response:**
-
-```json
-{
-    "success": true,
-    "message": "Ticket cancelled, inventory restored"
-}
-```
-
-**Auth:** Required (cashier+, manager)
-
-**Backend Logic:**
-
-- Only cancel if status = 'open'
-- Unreserve all items: `item.reserved_qty -= qty`
-- Set ticket status to 'cancelled'
-- Broadcast: `inventory.updated` event
-
----
-
-## 7. PAYMENT ENDPOINTS (Split Charges)
-
-### POST `/tickets/{id}/charges`
-
-**Description:** Create charges for ticket (can be multiple for split payment)
-
-**Body:**
+Pay the ticket. **One call, one transaction:** creates the charges, deducts inventory, marks the ticket `paid`, and issues one receipt per charge. If anything fails (including receipt generation) the whole payment rolls back.
 
 ```json
 {
     "charges": [
-        {
-            "payment_method": "cash",
-            "amount": 175.0
-        },
-        {
-            "payment_method": "gcash",
-            "amount": 175.0,
-            "payment_reference": "GCash_TXN_12345"
-        }
+        { "payment_method": "cash", "amount": 100, "tendered_amount": 200 },
+        { "payment_method": "gcash", "amount": 75, "payment_reference": "GC-123456" }
     ]
 }
 ```
 
-**Response:**
+| Field                      | Rules                                                     |
+| -------------------------- | --------------------------------------------------------- |
+| `charges`                  | required array, at least 1                                |
+| `charges.*.payment_method` | `cash` \| `gcash`                                         |
+| `charges.*.amount`         | numeric `> 0`                                             |
+| `charges.*.tendered_amount`| optional, `>= amount`; `change_due` is computed from it   |
+| `charges.*.payment_reference` | **required for `gcash`**, optional otherwise            |
+
+**Charges are amounts-only.** There is no per-item assignment: each charge covers a portion of the ticket total, and every receipt lists **all** ticket items with the ticket's discount **prorated** to that charge.
+
+**Rules**
+
+- The server **recomputes the total** from live, non-voided lines and the ticket discount — a client-supplied total is never trusted (another terminal may have voided a line).
+- The charges must sum to the total **exactly, to the centavo** → otherwise `409 ChargeAmountMismatch`.
+- `409` if the ticket isn't `open` (so a paid ticket can't be charged twice and stock is never deducted twice) or has no items.
+- Inventory is deducted (`direct` decrements `quantity`; `recipe` decrements ingredients) and reservations cleared.
+
+**Response `200`:** the paid ticket with `charges.receipt`. Each receipt already carries the full printable `payload`, so the POS can print immediately without a second request:
 
 ```json
 {
     "success": true,
     "data": {
+        "id": 10, "status": "paid", "subtotal": "200.00", "total": "175.00", "closed_at": "...",
         "charges": [
             {
-                "id": 1,
-                "payment_method": "cash",
-                "amount": 175.0,
-                "status": "pending"
+                "id": 21, "payment_method": "cash", "amount": "100.00",
+                "tendered_amount": "200.00", "change_due": "100.00", "status": "paid",
+                "payment_reference": null,
+                "receipt": { "id": 31, "receipt_number": "REC-2026-09-25-001", "payload": { "...": "see §7" } }
             },
-            {
-                "id": 2,
-                "payment_method": "gcash",
-                "amount": 175.0,
-                "status": "pending"
-            }
+            { "id": 22, "payment_method": "gcash", "amount": "75.00", "payment_reference": "GC-123456", "receipt": { "...": "..." } }
         ]
     }
 }
 ```
 
-**Auth:** Required (cashier+)
-
-**Backend Logic:**
-
-- Validate sum of amounts = ticket.total
-- Create charge records with status = 'pending'
-- If single charge (no split), status can be 'paid' immediately
-- Wrap in transaction
+There is no separate "close ticket" call — paying closes it.
 
 ---
 
-### POST `/charges/{charge_id}/items`
+## 7. RECEIPTS
 
-**Description:** Assign items to specific charge (for receipt breakdown)
+A receipt is an **immutable snapshot** written when payment commits (one per charge). Reprinting a receipt next month gives identical content.
 
-**Body:**
+- Number format: `REC-YYYY-MM-DD-NNN` — a per-day running sequence, unique.
+- Split payment ⇒ two receipts, same order number and items, each with its own prorated slice. Discount shares are prorated in whole centavos; the last charge takes the remainder, so shares always add up to the ticket discount exactly.
+- Merged tickets print **one** receipt listing every order number in `order.merged_from`.
+- `notes` are **never** included.
 
-```json
-{
-    "items": [
-        {
-            "ticket_item_id": 10,
-            "quantity": 1
-        },
-        {
-            "ticket_item_id": 11,
-            "quantity": 1
-        }
-    ]
-}
-```
-
-**Response:**
+### Receipt `payload`
 
 ```json
 {
-    "success": true,
-    "data": {
-        "charge_id": 1,
-        "payment_method": "cash",
-        "amount": 175.0,
-        "items": [
-            { "ticket_item_id": 10, "quantity": 1 },
-            { "ticket_item_id": 11, "quantity": 1 }
-        ]
-    }
-}
-```
-
-**Auth:** Required (cashier+)
-
-**Backend Logic:**
-
-- Create charge_item records
-- Validate total quantities across charges match ticket_items
-- Calculate prorated discount per charge
-
----
-
-### PUT `/tickets/{id}/close`
-
-**Description:** Process all charges and close ticket (deduct inventory, mark paid)
-
-**Body:**
-
-```json
-{
-    "confirm": true
-}
-```
-
-**Response:**
-
-```json
-{
-    "success": true,
-    "data": {
-        "id": 1,
+    "receipt_number": "REC-2026-09-25-001",
+    "issued_at": "2026-09-25T06:35:00+00:00",
+    "order": {
         "order_number": "#001",
-        "status": "paid",
-        "closed_at": "2026-08-10T14:35:00Z",
-        "charges": [
-            { "id": 1, "payment_method": "cash", "amount": 175.0, "status": "paid" },
-            { "id": 2, "payment_method": "gcash", "amount": 175.0, "status": "paid" }
-        ]
-    }
-}
-```
-
-**Auth:** Required (cashier+)
-
-**Backend Logic:**
-
-- Validate all charges exist and items assigned
-- Validate sum of charges = ticket.total
-- For each ticket_item:
-    - `item.quantity -= qty`
-    - `item.reserved_quantity -= qty`
-- Set all charges `status = 'paid'`, `paid_at = now()`
-- Set ticket `status = 'paid'`, `closed_at = now()`
-- Update shift totals:
-    - `total_revenue += ticket.total`
-    - `total_cash += cash_charges.amount`
-    - `total_gcash += gcash_charges.amount`
-- **AUTO-GENERATE RECEIPT(S)** for each charge
-- **AUTO-PRINT** each receipt to Goojrpt PT-210
-- **DISPLAY** receipt on POS screen
-- Save to receipt_history table
-- Wrap in transaction
-- Broadcast: `ticket.paid` event
-
----
-
-### GET `/charges/{charge_id}/receipt`
-
-**Description:** Get receipt data for printing/display
-
-**Response:**
-
-```json
-{
-    "success": true,
-    "data": {
-        "receipt_number": "REC-2026-08-10-001",
-        "charge_id": 1,
-        "payment_method": "cash",
-        "ticket_order_number": "#001",
         "customer_name": "john",
         "order_type": "dine_in",
         "terminal_id": "POS-01",
-        "cashier_name": "Maria",
-        "timestamp": "2026-08-10T14:35:00Z",
-        "items": [
-            {
-                "name": "Fried Itik (Large)",
-                "quantity": 1,
-                "unit_price": 150.0,
-                "line_total": 150.0
-            },
-            {
-                "name": "Rice",
-                "quantity": 1,
-                "unit_price": 50.0,
-                "line_total": 50.0
-            }
-        ],
-        "subtotal": 200.0,
-        "discount_prorated": 25.0,
-        "total": 175.0,
-        "paid": true,
-        "paid_at": "2026-08-10T14:35:00Z"
+        "merged_from": [{ "order_number": "#002", "customer_name": "john2" }]
+    },
+    "cashier": "Dangbi",
+    "items": [
+        {
+            "name": "Fried Itik (Large)", "quantity": 1, "unit_price": 150.0,
+            "modifiers": [{ "name": "Extra crispy", "price": 10.0 }],
+            "line_total": 160.0
+        }
+    ],
+    "subtotal": 200.0,
+    "discount": 25.0,
+    "total": 175.0,
+    "payment": {
+        "method": "cash", "amount": 175.0,
+        "tendered_amount": 200.0, "change_due": 25.0, "reference": null
     }
 }
 ```
 
-**Auth:** Required
-
----
-
-## 8. RECEIPT HISTORY ENDPOINTS
+Here `subtotal − discount = total` describes **this charge's slice** of the bill. The restaurant name/address header and footer text are not in the payload; the POS app supplies them.
 
 ### GET `/receipts`
 
-**Description:** List receipts (all terminals visible on POS, filterable on back office)
+History for **every terminal** (no restriction). Paginated, newest first. Lightweight rows — no payload.
 
-**Query Params (all optional, combinable — POS and back office use the same endpoint):**
-
-- `?terminal_id=POS-01` (filter only; every terminal can see every receipt)
-- `?shift_id={id}` · `?ticket_id={id}`
-- `?date_from=2026-08-10` · `?date_to=2026-08-11` (inclusive, by issue date)
-- `?payment_method=cash|gcash`
-- `?search=john` (matches order number, customer name, or receipt number)
-- `?page=1&per_page=20` (max 100)
-
-Newest first. Rows do not include the receipt `payload`; fetch `GET /receipts/{id}` for that.
-
-**Response:**
+Query (all optional): `shift_id`, `ticket_id`, `terminal_id`, `payment_method` (`cash|gcash`), `date_from`, `date_to` (`>= date_from`), `search` (matches order number, customer name or receipt number), `page`, `per_page` (1–100, default 20).
 
 ```json
 {
     "success": true,
     "data": [
         {
-            "id": 1,
-            "receipt_number": "REC-2026-08-10-001",
-            "order_number": "#001",
-            "customer_name": "john",
-            "payment_method": "cash",
-            "amount": 175.0,
-            "terminal_id": "POS-01",
-            "shift_id": 1,
-            "ticket_id": 1,
-            "issued_at": "2026-08-10T14:35:00Z",
-            "reprint_count": 0
+            "id": 31, "receipt_number": "REC-2026-09-25-001", "order_number": "#001",
+            "customer_name": "john", "payment_method": "cash", "amount": "175.00",
+            "terminal_id": "POS-01", "shift_id": 1, "ticket_id": 10,
+            "issued_at": "...", "reprint_count": 0
         }
     ],
     "meta": { "total": 1, "per_page": 20, "current_page": 1, "last_page": 1 }
 }
 ```
 
-**Notes:**
+### GET `/receipts/{receipt}`
 
-- One receipt is issued per paid charge, inside the payment transaction, and returned with the
-  payment response (`POST /tickets/{id}/charges` → `data.charges[].receipt`).
-- Receipt numbers are a per-day running sequence: `REC-{YYYY-MM-DD}-{NNN}`.
-- A receipt is an immutable snapshot (`payload`); it never changes after issue.
+The full receipt including `payload`, `reprint_count`, and the `prints` log (each with `is_reprint`, `printed_at`, `printed_by {id, name}`).
 
-**Auth:** Required
+### POST `/receipts/{receipt}/reprint`
 
----
-
-### GET `/receipts/{receipt_id}`
-
-**Description:** Get the full stored receipt. `payload` holds everything needed to print: order
-number(s) (`merged_from` lists merged tickets), items with modifiers (never kitchen notes), this
-charge's prorated `subtotal` / `discount` / `total`, and payment details. `prints` is the print log
-(first entry = original print, later entries = reprints, each with who printed it).
-
-**Auth:** Required
-
----
-
-### POST `/receipts/{receipt_id}/reprint`
-
-**Description:** Log a duplicate print and return the receipt to render with a watermark. The
-printer itself is driven by the POS app; the API only records the print and supplies the data.
-
-**Response:** the full receipt (as `GET /receipts/{id}`) plus:
+Logs a duplicate print (`is_reprint = true`) and returns the receipt with two extra fields:
 
 ```json
-{
-    "success": true,
-    "data": {
-        "receipt_number": "REC-2026-08-10-001",
-        "is_reprint": true,
-        "watermark": "DUPLICATE RECEIPT",
-        "reprint_count": 1
-    }
-}
+{ "is_reprint": true, "watermark": "DUPLICATE RECEIPT" }
 ```
 
-**Auth:** Required
-
-**Backend Logic:**
-
-- Append a `receipt_prints` row (`is_reprint = true`, `printed_by` = caller)
-- The receipt row and its number are never changed or duplicated
-- The POS prints `payload` with the `watermark` text
+The stored receipt is never altered — the POS prints the payload and adds the watermark itself. Any staff.
 
 ---
 
-## 9. REFUND ENDPOINTS
+## 8. REFUNDS
+
+Item-level, targeting **one charge** so cash-vs-GCash is known for drawer reconciliation. Only `paid` tickets can be refunded.
 
 ### POST `/refunds`
 
-**Description:** Request refund (cashier initiates, admin approves)
-
-**Body:**
+Request a refund. **Any role.**
 
 ```json
 {
-    "ticket_id": 1,
-    "amount": 350.0,
-    "reason": "Customer changed mind",
-    "charge_id": null
+    "ticket_id": 10,
+    "charge_id": 21,
+    "reason": "Wrong order",
+    "items": [{ "ticket_item_id": 55, "quantity": 1, "amount": 150 }]
 }
 ```
 
-**Response:**
+- `items`: at least one; `ticket_item_id` distinct; `quantity` integer `>= 1`; `amount` `> 0`
+- The refund `amount` is the sum of item amounts. Status starts `pending`.
+- `409` if the charge doesn't belong to the ticket or the ticket isn't `paid`.
 
-```json
-{
-    "success": true,
-    "data": {
-        "id": 1,
-        "ticket_id": 1,
-        "amount": 350.0,
-        "reason": "Customer changed mind",
-        "status": "pending",
-        "requested_by": 3,
-        "requested_at": "2026-08-10T14:40:00Z"
-    }
-}
-```
-
-**Auth:** Required (cashier+)
-
-**Backend Logic:**
-
-- Validate ticket exists and status = 'paid'
-- Validate amount ≤ ticket.total
-- Create refund record with status = 'pending'
-- Broadcast: `refund.requested` event (notify admin)
-
----
+`201` with the refund and its `items`.
 
 ### GET `/refunds`
 
-**Description:** List refunds (pending for admin, all for back office)
+Optional `status` (`pending|approved|rejected`) and `shift_id`. Newest first, with `items`.
 
-**Query Params:**
+### GET `/refunds/{refund}`
 
-- `?status=pending` (default for admin dashboard)
-- `?shift_id={id}`
-- `?page=1&per_page=20`
+One refund with `items`.
 
-**Response:**
+### PUT `/refunds/{refund}/approve` · PUT `/refunds/{refund}/reject`
+
+Requires a manager/admin passcode:
 
 ```json
-{
-    "success": true,
-    "data": [
-        {
-            "id": 1,
-            "ticket_id": 1,
-            "order_number": "#001",
-            "amount": 350.0,
-            "reason": "Customer changed mind",
-            "status": "pending",
-            "requested_by": "Maria",
-            "requested_at": "2026-08-10T14:40:00Z"
-        }
-    ]
-}
+{ "approver_id": 1, "passcode": "0428" }
 ```
 
-**Auth:** Required (admin, manager)
+- `403` if the approver isn't admin/manager or the PIN is wrong.
+- `409` `Refund has already been decided.` if not `pending` (checked under lock).
+- **Approve** restores inventory (`direct` → `quantity += qty`; `recipe` → ingredients restored; `none` → nothing), sets `status = approved`, `approved_by`, `approved_at`. A **cash** refund reduces the shift's expected cash (§3).
+- **Reject** sets `status = rejected` with the same audit fields and touches nothing else.
+
+The ticket stays `paid`.
 
 ---
 
-### PUT `/refunds/{id}/approve`
+## 9. AUDIT TRAIL SUMMARY
 
-**Description:** Approve refund (admin-only, reverses inventory)
-
-**Body:**
-
-```json
-{
-    "notes": "Approved - customer error"
-}
-```
-
-**Response:**
-
-```json
-{
-    "success": true,
-    "data": {
-        "id": 1,
-        "status": "approved",
-        "approved_by": 1,
-        "approved_at": "2026-08-10T14:45:00Z"
-    }
-}
-```
-
-**Auth:** Required (admin only)
-
-**Backend Logic:**
-
-- Set `status = 'approved'`, `approved_by = current_user.id`, `approved_at = now()`
-- For each ticket_item in ticket:
-    - `item.quantity += qty` (restore to inventory)
-    - `item.reserved_quantity -= qty` (clear reserve)
-- Update shift totals:
-    - `total_revenue -= refund.amount`
-    - Adjust cash/gcash based on which charge was refunded
-- Broadcast: `refund.approved` event
-- Wrap in transaction
+| Action              | Recorded                                                         |
+| ------------------- | ---------------------------------------------------------------- |
+| Ticket created      | `created_by`, `terminal_id`                                      |
+| Line voided         | `voided_by` (approver), `voided_requested_by` (cashier), `voided_at` |
+| Ticket cancelled    | `cancelled_by`, `cancelled_at`                                   |
+| Ticket merged       | `merged_by`, `merged_at`, `merged_into_ticket_id`; line `merged_from_ticket_id` |
+| Charge              | `created_by`, `paid_at`                                          |
+| Receipt / reprint   | `issued_by`; every print in `receipt_prints` (`printed_by`, `is_reprint`) |
+| Shift transaction   | `created_by`, `updated_by`, `deleted_by`, `deleted_at`           |
+| Refund              | `requested_by`, `approved_by` (the passcode holder), `requested_at`, `approved_at` |
+| Shift               | `opened_by`, `closed_by`                                         |
 
 ---
 
-### PUT `/refunds/{id}/reject`
+## 10. KEY IMPLEMENTATION NOTES
 
-**Description:** Reject refund (admin-only)
+### Inventory flow
 
-**Body:**
-
-```json
-{
-    "notes": "Does not meet criteria"
-}
+```
+Add line     →  reserve   (direct: reserved_quantity += qty | recipe: ingredient reserved += needed)
+Void / cancel →  release   (reverse of reserve)
+Pay          →  deduct    (quantity -= qty AND reserved -= qty)
+Approve refund → restore   (quantity += qty)
 ```
 
-**Response:**
+- `none` items skip all inventory accounting.
+- Reserving fails with `409` if `quantity − reserved_quantity` (or any recipe ingredient) is short; nothing is reserved on failure.
+- Every mutation runs in a transaction that locks the item/ingredient rows, so competing terminals can't oversell.
+- Merging tickets never touches inventory.
 
-```json
-{
-    "success": true,
-    "data": {
-        "id": 1,
-        "status": "rejected",
-        "approved_by": 1,
-        "approved_at": "2026-08-10T14:45:00Z"
-    }
-}
-```
+### Transactions and locking
 
-**Auth:** Required (admin only)
+Creating a ticket locks the shift row to serialize order-number and name assignment across terminals. Payment locks the ticket, then the shift (receipt numbering). Merges lock every involved ticket in ascending id order to avoid deadlocks. Refund decisions lock the refund row.
+
+### Passcodes
+
+A passcode is a 4-digit PIN stored hashed on the user. The POS sends `approver_id` + `passcode`; the server requires the approver to be `admin` or `manager` and `Hash::check`s the PIN. A cashier with no passcode can never be an approver.
+
+### Error catalog
+
+| HTTP | Typical `message`                                                                                          |
+| ---- | ---------------------------------------------------------------------------------------------------------- |
+| 401  | `Unauthenticated.`                                                                                         |
+| 403  | `Passcode is invalid or the approver lacks permission.` / role-forbidden                                   |
+| 404  | `Resource not found.` / `No active shift is open.`                                                         |
+| 409  | `Insufficient stock for item X.` · `Ticket is not open.` · `Tickets must belong to the same shift to be merged.` · `Refund has already been decided.` · charge amount mismatch · shift already open · open tickets exist |
+| 422  | `The given data was invalid.` + `errors`                                                                   |
 
 ---
 
-## 10. KITCHEN DISPLAY SYSTEM (KDS) ENDPOINTS
+## 11. TYPICAL POS FLOW
 
-### GET `/kds/orders`
-
-**Description:** Get all open orders for kitchen display (all terminals in shift)
-
-**Query Params:**
-
-- `?shift_id={id}` (required)
-- `?status=open` (default)
-
-**Response:**
-
-```json
-{
-    "success": true,
-    "data": [
-        {
-            "ticket_id": 1,
-            "order_number": "#001",
-            "customer_name": "john",
-            "order_type": "dine_in",
-            "terminal_id": "POS-01",
-            "status": "open",
-            "items": [
-                {
-                    "ticket_item_id": 10,
-                    "name": "Fried Itik (Large)",
-                    "quantity": 2,
-                    "notes": "Extra crispy",
-                    "completed": false
-                },
-                {
-                    "ticket_item_id": 11,
-                    "name": "Rice",
-                    "quantity": 2,
-                    "notes": null,
-                    "completed": false
-                }
-            ],
-            "created_at": "2026-08-10T14:30:00Z",
-            "elapsed_seconds": 240
-        },
-        {
-            "ticket_id": 2,
-            "order_number": "#002",
-            "customer_name": "maria",
-            "order_type": "takeout",
-            "terminal_id": "POS-02",
-            "status": "open",
-            "items": [
-                {
-                    "ticket_item_id": 12,
-                    "name": "Pork Sinigang (Large)",
-                    "quantity": 1,
-                    "notes": "No onions",
-                    "completed": false
-                }
-            ],
-            "created_at": "2026-08-10T14:32:00Z",
-            "elapsed_seconds": 208
-        }
-    ]
-}
 ```
-
-**Auth:** Required
-
-**Backend Logic:**
-
-- Filter for `status = 'open'` (not yet paid)
-- Include all items from all terminals in shift
-- Calculate elapsed time from created_at to now()
-- Sort by created_at (oldest first — longest waiting)
-- Include `completed` flag (UI state only, stored frontend)
-
----
-
-### PATCH `/kds/orders/{ticket_id}/items/{ticket_item_id}`
-
-**Description:** Mark item as completed (kitchen marks done, removes from KDS screen)
-
-**Body:**
-
-```json
-{
-    "completed": true
-}
-```
-
-**Response:**
-
-```json
-{
-    "success": true,
-    "data": {
-        "ticket_id": 1,
-        "ticket_item_id": 10,
-        "completed": true
-    }
-}
-```
-
-**Auth:** Required (kitchen)
-
-**Backend Logic:**
-
-- No DB state change (v1: UI state only)
-- Broadcast: `item.completed` event (notify POS terminals)
-- Frontend removes from KDS view
-
----
-
-## 11. EMPLOYEE ENDPOINTS (Admin Only)
-
-### GET `/employees`
-
-**Description:** List all employees
-
-**Query Params:** `?role=cashier` `?status=active`
-
-**Auth:** Required (admin only)
-
----
-
-### POST `/employees`
-
-**Description:** Create employee
-
-**Body:**
-
-```json
-{
-    "name": "Maria Santos",
-    "email": "maria@restaurant.com",
-    "password": "securepassword",
-    "role": "cashier"
-}
-```
-
-**Auth:** Required (admin only)
-
----
-
-### PUT `/employees/{id}`
-
-**Description:** Update employee
-
-**Body:**
-
-```json
-{
-    "name": "Maria Santos",
-    "role": "manager",
-    "status": "active"
-}
-```
-
-**Auth:** Required (admin only)
-
----
-
-### DELETE `/employees/{id}`
-
-**Description:** Delete employee (soft-delete)
-
-**Auth:** Required (admin only)
-
----
-
-## 12. REAL-TIME WEBSOCKET EVENTS
-
-### Broadcasting Channel
-
-- `shift.{shift_id}` → all users in same shift
-
-### Events
-
-**1. ticket.created**
-
-```json
-{
-    "event": "ticket.created",
-    "data": {
-        "id": 1,
-        "order_number": "#001",
-        "customer_name": "john",
-        "terminal_id": "POS-01",
-        "order_type": "dine_in",
-        "status": "open",
-        "created_at": "2026-08-10T14:30:00Z"
-    }
-}
-```
-
-**2. ticket.updated**
-
-```json
-{
-    "event": "ticket.updated",
-    "data": {
-        "id": 1,
-        "total": 350.0,
-        "items_count": 4
-    }
-}
-```
-
-**3. ticket.paid**
-
-```json
-{
-    "event": "ticket.paid",
-    "data": {
-        "id": 1,
-        "order_number": "#001",
-        "total": 350.0,
-        "paid_at": "2026-08-10T14:35:00Z"
-    }
-}
-```
-
-**4. ticket.merged**
-
-```json
-{
-    "event": "ticket.merged",
-    "data": {
-        "merged_into_ticket_id": 1,
-        "merged_from": [2, 3],
-        "total": 700.0
-    }
-}
-```
-
-**5. inventory.updated**
-
-```json
-{
-    "event": "inventory.updated",
-    "data": {
-        "item_id": 1,
-        "name": "Fried Itik",
-        "quantity": 19,
-        "reserved_quantity": 2,
-        "available": 17
-    }
-}
-```
-
-**6. item.completed**
-
-```json
-{
-    "event": "item.completed",
-    "data": {
-        "ticket_id": 1,
-        "ticket_item_id": 10
-    }
-}
-```
-
-**7. refund.requested**
-
-```json
-{
-    "event": "refund.requested",
-    "data": {
-        "id": 1,
-        "ticket_id": 1,
-        "amount": 350.0,
-        "requested_by": "Maria"
-    }
-}
-```
-
-**8. refund.approved**
-
-```json
-{
-    "event": "refund.approved",
-    "data": {
-        "refund_id": 1,
-        "ticket_id": 1,
-        "amount": 350.0,
-        "approved_by": "Admin"
-    }
-}
+POST /auth/login                       → token
+GET  /shifts/active                    → 404? → POST /shifts { starting_cash }
+GET  /items                            → menu
+POST /tickets                          → ticket (#001, "john")
+POST /tickets/{id}/items               → reserve stock, repeat per item
+PATCH /tickets/{id}/discount           → optional
+POST /tickets/{id}/charges             → pay (split ok) → receipts in the response → print
+GET  /receipts                         → history / reprint
+PUT  /shifts/{id}/close { closing_cash } → reconcile
 ```
 
 ---
 
-## 13. ERROR RESPONSES
+## 12. TESTED BEHAVIOR
 
-### 401 Unauthorized
+Covered by Pest tests (`tests/Feature`, `tests/Unit`): ordering reserves in both `direct` and `recipe` modes without deducting; paying deducts and clears reservations; a paid ticket can't be charged twice; a short recipe ingredient blocks the order and reserves nothing; cash+GCash split totals; receipt numbering, per-charge slices and centavo-exact discount proration; notes never on receipts; receipt immutability and payment rollback on receipt failure; receipt history filters/pagination/search; reprint logging; ticket merge rules (same shift, open only, chained merges, one receipt with all order numbers); menu visibility, filters, `available_stock`, and modifier output.
 
-```json
-{
-    "success": false,
-    "message": "Unauthenticated"
-}
-```
-
-### 403 Forbidden
-
-```json
-{
-    "success": false,
-    "message": "This action is unauthorized"
-}
-```
-
-### 404 Not Found
-
-```json
-{
-    "success": false,
-    "message": "Ticket not found"
-}
-```
-
-### 409 Conflict (Business Logic)
-
-```json
-{
-    "success": false,
-    "message": "No active shift. Open a shift first."
-}
-```
-
-### 422 Unprocessable Entity (Validation)
-
-```json
-{
-    "success": false,
-    "errors": {
-        "customer_name": ["Customer name is required"],
-        "order_type": ["Order type must be dine_in or takeout"]
-    }
-}
-```
+**Not yet covered by dedicated tests:** API login, shifts open/close and totals, shift transactions, refunds, and ticket create/void/discount/cancel.
 
 ---
 
-## 14. PAGINATION
+## 13. NOT IMPLEMENTED YET
 
-### Query Params
-
-```
-GET /api/tickets?page=1&per_page=20
-```
-
-### Response Format
-
-```json
-{
-    "success": true,
-    "data": [
-        /* array */
-    ],
-    "meta": {
-        "total": 150,
-        "per_page": 20,
-        "current_page": 1,
-        "last_page": 8
-    }
-}
-```
-
----
-
-## 15. KEY IMPLEMENTATION NOTES
-
-### Terminal Isolation
-
-- **POS Screens:** Always pass `terminal_id` in requests
-- **Queries:** Filter by `terminal_id` to show only own orders
-- **KDS:** Ignore terminal_id, show all terminals' orders
-- **Back Office:** Ignore terminal_id, show all orders
-
-### Inventory Flow
-
-```
-ADD to ticket:
-  reserved_qty += qty
-
-REMOVE from ticket:
-  reserved_qty -= qty
-
-PAYMENT processed:
-  quantity -= qty
-  reserved_qty -= qty
-
-REFUND approved:
-  quantity += qty
-  reserved_qty -= qty
-```
-
-### Transactions
-
-- Wrap payment + inventory changes in DB::transaction()
-- Prevents race conditions with multiple POS terminals
-
-### WebSocket Broadcasting
-
-- Use `channel('shift.' . $shift_id)`
-- All terminals in same shift get updates
-- Use `.toOthers()` to avoid echo
-
----
-
-**End of Unified API Endpoints v1.0**
+| Item | Status |
+| ---- | ------ |
+| **Real-time / WebSockets** | No broadcasting code or package installed. The POS should use the manual sync button or polling for now. The event list in `ENHANCED_SPEC.md` §10 is still a plan. |
+| **KDS endpoints** (`GET /kds/orders`, item completion) | Not built. KDS completion is UI-only by design; only the read feed is missing. |
+| **Ticket line quantity edit** | No `PATCH /tickets/{id}/items/{ticketItem}`. Reducing a quantity currently means a passcode-gated void plus re-adding. |
+| **Categories endpoint for the POS** | None in `/api/v1`. Derive categories from `GET /items`. |
+| **Server-enforced terminal isolation** | `terminal_id` is a client filter on `GET /tickets`; it is not bound to the token. |
+| **`/items` auth** | `GET /items` and `GET /items/{item}` are registered *outside* the `auth:sanctum` group in `routes/api_v1.php` (the in-group copies are commented out), so they are currently public. `ItemApiTest` expects them to require a token and fails. |
+| **Shift transaction delete role check** | `DELETE /shifts/{shift}/transactions/{transaction}` has no manager/admin gate, unlike create/update. |
+| **Employee / category / item admin over the API** | These live in the session-authenticated back office only, not in `/api/v1`. |
+| **Per-item charge assignment (`charge_items`)** | Dropped by design; charges are amounts-only with prorated receipts. |
+| **Back-office pages for shifts, orders/receipts, refunds, dashboard stats, reports** | Data and API exist; no Inertia pages yet. |

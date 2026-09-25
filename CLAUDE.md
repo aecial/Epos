@@ -2,8 +2,8 @@
 
 **Stack:** Laravel 12 + Inertia React back office · React Native Expo (planned POS + KDS) · MySQL
 **Hardware:** Intel NUC + TP-Link Deco M5 · Goojrpt PT-210 thermal printer (Local Deployment after Development of the overall Application)
-**Real-time:** beyondcode/laravel-websockets  
-**Auth:** Laravel web/session authentication for the current back office; Sanctum is planned for the POS API
+**Real-time:** beyondcode/laravel-websockets (planned; nothing installed yet)  
+**Auth:** Laravel web/session authentication for the back office; Laravel Sanctum bearer tokens for the POS API (`/api/v1`, implemented)
 
 ---
 
@@ -13,25 +13,28 @@
 app/
   Http/
     Controllers/
-      BackOffice/   ← Inertia controllers (back office pages)
+      *Controller.php   ← Back office controllers (session auth; Inertia pages + JSON)
+      Api/V1/           ← POS REST API controllers (Sanctum)
+      Api/Concerns/     ← ApiResponses trait (success/error envelope)
     Middleware/
-    Requests/
+    Requests/           ← Form requests (validation + role authorization)
+  Exceptions/           ← Domain exceptions (mapped to 409/403 for /api/*)
   Models/
-  Services/
-  Events/
+  Services/             ← Business logic shared by back office and API
 resources/
   js/
-    Pages/          ← Inertia React pages (back office)
-    Components/     ← Shared React components
+    pages/              ← Inertia React pages (back office)
+    components/         ← Shared React components
 routes/
-  web.php           ← Inertia routes (back office)
+  web.php               ← Inertia routes (back office)
+  api.php → api_v1.php  ← POS API, prefix /api/v1
 database/
   migrations/
   seeders/
 docs/
-  ENHANCED_SPEC.md
-  UNIFIED_API_ENDPOINTS.md
-  MERGED_DATABASE_SCHEMA.sql  ← Reference only; use migrations
+  ENHANCED_SPEC.md        ← Product spec (implementation status marked)
+  UNIFIED_API_ENDPOINTS.md ← The implemented /api/v1 contract
+  MERGED_DATABASE_SCHEMA.sql  ← Reference only (drifted); use migrations
 ```
 
 ---
@@ -44,11 +47,13 @@ docs/
 | **Terminal isolation** | POS only sees its own open tickets                                                                       |
 | **Inventory**          | Direct items use item stock; recipe items use shared ingredient stock; reserve on add, deduct on payment |
 | **Shift lock**         | One open shift at a time (DB UNIQUE INDEX)                                                               |
-| **Split payment**      | Cash + GCash simultaneously on one ticket; one receipt per payment method                                |
+| **Split payment**      | Cash + GCash simultaneously on one ticket; amounts-only (no per-item assignment); charges must equal the recomputed total to the centavo; one receipt per charge with a prorated discount |
 | **Notes**              | KDS-only — never printed on customer receipt                                                             |
-| **Duplicate names**    | Auto-append within shift: john → john2 → john3                                                           |
-| **Passcode**           | 4-digit PIN hashed with bcrypt; required to void item on open ticket or approve refund                   |
-| **Shift formula**      | Starting Cash + Cash Sales + Additions − Expenses = Expected Cash                                        |
+| **Duplicate names**    | Auto-append among open tickets within a shift, across all terminals: john → john2 → john3                |
+| **Passcode**           | 4-digit PIN hashed with bcrypt; required to void item on open ticket or approve/reject refund (approver must be admin/manager) |
+| **Shift formula**      | Starting Cash + Cash Sales + Additions − Expenses − Cash Refunds = Expected Cash                          |
+| **Payment atomicity**  | Charges, inventory deduction, ticket close and receipt generation succeed or roll back together          |
+| **Ticket merge**       | Open tickets in the same shift fold into a target; sources become `merged` with zeroed money             |
 
 ### Inventory Modes
 
@@ -94,20 +99,17 @@ docs/
 
 ## Development Priority
 
-1. **Back office first** (Laravel Inertia React)
-    - Auth (login page, role guard)
-    - Users CRUD
-    - Categories CRUD (with `is_visible_to_pos` toggle)
-    - Items CRUD (image upload, status toggle)
-    - Modifiers CRUD
-    - Ingredient groups CRUD
-    - Ingredients CRUD and quantity adjustment
-    - Recipe assignment for recipe-based items
-2. Shifts management (planned)
-3. API layer (planned POS endpoints)
+1. **Back office** (Laravel Inertia React) — done, except item image upload (only an `image_url` string) and the stats/report pages below
+    - Auth (login page), users, categories, items, modifier groups/modifiers, ingredient groups/ingredients, recipes
+2. **POS API** (`/api/v1`, Sanctum) — done: auth, menu, shifts, shift transactions, tickets (create/add/void/discount/merge/cancel), payments, receipts, refunds
+    - Still missing: ticket line quantity edit, a POS categories endpoint, server-enforced terminal isolation, KDS feed
+    - Known issues: `GET /items` is registered outside `auth:sanctum`; shift-transaction delete has no role check; public `/register` is still enabled
+3. Back-office shift, orders/receipts, refunds and dashboard pages (planned)
 4. React Native POS app (planned)
 5. KDS app (planned)
 6. Real-time (planned WebSockets)
+
+See `docs/UNIFIED_API_ENDPOINTS.md` §13 and `docs/ENHANCED_SPEC.md` §11 for the detailed status.
 
 ---
 
