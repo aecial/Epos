@@ -418,3 +418,26 @@ test('refunding a special line restores no stock', function () {
 
     expect($fee->fresh()->quantity)->toBe(0);
 });
+
+test('the back office form payload with an empty ingredients list can create a special item', function () {
+    $category = specialCategory();
+
+    // The form always sends `ingredients: []` and `modifiers: []` for a special item.
+    $this->actingAs(User::factory()->create(['role' => 'admin']))
+        ->postJson('/items', [
+            'category_id' => $category->id,
+            'name' => 'Delivery Fee',
+            'base_price' => '0',
+            'cost_price' => '0',
+            'quantity' => '0',
+            'inventory_type' => 'none',
+            'entry_mode' => 'price',
+            'status' => 'available',
+            'ingredients' => [],
+            'modifiers' => [],
+        ])
+        ->assertSessionHasNoErrors()
+        ->assertRedirectToRoute('item-management');
+
+    expect(Item::where('name', 'Delivery Fee')->firstOrFail()->entry_mode)->toBe('price');
+});

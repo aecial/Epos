@@ -18,6 +18,17 @@ class UpdateItemRequest extends FormRequest
     }
 
     /**
+     * Only a recipe item carries ingredients. The back office form always sends an empty
+     * list, so drop it for any other inventory type instead of failing its min:1 rule.
+     */
+    protected function prepareForValidation(): void
+    {
+        if ($this->has('inventory_type') && $this->input('inventory_type') !== 'recipe') {
+            $this->getInputSource()->remove('ingredients');
+        }
+    }
+
+    /**
      * Get the validation rules that apply to the request.
      *
      * @return array<string, ValidationRule|array<mixed>|string>
