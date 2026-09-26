@@ -4,10 +4,13 @@ import { Head, useForm } from '@inertiajs/react';
 import { type FormEvent } from 'react';
 
 type CategoryStatus = 'active' | 'inactive';
+type CategoryType = 'menu' | 'special';
 
 type Category = {
     id: number;
     name: string;
+    type: CategoryType;
+    items_count?: number;
     status: CategoryStatus;
     is_visible_to_pos: boolean;
 };
@@ -30,6 +33,7 @@ export default function UpdateCategoryPage({ category }: { category: Category })
 
     const form = useForm({
         name: category.name,
+        type: category.type,
         status: category.status,
         is_visible_to_pos: category.is_visible_to_pos,
     });
@@ -70,6 +74,27 @@ export default function UpdateCategoryPage({ category }: { category: Category })
                                     {form.errors.name}
                                 </p>
                             )}
+                        </div>
+
+                        <div className="space-y-2">
+                            <label htmlFor="type" className="text-sm font-medium">
+                                Type
+                            </label>
+                            <select
+                                id="type"
+                                name="type"
+                                value={form.data.type}
+                                onChange={(event) => form.setData('type', event.target.value as CategoryType)}
+                                disabled={(category.items_count ?? 0) > 0}
+                                className="bg-background focus:ring-ring w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 disabled:opacity-60"
+                            >
+                                <option value="menu">Menu (regular items)</option>
+                                <option value="special">Special (fees and custom items priced by the cashier)</option>
+                            </select>
+                            {(category.items_count ?? 0) > 0 && (
+                                <p className="text-muted-foreground text-sm">The type cannot be changed while the category has items.</p>
+                            )}
+                            {form.errors.type && <p className="text-destructive text-sm">{form.errors.type}</p>}
                         </div>
 
                         <div className="space-y-2">

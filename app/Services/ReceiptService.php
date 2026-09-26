@@ -41,6 +41,8 @@ class ReceiptService
         // notes are KDS-only and must not reach a customer receipt.
         $itemLines = $lines->map(fn (TicketItem $line): array => [
             'name' => $line->item_name,
+            // item | fee | custom, so the POS can print fees under their own heading.
+            'line_type' => $line->line_type,
             'quantity' => (int) $line->quantity,
             'unit_price' => (float) $line->unit_price,
             'modifiers' => $line->modifiers

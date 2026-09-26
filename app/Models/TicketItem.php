@@ -17,6 +17,7 @@ class TicketItem extends Model
         'item_id',
         'item_name',
         'item_cost_price',
+        'line_type',
         'quantity',
         'unit_price',
         'notes',

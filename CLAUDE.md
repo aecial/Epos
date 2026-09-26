@@ -53,6 +53,7 @@ docs/
 | **Passcode**           | 4-digit PIN hashed with bcrypt; required to void item on open ticket or approve/reject refund (approver must be admin/manager) |
 | **Shift formula**      | Starting Cash + Cash Sales + Additions − Expenses − Cash Refunds = Expected Cash                          |
 | **Payment atomicity**  | Charges, inventory deduction, ticket close and receipt generation succeed or roll back together          |
+| **Special items**      | Items in a `special` category (Fee item: cashier types the amount; Custom item: cashier types name + amount). No inventory/cost/recipe/modifiers; discount applies; `ticket_items.line_type` = item/fee/custom (KDS hides `fee`). The word "charge" always means a payment — never use it for these |
 | **Ticket merge**       | Open tickets in the same shift fold into a target; sources become `merged` with zeroed money             |
 
 ### Inventory Modes

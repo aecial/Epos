@@ -23,6 +23,7 @@ type CategoryStatus = 'active' | 'inactive';
 type Category = {
     id: number;
     name: string;
+    type?: 'menu' | 'special';
     items_count?: number;
     status: CategoryStatus;
     is_visible_to_pos: boolean;
@@ -116,7 +117,14 @@ export default function CategoryManagementPage({ categories }: { categories: Cat
                                 return (
                                     <TableRow key={category.id}>
                                         <TableCell className="font-medium">{category.id}</TableCell>
-                                        <TableCell className="uppercase">{category.name}</TableCell>
+                                        <TableCell className="uppercase">
+                                            {category.name}
+                                            {category.type === 'special' && (
+                                                <span className="bg-muted ml-2 rounded-full px-2 py-0.5 text-xs font-medium normal-case">
+                                                    Special
+                                                </span>
+                                            )}
+                                        </TableCell>
                                         <TableCell className="text-right">{category.items_count ?? 0}</TableCell>
                                         <TableCell>
                                             <button

@@ -87,6 +87,8 @@ class TicketController extends Controller
             (int) $request->validated('quantity'),
             $request->validated('modifier_ids', []),
             $request->validated('notes'),
+            $request->validated('unit_price') !== null ? (float) $request->validated('unit_price') : null,
+            $request->validated('custom_name'),
         );
 
         return $this->success($ticket->fresh(['items.modifiers']), 201, ['ticket_item_id' => $ticketItem->id]);

@@ -13,7 +13,8 @@ type InventoryType = 'direct' | 'recipe' | 'none';
 type Item = {
     id: number;
     name: string;
-    category?: { id: number; name: string };
+    category?: { id: number; name: string; type?: 'menu' | 'special' };
+    entry_mode?: 'fixed' | 'price' | 'name_price';
     base_price: number | string;
     cost_price: number | string;
     calculated_cost_price: number | string | null;
@@ -131,13 +132,22 @@ export default function ItemManagementPage({ items }: { items: Item[] }) {
                         </TableHeader>
                         <TableBody>
                             {filteredItems.map((item) => {
-                                const cost = item.inventory_type === 'recipe' ? item.calculated_cost_price : item.cost_price;
+                                const isSpecial = item.category?.type === 'special';
+                                const specialLabel = item.entry_mode === 'price' ? 'Fee' : item.entry_mode === 'name_price' ? 'Custom' : 'Special';
+                                const cost = isSpecial ? null : item.inventory_type === 'recipe' ? item.calculated_cost_price : item.cost_price;
                                 const margin = cost === null ? null : ((Number(item.base_price) - Number(cost)) / Number(item.base_price)) * 100;
 
                                 return (
                                     <TableRow key={item.id}>
                                         <TableCell className="font-medium">{item.id}</TableCell>
-                                        <TableCell className="font-medium uppercase">{item.name}</TableCell>
+                                        <TableCell className="font-medium uppercase">
+                                            {item.name}
+                                            {isSpecial && (
+                                                <span className="bg-muted ml-2 rounded-full px-2 py-0.5 text-xs font-medium normal-case">
+                                                    {specialLabel}
+                                                </span>
+                                            )}
+                                        </TableCell>
                                         <TableCell className="uppercase">{item.category?.name ?? 'Uncategorized'}</TableCell>
                                         <TableCell className="text-right">₱{Number(item.base_price).toFixed(2)}</TableCell>
                                         <TableCell className="text-right">{cost === null ? '—' : `₱${Number(cost).toFixed(2)}`}</TableCell>

@@ -127,11 +127,12 @@ Returns every item the POS is allowed to show, **sorted by name**:
         {
             "id": 12,
             "category_id": 3,
-            "category": { "id": 3, "name": "Mains" },
+            "category": { "id": 3, "name": "Mains", "type": "menu" },
             "name": "Fried Itik (Large)",
             "base_price": "150.00",
             "status": "available",
             "inventory_type": "recipe",
+            "entry_mode": "fixed",
             "image_url": null,
             "available_stock": 7,
             "modifiers": [
@@ -153,6 +154,14 @@ Notes:
 - `available_stock` is what can be sold right now: `quantity − reserved_quantity` for `direct`; the smallest complete-serving count across ingredients for `recipe`; `null` for `none` (untracked/unlimited) and for a recipe item with no ingredients configured yet.
 - `modifiers` lists only the item's **active** modifiers, in the configured display order. `group` is `null` for an ungrouped modifier. `price_modifier` is the per-item price from the `item_modifier` pivot.
 - A category filter with no matching items returns `[]`.
+- `category.type` is `menu` or `special`. A **special** category holds **Special items** (fees and custom items, see below); show it as its own "Specials" section. Special items have `inventory_type: "none"`, so `available_stock` is `null`.
+- `entry_mode` tells the app what to collect before adding the item to a ticket:
+
+| `entry_mode` | Kind | The cashier types | What to send to `POST /tickets/{id}/items` |
+| ------------ | ---- | ----------------- | ------------------------------------------ |
+| `fixed` | Any normal item, or a fixed-price fee (e.g. Packaging ₱10) | nothing | just `item_id`, `quantity` |
+| `price` | **Fee item** (e.g. Delivery fee) | the amount (`base_price` is only a suggested default to pre-fill) | plus `unit_price` |
+| `name_price` | **Custom item** (e.g. an off-menu dish) | the name and the amount | plus `unit_price` and `custom_name` |
 
 ### GET `/items/{id}`
 
@@ -345,12 +354,16 @@ Add a line and **reserve stock**. Any staff. Ticket must be `open`.
 - `quantity`: integer `>= 1`
 - `modifier_ids`: optional; ids must exist and be attached to the item (others are ignored)
 - `notes`: optional, max 500. **KDS/back-office only — never printed on a receipt.**
+- `unit_price`: numeric, `> 0`, at most 2 decimals, max 999999.99 — **required** for `entry_mode` `price` and `name_price`, **forbidden** for every other item (a terminal can never override a menu price)
+- `custom_name`: 1–100 characters, single line — **required** for `name_price`, **forbidden** otherwise
 
-Line price = `(base_price + Σ modifier price_modifier) × quantity`. The item name, cost price, unit price and modifier names/prices are **snapshotted** onto the line so later menu edits don't change history.
+Line price = `(unit_price or base_price + Σ modifier price_modifier) × quantity`. The item name (the typed `custom_name` for a Custom item), cost price, unit price, `line_type` and modifier names/prices are **snapshotted** onto the line so later menu edits don't change history.
+
+**Special items** (items in a `special` category) never touch inventory, so adding, voiding, paying and refunding them never moves stock. The ticket discount applies to them like any other line. `line_type` on the ticket line is `item` (regular), `fee` (Fee item or any fixed fee in a special category) or `custom` (Custom item). The future KDS feed shows `item` and `custom` lines and hides `fee` lines.
 
 **Response `201`:** the refreshed ticket with `items.modifiers`; `meta.ticket_item_id` is the new line's id.
 
-**Errors:** `409` `Insufficient stock for item …` (nothing is reserved), `409` if the ticket is not open.
+**Errors:** `409` `Insufficient stock for item …` (nothing is reserved), `409` if the ticket is not open, `422` if `unit_price` / `custom_name` is missing or not allowed for the item's `entry_mode`.
 
 ### DELETE `/tickets/{ticket}/items/{ticketItem}`
 
@@ -494,7 +507,7 @@ A receipt is an **immutable snapshot** written when payment commits (one per cha
     "cashier": "Dangbi",
     "items": [
         {
-            "name": "Fried Itik (Large)", "quantity": 1, "unit_price": 150.0,
+            "name": "Fried Itik (Large)", "line_type": "item", "quantity": 1, "unit_price": 150.0,
             "modifiers": [{ "name": "Extra crispy", "price": 10.0 }],
             "line_total": 160.0
         }
@@ -508,6 +521,8 @@ A receipt is an **immutable snapshot** written when payment commits (one per cha
     }
 }
 ```
+
+`line_type` is `item`, `fee` or `custom`, so the POS can print fees under their own heading; receipts issued before Special items existed have no `line_type` (treat as `item`). For a Custom item `name` is the name the cashier typed.
 
 Here `subtotal − discount = total` describes **this charge's slice** of the bill. The restaurant name/address header and footer text are not in the payload; the POS app supplies them.
 
@@ -667,6 +682,8 @@ PUT  /shifts/{id}/close { closing_cash } → reconcile
 ## 12. TESTED BEHAVIOR
 
 Covered by Pest tests (`tests/Feature`, `tests/Unit`): ordering reserves in both `direct` and `recipe` modes without deducting; paying deducts and clears reservations; a paid ticket can't be charged twice; a short recipe ingredient blocks the order and reserves nothing; cash+GCash split totals; receipt numbering, per-charge slices and centavo-exact discount proration; notes never on receipts; receipt immutability and payment rollback on receipt failure; receipt history filters/pagination/search; reprint logging; ticket merge rules (same shift, open only, chained merges, one receipt with all order numbers); menu visibility, filters, `available_stock`, and modifier output.
+
+Special items (fee and custom lines, entry-mode validation, no stock movement through pay/void/refund, discount, merge, receipt `line_type`) are covered by `SpecialItemTest`.
 
 **Not yet covered by dedicated tests:** API login, shifts open/close and totals, shift transactions, refunds, and ticket create/void/discount/cancel.
 

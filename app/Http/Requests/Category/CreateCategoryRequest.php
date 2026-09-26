@@ -30,6 +30,7 @@ class CreateCategoryRequest extends FormRequest
         return [
             'name' => ['required', 'string', 'max:255', 'unique:categories,name'],
             'status' => ['sometimes', 'in:active,inactive'],
+            'type' => ['sometimes', 'in:menu,special'],
             'is_visible_to_pos' => ['sometimes', 'boolean']
         ];
     }

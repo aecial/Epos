@@ -48,15 +48,32 @@ class TicketService
     }
 
     /**
+     * $unitPrice and $customName are only for Special items: a Fee item (entry_mode 'price')
+     * takes an amount, a Custom item ('name_price') takes a name and an amount. Any other item
+     * always sells at its own base_price; the request layer rejects overrides, and this method
+     * refuses them too so a direct service call can't bypass that.
+     *
      * @param  array<int, int>  $modifierIds
      */
-    public function AddItem(Ticket $ticket, Item $item, int $quantity, array $modifierIds = [], ?string $notes = null): TicketItem
+    public function AddItem(Ticket $ticket, Item $item, int $quantity, array $modifierIds = [], ?string $notes = null, ?float $unitPrice = null, ?string $customName = null): TicketItem
     {
         if ($quantity <= 0) {
             throw new InvalidArgumentException('Quantity must be greater than zero.');
         }
 
-        return DB::transaction(function () use ($ticket, $item, $quantity, $modifierIds, $notes): TicketItem {
+        $entryMode = $item->entry_mode ?? 'fixed';
+        $needsPrice = in_array($entryMode, ['price', 'name_price'], true);
+        $needsName = $entryMode === 'name_price';
+
+        if ($needsPrice !== ($unitPrice !== null) || $needsName !== ($customName !== null)) {
+            throw new InvalidArgumentException("Item {$item->name} does not accept this price/name combination.");
+        }
+
+        if ($unitPrice !== null && $unitPrice <= 0) {
+            throw new InvalidArgumentException('Price must be greater than zero.');
+        }
+
+        return DB::transaction(function () use ($ticket, $item, $quantity, $modifierIds, $notes, $unitPrice, $customName, $entryMode): TicketItem {
             $lockedTicket = Ticket::query()->lockForUpdate()->findOrFail($ticket->id);
 
             if (! $lockedTicket->isOpen()) {
@@ -69,15 +86,18 @@ class TicketService
                 ? collect()
                 : $item->modifiers()->whereIn('modifiers.id', $modifierIds)->get();
 
-            $unitPrice = (float) $item->base_price;
+            $unitPrice ??= (float) $item->base_price;
             $modifierTotal = (float) $itemModifiers->sum(fn (Modifier $modifier): float => (float) $modifier->pivot->price_modifier);
             $lineTotal = round(($unitPrice + $modifierTotal) * $quantity, 2);
 
             $ticketItem = TicketItem::create([
                 'ticket_id' => $lockedTicket->id,
                 'item_id' => $item->id,
-                'item_name' => $item->name,
+                // Custom items are named by the cashier; the typed name is the snapshot that
+                // reaches receipts, refunds and the KDS.
+                'item_name' => $customName ?? $item->name,
                 'item_cost_price' => $item->cost_price,
+                'line_type' => $this->lineTypeFor($item, $entryMode),
                 'quantity' => $quantity,
                 'unit_price' => $unitPrice,
                 'notes' => $notes,
@@ -283,6 +303,19 @@ class TicketService
 
             return $lockedTarget->fresh(['items.modifiers', 'mergedTickets']);
         });
+    }
+
+    /**
+     * A Custom item is a name+price line; any other item in a special category is a Fee;
+     * everything else is a regular menu line.
+     */
+    private function lineTypeFor(Item $item, string $entryMode): string
+    {
+        if ($entryMode === 'name_price') {
+            return 'custom';
+        }
+
+        return $item->category->isSpecial() ? 'fee' : 'item';
     }
 
     private function nextOrderNumber(Shift $shift): string

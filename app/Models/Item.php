@@ -19,6 +19,7 @@ class Item extends Model
         'quantity',
         'reserved_quantity',
         'inventory_type',
+        'entry_mode',
         'image_url',
         'status',
     ];

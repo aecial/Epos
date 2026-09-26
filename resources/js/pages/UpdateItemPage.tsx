@@ -3,9 +3,16 @@ import { type BreadcrumbItem } from '@/types';
 import { Head, useForm } from '@inertiajs/react';
 import { type FormEvent } from 'react';
 
-type Category = { id: number; name: string };
+type Category = { id: number; name: string; type: 'menu' | 'special' };
 type ItemStatus = 'available' | 'unavailable' | 'hidden';
 type InventoryType = 'direct' | 'recipe' | 'none';
+type EntryMode = 'fixed' | 'price' | 'name_price';
+
+const pricingHelp: Record<EntryMode, string> = {
+    fixed: 'Added to a ticket at the amount below, like a normal item (e.g. a packaging fee).',
+    price: 'Fee item: the cashier types the amount on POS (e.g. a delivery fee). The suggested amount is only pre-filled.',
+    name_price: 'Custom item: the cashier types both the name and the amount on POS (e.g. an off-menu dish). The kitchen sees the typed name.',
+};
 type RecipeIngredient = { id: number; name: string; unit: 'piece' | 'kg' | 'gram' | 'liter' | 'ml' };
 type ItemRecipeRow = {
     ingredient_id: number;
@@ -29,6 +36,7 @@ type Item = {
     image_url?: string;
     status: ItemStatus;
     inventory_type: InventoryType;
+    entry_mode: EntryMode;
     ingredients?: Array<RecipeIngredient & { pivot: { quantity_required: number | string; unit: RecipeIngredient['unit'] } }>;
     modifiers?: Array<ModifierOption & { pivot: { price_modifier: number | string; display_order: number } }>;
 };
@@ -58,6 +66,7 @@ export default function UpdateItemPage({
         image_url: item.image_url ?? '',
         status: item.status,
         inventory_type: item.inventory_type,
+        entry_mode: (item.entry_mode ?? 'fixed') as EntryMode,
         ingredients: (item.ingredients ?? []).map((ingredient) => ({
             ingredient_id: ingredient.id,
             quantity_required: String(ingredient.pivot.quantity_required),
@@ -69,8 +78,38 @@ export default function UpdateItemPage({
             display_order: modifier.pivot.display_order,
         })) as ItemModifierRow[],
     });
+    // Special items (fees and custom items) live in a special category: no inventory, cost, recipe or
+    // modifiers, and the cashier may type the price (and name) on POS. The server enforces the same rules.
+    const isSpecial = categories.find((category) => category.id === Number(form.data.category_id))?.type === 'special';
+    const isCustom = isSpecial && form.data.entry_mode === 'name_price';
+    const amountLabel = !isSpecial ? 'Base price' : form.data.entry_mode === 'price' ? 'Suggested amount' : 'Amount';
+
+    // Picking a special category defaults to a Fee item; leaving it resets to a normal fixed-price item.
+    const changeCategory = (categoryId: number) => {
+        const nextIsSpecial = categories.find((category) => category.id === categoryId)?.type === 'special';
+
+        form.setData((data) => ({
+            ...data,
+            category_id: categoryId,
+            entry_mode: nextIsSpecial ? (isSpecial ? data.entry_mode : 'price') : 'fixed',
+        }));
+    };
+
     const submit = (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
+        form.transform((data) =>
+            isSpecial
+                ? {
+                      ...data,
+                      inventory_type: 'none',
+                      quantity: '0',
+                      cost_price: '0',
+                      base_price: isCustom || data.base_price === '' ? '0' : data.base_price,
+                      ingredients: [],
+                      modifiers: [],
+                  }
+                : { ...data, entry_mode: 'fixed' },
+        );
         form.patch(route('items.update', item.id));
     };
 
@@ -115,24 +154,35 @@ export default function UpdateItemPage({
                 <div className="bg-card mx-auto w-full max-w-2xl rounded-xl border p-6 shadow-sm">
                     <div className="mb-6">
                         <h1 className="text-xl font-semibold">Update item</h1>
-                        <p className="text-muted-foreground mt-1 text-sm">Update the menu item details.</p>
+                        <p className="text-muted-foreground mt-1 text-sm">
+                            {isSpecial
+                                ? 'Update this special item. It never tracks inventory; the cashier can price it on POS.'
+                                : 'Update the menu item details.'}
+                        </p>
                     </div>
                     <form onSubmit={submit} className="grid gap-5 sm:grid-cols-2">
-                        <Field label="Name" error={form.errors.name} className="sm:col-span-2">
+                        <Field label={isCustom ? 'Button label' : 'Name'} error={form.errors.name} className="sm:col-span-2">
                             <input value={form.data.name} onChange={(event) => form.setData('name', event.target.value)} required className="field" />
+                            {isCustom && (
+                                <p className="text-muted-foreground text-xs">
+                                    Shown on the POS button. The cashier types the real name when adding it to a ticket.
+                                </p>
+                            )}
                         </Field>
                         <Field label="Category" error={form.errors.category_id}>
-                            <select
-                                value={form.data.category_id}
-                                onChange={(event) => form.setData('category_id', Number(event.target.value))}
-                                className="field"
-                            >
+                            <select value={form.data.category_id} onChange={(event) => changeCategory(Number(event.target.value))} className="field">
                                 {categories.map((category) => (
                                     <option key={category.id} value={category.id}>
                                         {category.name}
+                                        {category.type === 'special' ? ' (Special)' : ''}
                                     </option>
                                 ))}
                             </select>
+                            {isSpecial && categories.find((category) => category.id === item.category_id)?.type !== 'special' && (
+                                <p className="text-destructive text-xs">
+                                    Moving this item to a special category removes its stock tracking, recipe and modifiers.
+                                </p>
+                            )}
                         </Field>
                         <Field label="Status" error={form.errors.status}>
                             <select
@@ -145,48 +195,70 @@ export default function UpdateItemPage({
                                 <option value="hidden">Hidden</option>
                             </select>
                         </Field>
-                        <Field label="Inventory type" error={form.errors.inventory_type}>
-                            <select
-                                value={form.data.inventory_type}
-                                onChange={(event) => form.setData('inventory_type', event.target.value as InventoryType)}
-                                className="field"
-                            >
-                                <option value="direct">Direct item stock</option>
-                                <option value="recipe">Recipe ingredients</option>
-                                <option value="none">No inventory tracking</option>
-                            </select>
-                        </Field>
-                        <Field label="Base price" error={form.errors.base_price}>
-                            <input
-                                type="number"
-                                step="0.01"
-                                min="0"
-                                value={form.data.base_price}
-                                onChange={(event) => form.setData('base_price', event.target.value)}
-                                required
-                                className="field"
-                            />
-                        </Field>
-                        <Field label="Cost price" error={form.errors.cost_price}>
-                            <input
-                                type="number"
-                                step="0.01"
-                                min="0"
-                                value={form.data.cost_price}
-                                onChange={(event) => form.setData('cost_price', event.target.value)}
-                                className="field"
-                            />
-                        </Field>
-                        <Field label="Quantity" error={form.errors.quantity}>
-                            <input
-                                type="number"
-                                step="1"
-                                min="0"
-                                value={form.data.quantity}
-                                onChange={(event) => form.setData('quantity', event.target.value)}
-                                className="field"
-                            />
-                        </Field>
+                        {isSpecial && (
+                            <Field label="Pricing" error={form.errors.entry_mode} className="sm:col-span-2">
+                                <select
+                                    value={form.data.entry_mode}
+                                    onChange={(event) => form.setData('entry_mode', event.target.value as EntryMode)}
+                                    className="field"
+                                >
+                                    <option value="fixed">Fixed amount (fee with a set price)</option>
+                                    <option value="price">Fee item: cashier enters the amount</option>
+                                    <option value="name_price">Custom item: cashier enters the name and amount</option>
+                                </select>
+                                <p className="text-muted-foreground text-xs">{pricingHelp[form.data.entry_mode]}</p>
+                            </Field>
+                        )}
+                        {!isSpecial && (
+                            <Field label="Inventory type" error={form.errors.inventory_type}>
+                                <select
+                                    value={form.data.inventory_type}
+                                    onChange={(event) => form.setData('inventory_type', event.target.value as InventoryType)}
+                                    className="field"
+                                >
+                                    <option value="direct">Direct item stock</option>
+                                    <option value="recipe">Recipe ingredients</option>
+                                    <option value="none">No inventory tracking</option>
+                                </select>
+                            </Field>
+                        )}
+                        {!isCustom && (
+                            <Field label={amountLabel} error={form.errors.base_price}>
+                                <input
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    value={form.data.base_price}
+                                    onChange={(event) => form.setData('base_price', event.target.value)}
+                                    required={!isSpecial}
+                                    className="field"
+                                />
+                            </Field>
+                        )}
+                        {!isSpecial && (
+                            <Field label="Cost price" error={form.errors.cost_price}>
+                                <input
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    value={form.data.cost_price}
+                                    onChange={(event) => form.setData('cost_price', event.target.value)}
+                                    className="field"
+                                />
+                            </Field>
+                        )}
+                        {!isSpecial && (
+                            <Field label="Quantity" error={form.errors.quantity}>
+                                <input
+                                    type="number"
+                                    step="1"
+                                    min="0"
+                                    value={form.data.quantity}
+                                    onChange={(event) => form.setData('quantity', event.target.value)}
+                                    className="field"
+                                />
+                            </Field>
+                        )}
                         <Field label="Image URL" error={form.errors.image_url}>
                             <input
                                 type="url"
@@ -195,7 +267,7 @@ export default function UpdateItemPage({
                                 className="field"
                             />
                         </Field>
-                        {form.data.inventory_type === 'recipe' && (
+                        {!isSpecial && form.data.inventory_type === 'recipe' && (
                             <div className="space-y-4 border-t pt-6 sm:col-span-2">
                                 <div>
                                     <h2 className="font-semibold">Recipe ingredients</h2>
@@ -268,7 +340,7 @@ export default function UpdateItemPage({
                                 </button>
                             </div>
                         )}
-                        {modifierGroups.length > 0 && (
+                        {!isSpecial && modifierGroups.length > 0 && (
                             <div className="space-y-4 border-t pt-6 sm:col-span-2">
                                 <div>
                                     <h2 className="font-semibold">Modifiers</h2>

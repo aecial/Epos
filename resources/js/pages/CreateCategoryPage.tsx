@@ -2,6 +2,9 @@ import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, useForm } from '@inertiajs/react';
 import { type FormEvent } from 'react';
+
+type CategoryType = 'menu' | 'special';
+
 const breadcrumbs: BreadcrumbItem[] = [
     {
         title: 'Back Office',
@@ -20,6 +23,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 export default function CreateCategoryPage() {
     const form = useForm({
         name: '',
+        type: 'menu' as CategoryType,
     });
 
     const submit = (event: FormEvent<HTMLFormElement>) => {
@@ -59,6 +63,26 @@ export default function CreateCategoryPage() {
                                     {form.errors.name}
                                 </p>
                             )}
+                        </div>
+
+                        <div className="space-y-2">
+                            <label htmlFor="type" className="text-sm font-medium">
+                                Type
+                            </label>
+                            <select
+                                id="type"
+                                name="type"
+                                value={form.data.type}
+                                onChange={(event) => form.setData('type', event.target.value as CategoryType)}
+                                className="bg-background focus:ring-ring w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 disabled:opacity-60"
+                            >
+                                <option value="menu">Menu (regular items)</option>
+                                <option value="special">Special (fees and custom items priced by the cashier)</option>
+                            </select>
+                            <p className="text-muted-foreground text-sm">
+                                Special categories hold fee items and custom items. They never track inventory.
+                            </p>
+                            {form.errors.type && <p className="text-destructive text-sm">{form.errors.type}</p>}
                         </div>
 
                         <div className="flex justify-end gap-3 pt-2">

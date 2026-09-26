@@ -55,10 +55,11 @@ shifts (service sessions)
 shift_transactions (cash additions & expenses, soft-deleted)
 └─ belongs to → shift; audit: created_by / updated_by / deleted_by
 
-categories (menu groups; is_visible_to_pos)
+categories (menu groups; is_visible_to_pos; type = menu | special)
 └─ has many → items
 
 items (menu items with direct, recipe, or no inventory)
+├─ entry_mode: fixed | price (Fee item) | name_price (Custom item) — non-fixed only in special categories
 ├─ many-to-many → modifiers (item_modifier: per-item price_modifier, status, display_order)
 ├─ has many → ticket_items
 ├─ tracks → quantity/reserved_quantity for direct inventory
@@ -88,7 +89,7 @@ tickets (open / paid / merged / cancelled orders)
 └─ tracks → created_by, terminal_id, order_number (#001, resets per shift)
 
 ticket_items (line items in ticket)
-├─ snapshots → item_name, item_cost_price, unit_price at the time of adding
+├─ snapshots → item_name (the typed name for a Custom item), item_cost_price, unit_price, line_type (item | fee | custom) at the time of adding
 ├─ has many → ticket_item_modifier (snapshotted modifier name + price)
 ├─ merged_from_ticket_id → the ticket a line originally belonged to
 ├─ voided_at / voided_by / voided_requested_by
@@ -119,6 +120,7 @@ refunds (refund tracking with approval)
 - Payment is atomic: charges, inventory deduction, ticket close and receipt generation succeed or fail together
 - Ticket merge: source lines move onto the target, sources become `merged` with zeroed money, discounts combine into one fixed amount, and receipts list every order number
 - Item, modifier and price data are snapshotted onto ticket lines so later menu edits never change history
+- **Special items:** an item in a `special` category never tracks inventory, cost, a recipe or modifiers. A Fee item (`entry_mode = price`) takes its amount from the cashier; a Custom item (`name_price`) takes its name and amount. The server rejects a price/name on any other item. A category's type cannot change once it has items. The ticket discount applies to every line, fees included
 
 ---
 
@@ -380,6 +382,7 @@ Each POS device has a fixed `terminal_id` (e.g. `POS-01`) that it sends when cre
 - Show `available_stock` (`null` = untracked)
 - **Manual sync button** (re-fetch `GET /items`; the only sync mechanism until real-time exists)
 - Tap item → choose modifiers (a group with `is_required` must be satisfied) → `POST /tickets/{id}/items`, which reserves stock
+- **Specials section:** items whose `category.type = special` are shown as their own section. By `entry_mode`: `fixed` adds immediately; `price` (Fee item) opens an amount keypad pre-filled with `base_price`; `name_price` (Custom item) opens a name + amount form. Send `unit_price` / `custom_name` with the add-item call
 - Cart badge (top-right) → go to CartScreen
 - **Terminal sees only own open tickets** in sidebar (`GET /tickets?terminal_id=…`)
 - Receipt history is **not** terminal-filtered: every terminal sees every receipt (`GET /receipts`)
@@ -393,6 +396,7 @@ Each POS device has a fixed `terminal_id` (e.g. `POS-01`) that it sends when cre
 - Order name (auto-suffixed by the server if a same-named ticket is open: john → john2)
 - Order type selector (dine-in / takeout)
 - Per-line notes (KDS only — never printed on the receipt)
+- Fee lines are shown as fees; Custom lines show the typed name
 - Checkout button
 
 #### 5. **CheckoutScreen**
@@ -456,8 +460,8 @@ The back office is a set of Inertia pages served by session-authenticated Larave
 | `/login` | Login | Username + password (session) |
 | `/dashboard` | Dashboard | Placeholder only — no stats yet |
 | `/back-office` | Hub | Links to category, item, modifier and ingredient management |
-| `/category-management`, `/create-category`, `/categories/{id}/edit` | Categories | CRUD with `name`, `status` (active/inactive) and the `is_visible_to_pos` toggle; item counts |
-| `/item-management`, `/create-item`, `/items/{id}/edit` | Items | Table of name, price, cost, margin, category, stock, available stock and status. Create/edit/delete with `inventory_type` (`direct` \| `recipe` \| `none`), stock quantities, status (`available` \| `unavailable` \| `hidden`), and attached modifiers with a per-item price and display order. Recipe items get their ingredient requirements (ingredient, quantity, unit) |
+| `/category-management`, `/create-category`, `/categories/{id}/edit` | Categories | CRUD with `name`, `type` (Menu or Special; locked once the category has items), `status` (active/inactive) and the `is_visible_to_pos` toggle; item counts |
+| `/item-management`, `/create-item`, `/items/{id}/edit` | Items | Table of name, price, cost, margin, category, stock, available stock and status. Create/edit/delete with `inventory_type` (`direct` \| `recipe` \| `none`), stock quantities, status (`available` \| `unavailable` \| `hidden`), and attached modifiers with a per-item price and display order. Recipe items get their ingredient requirements (ingredient, quantity, unit). In a **Special category** the form hides inventory, cost, quantity, recipe and modifiers and shows a **Pricing** choice — fixed amount, *Fee item* (cashier enters the amount) or *Custom item* (cashier enters the name and amount); `base_price` becomes the "Default amount" |
 | `/modifier-management`, `/create-modifier-group`, `/create-modifier`, `/modifier-groups/{id}/edit`, `/modifiers/{id}/edit` | Modifier groups & modifiers | Reusable groups (with `is_required`) and modifiers; the price is set per item when a modifier is attached |
 | `/ingredient-management`, `/create-ingredient-group`, `/create-ingredient`, `/ingredient-groups/{id}/edit`, `/ingredients/{id}/edit` | Ingredient groups & ingredients | CRUD; ingredients carry a unit (`piece`, `kg`, `gram`, `liter`, `ml`), decimal quantity and `cost_per_unit` |
 | `/employee-management`, `/users/create`, `/users/{id}/edit` | Employees | CRUD. Creates `manager` and `cashier` accounts (admins are seeded). A 4-digit passcode can only be set on a manager. Status active/inactive |
@@ -702,6 +706,7 @@ Legend: `[x]` implemented and tested · `[~]` implemented on the server/API, cli
 - [x] Receipt issuing (one per charge), immutable snapshot, prorated discount, notes excluded
 - [x] Receipt history for all terminals (filter/search/paginate) and reprint log with watermark flag
 - [x] Refund request + passcode approval/rejection, inventory restored, cash refunds netted from expected cash
+- [x] Special items: Special categories with Fee items (cashier enters the amount) and Custom items (cashier enters the name and amount) — API, receipts and back office
 
 **Still to build**
 

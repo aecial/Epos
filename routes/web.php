@@ -131,7 +131,7 @@ Route::middleware(['auth'])->group(function () {
     })->name('create-category');
     Route::get('create-item', function () {
         return Inertia::render('CreateItemPage', [
-            'categories' => Category::orderBy('name')->get(['id', 'name']),
+            'categories' => Category::orderBy('name')->get(['id', 'name', 'type']),
             'ingredients' => Ingredient::where('status', 'active')->orderBy('name')->get(['id', 'name', 'unit']),
             'modifierGroups' => ModifierGroup::query()
                 ->with(['modifiers' => fn ($query) => $query->where('status', 'active')->orderBy('name')])
@@ -142,7 +142,7 @@ Route::middleware(['auth'])->group(function () {
     })->name('create-item');
     Route::get('categories/{category}/edit', function (Category $category) {
         return Inertia::render('UpdateCategoryPage', [
-            'category' => $category,
+            'category' => $category->loadCount('items'),
         ]);
     })->name('categories.edit');
 
@@ -155,7 +155,7 @@ Route::middleware(['auth'])->group(function () {
     Route::get('items/{item}/edit', function (Item $item) {
         return Inertia::render('UpdateItemPage', [
             'item' => $item->load(['ingredients', 'modifiers']),
-            'categories' => Category::orderBy('name')->get(['id', 'name']),
+            'categories' => Category::orderBy('name')->get(['id', 'name', 'type']),
             'ingredients' => Ingredient::where('status', 'active')->orderBy('name')->get(['id', 'name', 'unit']),
             'modifierGroups' => ModifierGroup::query()
                 ->with(['modifiers' => fn ($query) => $query->where('status', 'active')->orderBy('name')])

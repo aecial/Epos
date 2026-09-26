@@ -2,8 +2,10 @@
 
 namespace App\Http\Requests\Item;
 
+use App\Services\ItemService;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Validator;
 
 class CreateItemRequest extends FormRequest
 {
@@ -30,6 +32,8 @@ class CreateItemRequest extends FormRequest
             'quantity' => ['sometimes', 'integer', 'min:0'],
             'reserved_quantity' => ['sometimes', 'integer', 'min:0'],
             'inventory_type' => ['sometimes', 'in:direct,recipe,none'],
+            // fixed = normal item; price = Fee item; name_price = Custom item (special categories only).
+            'entry_mode' => ['sometimes', 'in:fixed,price,name_price'],
             'image_url' => ['sometimes'],
             'status' => ['sometimes', 'in:available,unavailable,hidden'],
             'ingredients' => ['required_if:inventory_type,recipe', 'array', 'min:1'],
@@ -40,6 +44,22 @@ class CreateItemRequest extends FormRequest
             'modifiers.*.modifier_id' => ['required', 'integer', 'distinct', 'exists:modifiers,id'],
             'modifiers.*.price_modifier' => ['sometimes', 'nullable', 'decimal:0,2'],
             'modifiers.*.display_order' => ['sometimes', 'nullable', 'integer', 'min:0'],
+        ];
+    }
+
+    /**
+     * Category-dependent rules for Special items (see ItemService::SpecialItemViolations).
+     *
+     * @return array<int, \Closure(Validator): void>
+     */
+    public function after(): array
+    {
+        return [
+            function (Validator $validator): void {
+                foreach (app(ItemService::class)->SpecialItemViolations($this->all(), null) as $field => $message) {
+                    $validator->errors()->add($field, $message);
+                }
+            },
         ];
     }
 }

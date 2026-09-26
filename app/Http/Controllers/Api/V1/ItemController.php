@@ -43,12 +43,15 @@ class ItemController extends Controller
         return [
             'id' => $item->id,
             'category_id' => $item->category_id,
-            'category' => ['id' => $item->category->id, 'name' => $item->category->name],
+            'category' => ['id' => $item->category->id, 'name' => $item->category->name, 'type' => $item->category->type],
             'name' => $item->name,
             'base_price' => $item->base_price,
             // available = orderable, unavailable = shown greyed out (hidden never reaches here).
             'status' => $item->status,
             'inventory_type' => $item->inventory_type,
+            // fixed = add as-is; price = cashier types the amount (Fee item, base_price is the
+            // suggested default); name_price = cashier types name and amount (Custom item).
+            'entry_mode' => $item->entry_mode,
             'image_url' => $item->image_url,
             'available_stock' => $this->availableStock($item),
             'modifiers' => $item->modifiers->map(fn (Modifier $modifier): array => [
