@@ -457,7 +457,7 @@ The back office is a set of Inertia pages served by session-authenticated Larave
 
 | Route | Page | What it does |
 | ----- | ---- | ------------ |
-| `/login` | Login | Username + password (session) |
+| `/login` | Login | Username + password (session). There is no self-registration, email verification or password reset; accounts are created and passwords reset by a manager/admin on the Employees pages |
 | `/dashboard` | Dashboard | Placeholder only — no stats yet |
 | `/back-office` | Hub | Links to category, item, modifier and ingredient management |
 | `/category-management`, `/create-category`, `/categories/{id}/edit` | Categories | CRUD with `name`, `type` (Menu or Special; locked once the category has items), `status` (active/inactive) and the `is_visible_to_pos` toggle; item counts |
@@ -476,7 +476,6 @@ Notes:
 
 ### Known gaps (back office)
 
-- **Public registration is still enabled.** `GET/POST /register` (Laravel starter kit, `routes/auth.php`) lets anyone who can reach the server create an account and log in. User creation is meant to be manager/admin-only via `/users/create`; the starter-kit route should be removed. Its tests (`RegistrationTest`, and the email-verification / password-reset tests) are stale and fail.
 - **Back-office page routes only require login, not a role.** Create/update form requests are gated by `admin or manager`, but the read-only pages (`/item-management`, `/employee-management`, …) are reachable by any authenticated user, including a cashier.
 
 ### Planned (data and API exist; no Inertia pages yet)
@@ -894,7 +893,7 @@ Automated (Pest) coverage today is marked ✅; the rest is manual or still to wr
 - [ ] Printer offline, fallback to digital receipt — _POS app_
 - [ ] Token expiry & re-login flow — _POS app_
 
-Known failing tests (stale or affected by the items-route auth change): starter-kit registration / email verification / password reset / profile tests, `CategoryTest`, `CategoryServiceTest`, and `ItemApiTest > the items endpoints require authentication`.
+Known failing tests (stale or affected by the items-route auth change): `CategoryTest`, `CategoryServiceTest`, and `ItemApiTest > the items endpoints require authentication`.
 
 ---
 
