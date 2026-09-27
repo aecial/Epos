@@ -15,7 +15,6 @@ use App\Models\Item;
 use App\Models\Shift;
 use App\Models\Ticket;
 use App\Models\TicketItem;
-use App\Models\User;
 use App\Services\ShiftService;
 use App\Services\TicketService;
 use Illuminate\Http\JsonResponse;
@@ -98,11 +97,11 @@ class TicketController extends Controller
     {
         $this->assertBelongsToTicket($ticket, $ticketItem);
 
-        $approver = User::query()->findOrFail($request->validated('approver_id'));
+        $voided = $this->ticketService->VoidItem($ticketItem, $request->user(), $request->validated('passcode'));
 
-        $this->ticketService->VoidItem($ticketItem, $request->user(), $approver, $request->validated('passcode'));
-
-        return $this->success($ticket->fresh(['items.modifiers']));
+        return $this->success($ticket->fresh(['items.modifiers']), meta: [
+            'approver' => $voided->voidedBy->only(['id', 'name']),
+        ]);
     }
 
     public function setDiscount(SetTicketDiscountRequest $request, Ticket $ticket): JsonResponse

@@ -20,7 +20,7 @@ Success:
 { "success": true, "data": { "...": "..." }, "meta": { "...": "..." } }
 ```
 
-`meta` is present only when there is something to put in it (pagination, `ticket_item_id`).
+`meta` is present only when there is something to put in it (pagination, `ticket_item_id`, `approver`).
 
 Error:
 
@@ -41,11 +41,11 @@ Error:
 | 200  | OK                                                                                                           |
 | 201  | Created (login, open shift, create ticket/transaction/refund, add item)                                      |
 | 401  | Missing/invalid token — `Unauthenticated.`                                                                   |
-| 403  | Role not allowed, or a bad/insufficient passcode (`Passcode is invalid or the approver lacks permission.`)   |
+| 403  | Role not allowed, a passcode that matches no active manager/admin (`Passcode is invalid or the approver lacks permission.`), or a passcode shared by more than one of them |
 | 404  | Unknown id, or no active shift where one is required                                                         |
 | 409  | Business-rule conflict: no active shift, shift already open, open tickets block close, charge total mismatch, insufficient stock, ticket not open, refund already decided, etc. |
 | 422  | Validation failed                                                                                            |
-| 429  | Login throttled (6 attempts per minute)                                                                      |
+| 429  | Login throttled (6 attempts per minute), or 5 failed passcode attempts in a minute (sends `Retry-After`)      |
 
 Any domain rule a service rejects with `InvalidArgumentException` (for example "Ticket is not open.") is returned as **409** with that message.
 
@@ -367,18 +367,27 @@ Line price = `(unit_price or base_price + Σ modifier price_modifier) × quantit
 
 ### DELETE `/tickets/{ticket}/items/{ticketItem}`
 
-Void a line and **release its reservation**. Requires a manager/admin **passcode**.
+Void a line and **release its reservation**. Requires a manager/admin **passcode** — the manager types it on the POS and the passcode alone identifies them (see §10 Passcodes).
 
 ```json
-{ "approver_id": 1, "passcode": "0428" }
+{ "passcode": "0428" }
 ```
 
-- The signed-in user (usually a cashier) is recorded as `voided_requested_by`; the approver as `voided_by`.
-- `403` if the approver isn't admin/manager or the 4-digit PIN doesn't match.
+- `passcode`: required, exactly 4 digits.
+- The signed-in user (usually a cashier) is recorded as `voided_requested_by`; the manager/admin the passcode belongs to as `voided_by`.
+- `403` `Passcode is invalid or the approver lacks permission.` if it matches no active manager/admin.
+- `403` `This passcode is shared by more than one manager. It must be changed in the back office before it can be used.` if it matches more than one.
+- `429` after 5 failed passcode attempts in a minute by the signed-in user.
 - The line is kept (with `voided_at`); it is excluded from totals and receipts.
 - `404` if the line belongs to another ticket; `409` if already voided or the ticket isn't open.
 
-Returns the refreshed ticket. There is no endpoint to change a line's quantity — void and re-add (see §13).
+Returns the refreshed ticket; `meta.approver` names who approved:
+
+```json
+{ "success": true, "data": { "id": 10, "...": "..." }, "meta": { "approver": { "id": 2, "name": "Kring" } } }
+```
+
+There is no endpoint to change a line's quantity — void and re-add (see §13).
 
 ### PATCH `/tickets/{ticket}/discount`
 
@@ -596,18 +605,20 @@ One refund with `items`.
 
 ### PUT `/refunds/{refund}/approve` · PUT `/refunds/{refund}/reject`
 
-Requires a manager/admin passcode:
+Requires a manager/admin passcode; the passcode alone identifies who decides:
 
 ```json
-{ "approver_id": 1, "passcode": "0428" }
+{ "passcode": "0428" }
 ```
 
-- `403` if the approver isn't admin/manager or the PIN is wrong.
+- `passcode`: required, exactly 4 digits.
+- `403` `Passcode is invalid or the approver lacks permission.` if it matches no active manager/admin; `403` with the "shared by more than one manager" message if it matches several.
+- `429` after 5 failed passcode attempts in a minute by the signed-in user.
 - `409` `Refund has already been decided.` if not `pending` (checked under lock).
 - **Approve** restores inventory (`direct` → `quantity += qty`; `recipe` → ingredients restored; `none` → nothing), sets `status = approved`, `approved_by`, `approved_at`. A **cash** refund reduces the shift's expected cash (§3).
 - **Reject** sets `status = rejected` with the same audit fields and touches nothing else.
 
-The ticket stays `paid`.
+Returns the refund; `approved_by` holds the deciding user's id and `meta.approver` is `{ "id", "name" }` for display. The ticket stays `paid`.
 
 ---
 
@@ -649,17 +660,23 @@ Creating a ticket locks the shift row to serialize order-number and name assignm
 
 ### Passcodes
 
-A passcode is a 4-digit PIN stored hashed on the user. The POS sends `approver_id` + `passcode`; the server requires the approver to be `admin` or `manager` and `Hash::check`s the PIN. A cashier with no passcode can never be an approver.
+A passcode is a 4-digit PIN stored hashed (bcrypt) on the user. The POS never knows approver ids: it sends only `passcode`, and the server `Hash::check`s it against **every** active `admin`/`manager` with a passcode (always all of them, for consistent timing and to spot duplicates):
+
+- no match → `403`; exactly one → that user is the approver; more than one → `403` asking for the passcode to be changed in the back office (the server never guesses).
+- Cashiers and inactive users never match, even if they hold a passcode.
+- Failed attempts are counted per signed-in user: 5 in a minute → `429` with `Retry-After` until the minute is up. A successful passcode resets the count.
+- Because hashes are salted, uniqueness can't be a DB index. The back office Employees form instead rejects a manager passcode that already belongs to another active manager/admin (`This passcode is already in use. Choose a different one.`).
 
 ### Error catalog
 
 | HTTP | Typical `message`                                                                                          |
 | ---- | ---------------------------------------------------------------------------------------------------------- |
 | 401  | `Unauthenticated.`                                                                                         |
-| 403  | `Passcode is invalid or the approver lacks permission.` / role-forbidden                                   |
+| 403  | `Passcode is invalid or the approver lacks permission.` · `This passcode is shared by more than one manager. It must be changed in the back office before it can be used.` · role-forbidden |
 | 404  | `Resource not found.` / `No active shift is open.`                                                         |
 | 409  | `Insufficient stock for item X.` · `Ticket is not open.` · `Tickets must belong to the same shift to be merged.` · `Refund has already been decided.` · charge amount mismatch · shift already open · open tickets exist |
 | 422  | `The given data was invalid.` + `errors`                                                                   |
+| 429  | `Too many incorrect passcode attempts. Please try again in N seconds.` · login throttled                   |
 
 ---
 
@@ -685,7 +702,9 @@ Covered by Pest tests (`tests/Feature`, `tests/Unit`): ordering reserves in both
 
 Special items (fee and custom lines, entry-mode validation, no stock movement through pay/void/refund, discount, merge, receipt `line_type`) are covered by `SpecialItemTest`.
 
-**Not yet covered by dedicated tests:** API login, shifts open/close and totals, shift transactions, refunds, and ticket create/void/discount/cancel.
+Passcode approval (void and refund approve/reject identify the manager/admin from the passcode alone; wrong, cashier, inactive and shared passcodes are refused; 5 failures → `429`, success resets; back office passcode uniqueness) is covered by `PasscodeApprovalTest`.
+
+**Not yet covered by dedicated tests:** API login, shifts open/close and totals, shift transactions, refund request/listing, and ticket create/discount/cancel.
 
 ---
 

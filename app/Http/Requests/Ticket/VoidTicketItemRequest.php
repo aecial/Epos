@@ -8,16 +8,15 @@ class VoidTicketItemRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        // Any logged-in staff can operate the terminal and initiate the void; the
-        // approver_id + passcode pair below is the actual admin/manager gate,
-        // verified in TicketService::VoidItem.
+        // Any logged-in staff can operate the terminal and initiate the void; the passcode
+        // below is the actual admin/manager gate. TicketService::VoidItem resolves which
+        // active admin/manager it belongs to and records them as the approver.
         return auth()->check();
     }
 
     public function rules(): array
     {
         return [
-            'approver_id' => ['required', 'integer', 'exists:users,id'],
             'passcode' => ['required', 'digits:4'],
         ];
     }

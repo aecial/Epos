@@ -350,7 +350,7 @@ This matrix reflects what the code enforces today. "Manage" means the back-offic
 | View Receipts / Reprint                        | ✅    | ✅      | ✅      |
 | View Reports (planned)                         | ✅    | ✅      | ❌      |
 
-**Passcodes:** a 4-digit PIN stored hashed on the user. For a void or refund decision the POS sends `approver_id` + `passcode`; the server checks that the approver is an admin/manager and that the PIN matches. The signed-in cashier is recorded as the requester, the approver as the authorizer.
+**Passcodes:** a 4-digit PIN stored hashed on the user. For a void or refund decision a manager/admin types their passcode on the POS and the POS sends only `passcode`; the server checks it against every active admin/manager and records the one it belongs to as the approver. Cashiers and inactive users never match. A passcode that matches nobody is refused (`403`); one that matches more than one approver is also refused (`403`) until it is changed in the back office, so passcodes must be unique among active managers/admins (the Employees form enforces this). Five failed attempts in a minute by the signed-in user return `429`. The signed-in cashier is recorded as the requester, the approver as the authorizer.
 
 **Terminal isolation:** any authenticated user may create tickets. Isolation between terminals is achieved by each POS sending its `terminal_id` when creating tickets and when listing them; it is not yet enforced from the token.
 
@@ -391,7 +391,7 @@ Each POS device has a fixed `terminal_id` (e.g. `POS-01`) that it sends when cre
 
 - Items with quantities and modifiers
 - Edit quantity (+ / -) — _the API has no quantity-edit endpoint yet_ (today: void + re-add)
-- Remove item — requires a manager/admin passcode (`DELETE /tickets/{id}/items/{ticketItemId}`)
+- Remove item — a manager/admin types their passcode; the passcode alone identifies them (`DELETE /tickets/{id}/items/{ticketItemId}` with `{ "passcode" }`; `meta.approver` in the response names who approved)
 - Apply discount (₱ or %) — `PATCH /tickets/{id}/discount`; a percent wins over a fixed amount
 - Order name (auto-suffixed by the server if a same-named ticket is open: john → john2)
 - Order type selector (dine-in / takeout)
@@ -445,7 +445,7 @@ Each POS device has a fixed `terminal_id` (e.g. `POS-01`) that it sends when cre
 
 - Pick a paid ticket and one of its charges, choose the lines/quantities/amounts to refund, add a reason (`POST /refunds`; any role)
 - Pending refunds list (`GET /refunds?status=pending`)
-- Approve / reject with a manager/admin approver + passcode
+- Approve / reject with a manager/admin passcode only — the server identifies the approver from it (`meta.approver` in the response)
 
 ---
 
@@ -464,7 +464,7 @@ The back office is a set of Inertia pages served by session-authenticated Larave
 | `/item-management`, `/create-item`, `/items/{id}/edit` | Items | Table of name, price, cost, margin, category, stock, available stock and status. Create/edit/delete with `inventory_type` (`direct` \| `recipe` \| `none`), stock quantities, status (`available` \| `unavailable` \| `hidden`), and attached modifiers with a per-item price and display order. Recipe items get their ingredient requirements (ingredient, quantity, unit). In a **Special category** the form hides inventory, cost, quantity, recipe and modifiers and shows a **Pricing** choice — fixed amount, *Fee item* (cashier enters the amount) or *Custom item* (cashier enters the name and amount); `base_price` becomes the "Default amount" |
 | `/modifier-management`, `/create-modifier-group`, `/create-modifier`, `/modifier-groups/{id}/edit`, `/modifiers/{id}/edit` | Modifier groups & modifiers | Reusable groups (with `is_required`) and modifiers; the price is set per item when a modifier is attached |
 | `/ingredient-management`, `/create-ingredient-group`, `/create-ingredient`, `/ingredient-groups/{id}/edit`, `/ingredients/{id}/edit` | Ingredient groups & ingredients | CRUD; ingredients carry a unit (`piece`, `kg`, `gram`, `liter`, `ml`), decimal quantity and `cost_per_unit` |
-| `/employee-management`, `/users/create`, `/users/{id}/edit` | Employees | CRUD. Creates `manager` and `cashier` accounts (admins are seeded). A 4-digit passcode can only be set on a manager. Status active/inactive |
+| `/employee-management`, `/users/create`, `/users/{id}/edit` | Employees | CRUD. Creates `manager` and `cashier` accounts (admins are seeded). A 4-digit passcode can only be set on a manager and must not already belong to another active manager/admin (the POS identifies the approver from the passcode alone). Status active/inactive |
 | `/settings/*` | Profile, password, appearance | Starter-kit account settings |
 
 Notes:
@@ -757,11 +757,11 @@ Legend: `[x]` implemented and tested · `[~]` implemented on the server/API, cli
 ### Common Errors
 
 - **401 Unauthorized** — Missing/invalid token
-- **403 Forbidden** — Insufficient role, or a bad passcode / approver who is not admin/manager
+- **403 Forbidden** — Insufficient role, a passcode that matches no active admin/manager, or a passcode shared by more than one of them
 - **404 Not Found** — Resource doesn't exist, or no active shift where one is required
 - **409 Conflict** — Business-rule violation: shift already open, no active shift, open tickets block close, charge total mismatch, insufficient stock, ticket not open, refund already decided, tickets in different shifts
 - **422 Unprocessable Entity** — Validation failed
-- **429 Too Many Requests** — Login throttled (6 attempts per minute)
+- **429 Too Many Requests** — Login throttled (6 attempts per minute), or 5 failed passcode attempts in a minute
 
 Full catalog: `UNIFIED_API_ENDPOINTS.md` §10.
 
@@ -883,7 +883,7 @@ Automated (Pest) coverage today is marked ✅; the rest is manual or still to wr
 - [x] Verify inventory deducted; a paid ticket can't be charged twice
 - [x] Merge tickets (rules, chained merges, single receipt with all order numbers)
 - [ ] Cancel ticket (unreserve inventory) — _untested_
-- [ ] Void item with passcode — _untested_
+- [x] Void item with passcode (approver identified from the passcode alone; `PasscodeApprovalTest`)
 - [ ] Terminal 1 sees own orders, KDS sees all — _KDS not built_
 - [ ] Kitchen marks item done (UI only) — _KDS not built_
 - [ ] Request refund, manager approves (restore inventory; cash refund reduces expected cash) — _untested_

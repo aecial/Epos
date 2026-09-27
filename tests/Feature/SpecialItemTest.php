@@ -344,12 +344,13 @@ test('a special line can be voided only with a manager passcode and never moves 
         ->assertCreated()
         ->json('meta.ticket_item_id');
 
-    $this->deleteJson("/api/v1/tickets/{$ticket->id}/items/{$lineId}", ['approver_id' => $manager->id, 'passcode' => '9999'])
+    $this->deleteJson("/api/v1/tickets/{$ticket->id}/items/{$lineId}", ['passcode' => '9999'])
         ->assertForbidden();
 
-    $this->deleteJson("/api/v1/tickets/{$ticket->id}/items/{$lineId}", ['approver_id' => $manager->id, 'passcode' => '1234'])
+    $this->deleteJson("/api/v1/tickets/{$ticket->id}/items/{$lineId}", ['passcode' => '1234'])
         ->assertOk()
-        ->assertJsonPath('data.total', 0);
+        ->assertJsonPath('data.total', 0)
+        ->assertJsonPath('meta.approver.id', $manager->id);
 
     expect($fee->fresh()->reserved_quantity)->toBe(0);
 });
@@ -412,9 +413,10 @@ test('refunding a special line restores no stock', function () {
         'items' => [['ticket_item_id' => $lineId, 'quantity' => 1, 'amount' => 50]],
     ])->assertCreated()->json('data.id');
 
-    $this->putJson("/api/v1/refunds/{$refundId}/approve", ['approver_id' => $manager->id, 'passcode' => '1234'])
+    $this->putJson("/api/v1/refunds/{$refundId}/approve", ['passcode' => '1234'])
         ->assertOk()
-        ->assertJsonPath('data.status', 'approved');
+        ->assertJsonPath('data.status', 'approved')
+        ->assertJsonPath('data.approved_by', $manager->id);
 
     expect($fee->fresh()->quantity)->toBe(0);
 });

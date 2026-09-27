@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use App\Exceptions\InvalidPasscodeException;
 use App\Exceptions\NoActiveShiftException;
 use App\Models\Item;
 use App\Models\Modifier;
@@ -12,12 +11,14 @@ use App\Models\TicketItem;
 use App\Models\TicketItemModifier;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Hash;
 use InvalidArgumentException;
 
 class TicketService
 {
-    public function __construct(private InventoryService $inventoryService) {}
+    public function __construct(
+        private InventoryService $inventoryService,
+        private PasscodeService $passcodeService,
+    ) {}
 
     public function CreateTicket(Shift $shift, User $createdBy, string $terminalId, string $customerName, string $orderType): Ticket
     {
@@ -120,14 +121,14 @@ class TicketService
     }
 
     /**
-     * Void a line item. $approver must be admin/manager and $passcode must match their
-     * PIN — this is the passcode gate CLAUDE.md requires for removing an item from an
-     * open ticket. $requestedBy is the cashier operating the terminal, recorded
-     * separately from $approver so the audit trail shows who asked and who authorized.
+     * Void a line item. $passcode must belong to exactly one active admin/manager, who is
+     * recorded as the approver — this is the passcode gate CLAUDE.md requires for removing
+     * an item from an open ticket. $requestedBy is the cashier operating the terminal,
+     * recorded separately so the audit trail shows who asked and who authorized.
      */
-    public function VoidItem(TicketItem $ticketItem, User $requestedBy, User $approver, string $passcode): TicketItem
+    public function VoidItem(TicketItem $ticketItem, User $requestedBy, string $passcode): TicketItem
     {
-        $this->assertPasscode($approver, $passcode);
+        $approver = $this->passcodeService->ResolveApprover($requestedBy, $passcode);
 
         return DB::transaction(function () use ($ticketItem, $requestedBy, $approver): TicketItem {
             $lockedItem = TicketItem::query()->lockForUpdate()->findOrFail($ticketItem->id);
@@ -372,12 +373,5 @@ class TicketService
             'subtotal' => round($subtotal, 2),
             'total' => $total,
         ]);
-    }
-
-    private function assertPasscode(User $approver, string $passcode): void
-    {
-        if (! $approver->isAdminOrManager() || ! Hash::check($passcode, $approver->passcode)) {
-            throw new InvalidPasscodeException;
-        }
     }
 }

@@ -6,6 +6,7 @@ use App\Exceptions\InsufficientInventoryException;
 use App\Exceptions\InvalidPasscodeException;
 use App\Exceptions\NoActiveShiftException;
 use App\Exceptions\OpenTicketsExistException;
+use App\Exceptions\TooManyPasscodeAttemptsException;
 use App\Http\Middleware\HandleInertiaRequests;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -33,7 +34,8 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withExceptions(function (Exceptions $exceptions) {
         // Domain-rule violations (e.g. "ticket is not open") that services throw as
         // plain InvalidArgumentException, plus the typed exceptions below, all read as
-        // 409 Conflict per the documented API error catalog. Passcode failures are 403.
+        // 409 Conflict per the documented API error catalog. Passcode failures are 403;
+        // too many failed passcode attempts are 429.
         $conflictExceptions = [
             NoActiveShiftException::class,
             ActiveShiftExistsException::class,
@@ -68,6 +70,13 @@ return Application::configure(basePath: dirname(__DIR__))
                     'success' => false,
                     'message' => $e->getMessage(),
                 ], 403);
+            }
+
+            if ($e instanceof TooManyPasscodeAttemptsException) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $e->getMessage(),
+                ], 429, ['Retry-After' => $e->retryAfter]);
             }
 
             if ($e instanceof ModelNotFoundException) {

@@ -50,7 +50,7 @@ docs/
 | **Split payment**      | Cash + GCash simultaneously on one ticket; amounts-only (no per-item assignment); charges must equal the recomputed total to the centavo; one receipt per charge with a prorated discount |
 | **Notes**              | KDS-only — never printed on customer receipt                                                             |
 | **Duplicate names**    | Auto-append among open tickets within a shift, across all terminals: john → john2 → john3                |
-| **Passcode**           | 4-digit PIN hashed with bcrypt; required to void item on open ticket or approve/reject refund (approver must be admin/manager) |
+| **Passcode**           | 4-digit PIN hashed with bcrypt; required to void item on open ticket or approve/reject refund. The POS sends only the passcode; the server identifies the approver among active admins/managers (`PasscodeService`), refuses a passcode shared by more than one, and returns 429 after 5 failed attempts/minute. Passcodes must be unique among active managers/admins (enforced by the back office user forms) |
 | **Shift formula**      | Starting Cash + Cash Sales + Additions − Expenses − Cash Refunds = Expected Cash                          |
 | **Payment atomicity**  | Charges, inventory deduction, ticket close and receipt generation succeed or roll back together          |
 | **Special items**      | Items in a `special` category (Fee item: cashier types the amount; Custom item: cashier types name + amount). No inventory/cost/recipe/modifiers; discount applies; `ticket_items.line_type` = item/fee/custom (KDS hides `fee`). The word "charge" always means a payment — never use it for these |
@@ -73,8 +73,9 @@ docs/
 - Login via `username` (not email)
 - `password` — full login credential (bcrypt)
 - `passcode` — 4-digit PIN (bcrypt); used for sensitive POS actions:
-    - Removing an item from an open ticket → POS prompts passcode → `Hash::check()` → allowed
-    - Refund approval → `approved_by` set to the verifying manager/admin user id
+    - Removing an item from an open ticket → POS prompts a manager/admin for their passcode → server `Hash::check()`s it against every active admin/manager → the single match is recorded as `voided_by`
+    - Refund approval/rejection → same passcode-only lookup → `approved_by` set to the matching manager/admin user id
+    - The passcode alone identifies the approver (no `approver_id`), so it must be unique among active managers/admins; cashiers and inactive users never match
 - Roles: `admin` · `manager` · `cashier`
 
 ---

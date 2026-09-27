@@ -2,19 +2,20 @@
 
 namespace App\Services;
 
-use App\Exceptions\InvalidPasscodeException;
 use App\Models\Charge;
 use App\Models\Refund;
 use App\Models\RefundItem;
 use App\Models\Ticket;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Hash;
 use InvalidArgumentException;
 
 class RefundService
 {
-    public function __construct(private InventoryService $inventoryService) {}
+    public function __construct(
+        private InventoryService $inventoryService,
+        private PasscodeService $passcodeService,
+    ) {}
 
     /**
      * A refund always targets one charge, so cash-vs-gcash is known for shift cash
@@ -64,12 +65,13 @@ class RefundService
     }
 
     /**
-     * $approver must be admin/manager and $passcode must match their PIN, per
-     * CLAUDE.md's "passcode required to approve refund" rule.
+     * $passcode must belong to exactly one active admin/manager, who is recorded as the
+     * approver, per CLAUDE.md's "passcode required to approve refund" rule. $operator is
+     * the logged-in user at the terminal; failed passcode attempts are throttled per them.
      */
-    public function ApproveRefund(Refund $refund, User $approver, string $passcode): Refund
+    public function ApproveRefund(Refund $refund, User $operator, string $passcode): Refund
     {
-        $this->assertPasscode($approver, $passcode);
+        $approver = $this->passcodeService->ResolveApprover($operator, $passcode);
 
         return DB::transaction(function () use ($refund, $approver): Refund {
             $lockedRefund = Refund::query()->lockForUpdate()->findOrFail($refund->id);
@@ -97,9 +99,12 @@ class RefundService
         });
     }
 
-    public function RejectRefund(Refund $refund, User $approver, string $passcode): Refund
+    /**
+     * Same passcode gate as ApproveRefund; the deciding admin/manager is stored in approved_by.
+     */
+    public function RejectRefund(Refund $refund, User $operator, string $passcode): Refund
     {
-        $this->assertPasscode($approver, $passcode);
+        $approver = $this->passcodeService->ResolveApprover($operator, $passcode);
 
         return DB::transaction(function () use ($refund, $approver): Refund {
             $lockedRefund = Refund::query()->lockForUpdate()->findOrFail($refund->id);
@@ -116,12 +121,5 @@ class RefundService
 
             return $lockedRefund;
         });
-    }
-
-    private function assertPasscode(User $approver, string $passcode): void
-    {
-        if (! $approver->isAdminOrManager() || ! Hash::check($passcode, $approver->passcode)) {
-            throw new InvalidPasscodeException;
-        }
     }
 }

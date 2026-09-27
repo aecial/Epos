@@ -10,7 +10,6 @@ use App\Http\Requests\Refund\GetRefundsRequest;
 use App\Models\Charge;
 use App\Models\Refund;
 use App\Models\Ticket;
-use App\Models\User;
 use App\Services\RefundService;
 use Illuminate\Http\JsonResponse;
 
@@ -55,19 +54,15 @@ class RefundController extends Controller
 
     public function approveRefund(DecideRefundRequest $request, Refund $refund): JsonResponse
     {
-        $approver = User::query()->findOrFail($request->validated('approver_id'));
+        $approved = $this->refundService->ApproveRefund($refund, $request->user(), $request->validated('passcode'));
 
-        $approved = $this->refundService->ApproveRefund($refund, $approver, $request->validated('passcode'));
-
-        return $this->success($approved);
+        return $this->success($approved, meta: ['approver' => $approved->approvedBy()->firstOrFail()->only(['id', 'name'])]);
     }
 
     public function rejectRefund(DecideRefundRequest $request, Refund $refund): JsonResponse
     {
-        $approver = User::query()->findOrFail($request->validated('approver_id'));
+        $rejected = $this->refundService->RejectRefund($refund, $request->user(), $request->validated('passcode'));
 
-        $rejected = $this->refundService->RejectRefund($refund, $approver, $request->validated('passcode'));
-
-        return $this->success($rejected);
+        return $this->success($rejected, meta: ['approver' => $rejected->approvedBy()->firstOrFail()->only(['id', 'name'])]);
     }
 }
