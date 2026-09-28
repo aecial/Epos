@@ -167,7 +167,23 @@ Notes:
 
 One item, same shape. A hidden item or one in a POS-hidden category is a clean `404`.
 
-There is no categories endpoint for the POS yet (see §13); derive the category pills from `category` on the items.
+### GET `/categories`
+
+Categories for the MenuScreen's pills, **sorted by name**. Only `active` categories with `is_visible_to_pos = true` are returned — the same visibility rule `/items` applies.
+
+```json
+{
+    "success": true,
+    "data": [
+        { "id": 3, "name": "Mains", "type": "menu" },
+        { "id": 7, "name": "Specials", "type": "special" }
+    ]
+}
+```
+
+### GET `/categories/{id}`
+
+One category, same shape. An inactive category or one with `is_visible_to_pos = false` is a clean `404`.
 
 ---
 
@@ -715,7 +731,6 @@ Passcode approval (void and refund approve/reject identify the manager/admin fro
 | **Real-time / WebSockets** | No broadcasting code or package installed. The POS should use the manual sync button or polling for now. The event list in `ENHANCED_SPEC.md` §10 is still a plan. |
 | **KDS endpoints** (`GET /kds/orders`, item completion) | Not built. KDS completion is UI-only by design; only the read feed is missing. |
 | **Ticket line quantity edit** | No `PATCH /tickets/{id}/items/{ticketItem}`. Reducing a quantity currently means a passcode-gated void plus re-adding. |
-| **Categories endpoint for the POS** | None in `/api/v1`. Derive categories from `GET /items`. |
 | **Server-enforced terminal isolation** | `terminal_id` is a client filter on `GET /tickets`; it is not bound to the token. |
 | **`/items` auth** | `GET /items` and `GET /items/{item}` are registered *outside* the `auth:sanctum` group in `routes/api_v1.php` (the in-group copies are commented out), so they are currently public. `ItemApiTest` expects them to require a token and fails. |
 | **Shift transaction delete role check** | `DELETE /shifts/{shift}/transactions/{transaction}` has no manager/admin gate, unlike create/update. |

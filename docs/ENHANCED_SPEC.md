@@ -706,12 +706,12 @@ Legend: `[x]` implemented and tested · `[~]` implemented on the server/API, cli
 - [x] Receipt history for all terminals (filter/search/paginate) and reprint log with watermark flag
 - [x] Refund request + passcode approval/rejection, inventory restored, cash refunds netted from expected cash
 - [x] Special items: Special categories with Fee items (cashier enters the amount) and Custom items (cashier enters the name and amount) — API, receipts and back office
+- [x] Categories endpoint for the POS (`GET /categories`, `GET /categories/{id}`; active + POS-visible only)
 
 **Still to build**
 
 - [~] Terminal isolation (POS sees own orders only) — `terminal_id` filter works; not enforced by token
 - [ ] Ticket line quantity edit (API)
-- [ ] Categories endpoint for the POS (API)
 - [ ] KDS order feed + item completion UI (UI-only completion)
 - [ ] Real-time WebSocket updates
 - [ ] React Native POS app, including auto-print to the thermal printer
