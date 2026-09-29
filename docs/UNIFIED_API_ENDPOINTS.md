@@ -732,7 +732,6 @@ Passcode approval (void and refund approve/reject identify the manager/admin fro
 | **KDS endpoints** (`GET /kds/orders`, item completion) | Not built. KDS completion is UI-only by design; only the read feed is missing. |
 | **Ticket line quantity edit** | No `PATCH /tickets/{id}/items/{ticketItem}`. Reducing a quantity currently means a passcode-gated void plus re-adding. |
 | **Server-enforced terminal isolation** | `terminal_id` is a client filter on `GET /tickets`; it is not bound to the token. |
-| **Shift transaction delete role check** | `DELETE /shifts/{shift}/transactions/{transaction}` has no manager/admin gate, unlike create/update. |
 | **Employee / category / item admin over the API** | These live in the session-authenticated back office only, not in `/api/v1`. |
 | **Per-item charge assignment (`charge_items`)** | Dropped by design; charges are amounts-only with prorated receipts. |
 | **Back-office pages for shifts, orders/receipts, refunds, dashboard stats, reports** | Data and API exist; no Inertia pages yet. |

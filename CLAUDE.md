@@ -105,7 +105,7 @@ docs/
     - Auth (login page), users, categories, items, modifier groups/modifiers, ingredient groups/ingredients, recipes
 2. **POS API** (`/api/v1`, Sanctum) — done: auth, menu, shifts, shift transactions, tickets (create/add/void/discount/merge/cancel), payments, receipts, refunds
     - Still missing: ticket line quantity edit, server-enforced terminal isolation, KDS feed
-    - Known issues: shift-transaction delete has no role check
+    - Known issues: none outstanding. `DELETE /shifts/{shift}/transactions/{transaction}` intentionally has no manager/admin gate (create/update do) — any authenticated staff may remove a mistaken cash addition or expense entry
 3. Back-office shift, orders/receipts, refunds and dashboard pages (planned)
 4. React Native POS app (planned)
 5. KDS app (planned)

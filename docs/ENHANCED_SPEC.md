@@ -295,7 +295,7 @@ Only **cash** refunds reduce expected cash; GCash refunds never touched the draw
 
 **Features:**
 
-- Managers/admins only can add and edit via POS "Shift Settings" (delete has no role check in code yet — see API doc §13)
+- Managers/admins only can add and edit via POS "Shift Settings"; deleting an entry is open to any authenticated staff (deliberate asymmetry — a cashier can remove their own mistaken entry without waiting for a manager)
 - Free-text reason (e.g., "Owner deposit", "Supply purchase")
 - Track who added it and when (`created_by`, `updated_by`, `deleted_by`)
 - Can edit/delete entries mid-shift; not allowed once the shift is closed
