@@ -871,7 +871,7 @@ Automated (Pest) coverage today is marked ✅; the rest is manual or still to wr
 - [ ] Open shift, sync menu — _menu ✅ (`ItemApiTest`); shift open/close untested_
 - [ ] Create ticket with auto-duplicate names (john → john2) — _no ticket create test yet_
 - [x] Add items (reserves inventory) — direct and recipe modes
-- [ ] Edit item quantity — _endpoint not built_
+- [x] Edit item quantity — raise/lower without a passcode, insufficient stock, zero rejected, voided/closed ticket rejected (`TicketItemQuantityTest`)
 - [ ] Apply discount — _ticket discount untested; discount proration ✅ (`ReceiptTest`)_
 - [x] Split payment (cash + gcash)
 - [x] Charge sum must equal total exactly
@@ -889,7 +889,7 @@ Automated (Pest) coverage today is marked ✅; the rest is manual or still to wr
 - [ ] Printer offline, fallback to digital receipt — _POS app_
 - [ ] Token expiry & re-login flow — _POS app_
 
-Known failing tests (stale or affected by the items-route auth change): `CategoryTest`, `CategoryServiceTest`, and `ItemApiTest > the items endpoints require authentication`.
+No known failing tests — `php artisan test` is green.
 
 ---
 

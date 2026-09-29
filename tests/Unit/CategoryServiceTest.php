@@ -6,6 +6,7 @@ use App\Http\Requests\Category\UpdateCategoryRequest;
 use App\Models\Category;
 use App\Services\CategoryService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\RedirectResponse;
 use Tests\TestCase;
 
 uses(TestCase::class, RefreshDatabase::class);
@@ -14,7 +15,7 @@ test('service returns all categories', function () {
     Category::create(['name' => 'Lunch', 'status' => 'active', 'is_visible_to_pos' => true]);
     Category::create(['name' => 'Drinks', 'status' => 'active', 'is_visible_to_pos' => true]);
 
-    $service = new CategoryService();
+    $service = new CategoryService;
 
     $names = $service->ReadAllCategory()->pluck('name')->all();
 
@@ -24,7 +25,7 @@ test('service returns all categories', function () {
 test('service returns one category by model instance', function () {
     $category = Category::create(['name' => 'Lunch', 'status' => 'active', 'is_visible_to_pos' => true]);
 
-    $service = new CategoryService();
+    $service = new CategoryService;
 
     $result = $service->ReadCategory($category);
 
@@ -33,7 +34,7 @@ test('service returns one category by model instance', function () {
 });
 
 test('service creates a category', function () {
-    $service = new CategoryService();
+    $service = new CategoryService;
 
     $category = $service->CreateCategory([
         'name' => 'Desserts',
@@ -53,7 +54,7 @@ test('service updates a category', function () {
         'is_visible_to_pos' => true,
     ]);
 
-    $service = new CategoryService();
+    $service = new CategoryService;
 
     $updated = $service->UpdateCategory([
         'name' => 'Dinner',
@@ -73,11 +74,15 @@ test('service deletes a category', function () {
         'is_visible_to_pos' => true,
     ]);
 
-    $service = new CategoryService();
+    $service = new CategoryService;
 
     expect($service->DeleteCategory($category))->toBeTrue()
         ->and(Category::count())->toBe(0);
 });
+
+// The controller redirects back to category-management on create/update/delete rather than
+// returning the service's result directly (it drives Inertia pages, not a JSON API) — these
+// assert that redirect and that the service was still called with the right arguments.
 
 test('controller delegates createCategory to the service', function () {
     $data = [
@@ -95,8 +100,10 @@ test('controller delegates createCategory to the service', function () {
     $service->shouldReceive('CreateCategory')->once()->with($data)->andReturn($category);
 
     $controller = new CategoryController($service);
+    $response = $controller->createCategory($request);
 
-    expect($controller->createCategory($request))->toBe($category);
+    expect($response)->toBeInstanceOf(RedirectResponse::class)
+        ->and($response->getTargetUrl())->toBe(route('category-management'));
 });
 
 test('controller delegates updateCategory to the service', function () {
@@ -120,8 +127,10 @@ test('controller delegates updateCategory to the service', function () {
     $service->shouldReceive('UpdateCategory')->once()->with($data, $category)->andReturn($category);
 
     $controller = new CategoryController($service);
+    $response = $controller->updateCategory($category, $request);
 
-    expect($controller->updateCategory($category, $request))->toBe($category);
+    expect($response)->toBeInstanceOf(RedirectResponse::class)
+        ->and($response->getTargetUrl())->toBe(route('category-management'));
 });
 
 test('controller delegates deleteCategory to the service', function () {
@@ -136,6 +145,8 @@ test('controller delegates deleteCategory to the service', function () {
     $service->shouldReceive('DeleteCategory')->once()->with($category)->andReturnTrue();
 
     $controller = new CategoryController($service);
+    $response = $controller->deleteCategory($category);
 
-    expect($controller->deleteCategory($category))->toBeTrue();
+    expect($response)->toBeInstanceOf(RedirectResponse::class)
+        ->and($response->getTargetUrl())->toBe(route('category-management'));
 });

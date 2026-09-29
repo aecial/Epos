@@ -9,7 +9,7 @@ function authorizeCategoryRequest(string $role): bool
     $user = User::factory()->create(['role' => $role]);
     auth()->setUser($user);
 
-    $request = new CreateCategoryRequest();
+    $request = new CreateCategoryRequest;
     $request->setUserResolver(fn () => auth()->user());
 
     return $request->authorize();
@@ -21,7 +21,7 @@ test('admin can read all categories', function () {
 
     $this->actingAs(User::factory()->create(['role' => 'admin']));
 
-    $this->get('/category')
+    $this->get('/categories')
         ->assertOk()
         ->assertJsonFragment(['name' => 'Lunch'])
         ->assertJsonFragment(['name' => 'Drinks']);
@@ -32,7 +32,7 @@ test('admin can read a single category', function () {
 
     $this->actingAs(User::factory()->create(['role' => 'admin']));
 
-    $this->get('/category/' . $category->id)
+    $this->get('/categories/'.$category->id)
         ->assertOk()
         ->assertJsonPath('name', 'Lunch');
 });
