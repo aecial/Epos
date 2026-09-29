@@ -465,6 +465,7 @@ The back office is a set of Inertia pages served by session-authenticated Larave
 | `/modifier-management`, `/create-modifier-group`, `/create-modifier`, `/modifier-groups/{id}/edit`, `/modifiers/{id}/edit` | Modifier groups & modifiers | Reusable groups (with `is_required`) and modifiers; the price is set per item when a modifier is attached |
 | `/ingredient-management`, `/create-ingredient-group`, `/create-ingredient`, `/ingredient-groups/{id}/edit`, `/ingredients/{id}/edit` | Ingredient groups & ingredients | CRUD; ingredients carry a unit (`piece`, `kg`, `gram`, `liter`, `ml`), decimal quantity and `cost_per_unit` |
 | `/employee-management`, `/users/create`, `/users/{id}/edit` | Employees | CRUD. Creates `manager` and `cashier` accounts (admins are seeded). A 4-digit passcode can only be set on a manager and must not already belong to another active manager/admin (the POS identifies the approver from the passcode alone). Status active/inactive |
+| `/users/{id}/sessions` | Employees → Devices | POS tokens never expire on their own, so this is the only way to end one: lists every device signed in as that user (`device_name`, signed-in/last-used time) with a per-device "Sign out" and a "Sign out everywhere" button. Not available for admin accounts, same protection as editing/deleting one |
 | `/settings/*` | Profile, password, appearance | Starter-kit account settings |
 
 Notes:
@@ -887,7 +888,7 @@ Automated (Pest) coverage today is marked ✅; the rest is manual or still to wr
 - [ ] WebSocket broadcasts on new order — _not built_
 - [ ] Close shift, verify totals (incl. blocked while tickets are open) — _partly covered by the merge test; otherwise untested_
 - [ ] Printer offline, fallback to digital receipt — _POS app_
-- [ ] Token expiry & re-login flow — _POS app_
+- [x] Token expiry & re-login flow — tokens never expire on their own; a manager/admin can revoke one from Employee Management → Devices, and the revoked token is immediately rejected by the API (`UserSessionsTest`). The POS app's re-login-on-401 UI is still to build
 
 No known failing tests — `php artisan test` is green.
 

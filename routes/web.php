@@ -82,6 +82,9 @@ Route::middleware(['auth'])->group(function () {
     })->middleware('can:update,user')->name('users.edit');
     Route::patch('users/{user}', [UserController::class, 'updateUser'])->middleware('can:update,user')->name('users.update');
     Route::delete('users/{user}', [UserController::class, 'deleteUser'])->middleware('can:delete,user')->name('users.destroy');
+    Route::get('users/{user}/sessions', [UserController::class, 'getUserSessions'])->middleware('can:update,user')->name('users.sessions');
+    Route::delete('users/{user}/sessions/{token}', [UserController::class, 'revokeUserSession'])->middleware('can:update,user')->name('users.sessions.revoke');
+    Route::delete('users/{user}/sessions', [UserController::class, 'revokeAllUserSessions'])->middleware('can:update,user')->name('users.sessions.revoke-all');
     Route::get('create-modifier-group', function () {
         return Inertia::render('CreateModifierGroupPage');
     })->middleware('can:create,'.ModifierGroup::class)->name('create-modifier-group');

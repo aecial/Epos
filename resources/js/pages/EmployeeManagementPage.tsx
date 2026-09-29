@@ -4,7 +4,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/react';
-import { Pencil, Plus, Search, Trash2, Users } from 'lucide-react';
+import { Pencil, Plus, Search, Smartphone, Trash2, Users } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -116,6 +116,14 @@ export default function EmployeeManagementPage({ users }: { users: User[] }) {
                                     </TableCell>
                                     <TableCell>
                                         <div className="flex items-center gap-2">
+                                            <Link
+                                                href={route('users.sessions', user.id)}
+                                                aria-label={`${user.name}'s devices`}
+                                                className="hover:bg-muted inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium"
+                                            >
+                                                <Smartphone className="size-3" />
+                                                Devices
+                                            </Link>
                                             <Link
                                                 href={route('users.edit', user.id)}
                                                 aria-label={`Update ${user.name}`}

@@ -74,7 +74,19 @@ Log in with `username` (not email) and password. Throttled: 6 requests per minut
 { "username": "dangbi", "password": "pass1234", "device_name": "POS-01" }
 ```
 
-`device_name` is optional (default `pos`); it labels the token so a manager can tell tablets apart.
+`device_name` is optional (default `pos`); it labels the token so a manager can tell tablets apart on the back office's Employee Management → Devices page (below).
+
+Tokens never expire on their own (`config/sanctum.php` `expiration` is `null`) — a terminal logs in once and stays signed in until a manager/admin revokes it. Pass a stable, meaningful `device_name` (e.g. the `terminal_id`, not the default `pos`) so that revoke list is actually useful.
+
+### Revoking a device's login (back office only)
+
+Not part of `/api/v1` — this lives in the session-authenticated back office (`routes/web.php`), gated the same as the rest of Employee Management (admin/manager only):
+
+- `GET /users/{user}/sessions` — list that user's active tokens (`device_name`, signed-in time, last-used time)
+- `DELETE /users/{user}/sessions/{token}` — revoke one device; its token stops authenticating immediately
+- `DELETE /users/{user}/sessions` — revoke every device at once (lost tablet, employee left, etc.)
+
+An admin account's sessions can't be viewed or revoked through this UI, same protection as editing/deleting an admin.
 
 **Response `201`**
 

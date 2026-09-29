@@ -76,6 +76,7 @@ docs/
     - Removing an item from an open ticket → POS prompts a manager/admin for their passcode → server `Hash::check()`s it against every active admin/manager → the single match is recorded as `voided_by`
     - Refund approval/rejection → same passcode-only lookup → `approved_by` set to the matching manager/admin user id
     - The passcode alone identifies the approver (no `approver_id`), so it must be unique among active managers/admins; cashiers and inactive users never match
+- POS Sanctum tokens never expire on their own (`config/sanctum.php` `expiration` is `null`) — a terminal logs in once and stays signed in. A manager/admin revokes a device from Employee Management → Devices (`/users/{id}/sessions`); the revoked token is rejected on its very next request. Not available for admin accounts
 - Roles: `admin` · `manager` · `cashier`
 
 ---
