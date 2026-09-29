@@ -331,7 +331,7 @@ Only **cash** refunds reduce expected cash; GCash refunds never touched the draw
 
 ### Role Matrix
 
-This matrix reflects what the code enforces today. "Manage" means the back-office and inventory management routes, which check `admin or manager`.
+This matrix reflects what the code enforces today. "Manage" means the back-office and inventory management routes, which check `admin or manager` — every read, create, update and delete route for categories, items, modifiers, modifier groups, ingredients, ingredient groups and users carries a `can:` middleware backed by a Policy (`App\Policies\*`, all composing `AuthorizesBackOffice`), not just the create/update form requests. Only the dashboard, the back-office hub and account settings stay open to every role.
 
 | Action                                         | Admin | Manager | Cashier |
 | ---------------------------------------------- | ----- | ------- | ------- |
@@ -473,10 +473,6 @@ Notes:
 - Item images are stored as an `image_url` string. **File upload is not implemented yet.**
 - Restocking a direct item is done by editing its quantity on the item form; ingredient stock is adjusted on the ingredient form. There is no separate bulk-adjust screen.
 - The back-office item list has a client-side search (name or category) but no category/status filter; the POS `GET /api/v1/items` supports a `category_id` filter.
-
-### Known gaps (back office)
-
-- **Back-office page routes only require login, not a role.** Create/update form requests are gated by `admin or manager`, but the read-only pages (`/item-management`, `/employee-management`, …) are reachable by any authenticated user, including a cashier.
 
 ### Planned (data and API exist; no Inertia pages yet)
 

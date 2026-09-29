@@ -1,19 +1,19 @@
 <?php
 
 use App\Http\Controllers\CategoryController;
-use App\Http\Controllers\ItemController;
-use App\Http\Controllers\ModifierController;
-use App\Http\Controllers\ModifierGroupController;
 use App\Http\Controllers\IngredientController;
 use App\Http\Controllers\IngredientGroupController;
+use App\Http\Controllers\ItemController;
 use App\Http\Controllers\ItemRecipeController;
+use App\Http\Controllers\ModifierController;
+use App\Http\Controllers\ModifierGroupController;
 use App\Http\Controllers\UserController;
 use App\Models\Category;
 use App\Models\Ingredient;
 use App\Models\IngredientGroup;
 use App\Models\Item;
-use App\Models\ModifierGroup;
 use App\Models\Modifier;
+use App\Models\ModifierGroup;
 use App\Models\User;
 use App\Services\InventoryService;
 use Illuminate\Support\Facades\Route;
@@ -24,6 +24,9 @@ Route::get('/', function () {
 })->name('home');
 
 Route::middleware(['auth'])->group(function () {
+    // Every role may log in to the back office (CLAUDE.md role matrix), so dashboard and the
+    // hub stay open to all; each management resource below is gated by its own Policy
+    // (admin/manager only today — see App\Policies\Concerns\AuthorizesBackOffice).
     Route::get('dashboard', function () {
         return Inertia::render('dashboard');
     })->name('dashboard');
@@ -35,7 +38,7 @@ Route::middleware(['auth'])->group(function () {
         return Inertia::render('CategoryManagementPage', [
             'categories' => Category::withCount('items')->get(),
         ]);
-    })->name('category-management');
+    })->middleware('can:viewAny,'.Category::class)->name('category-management');
     Route::get('item-management', function () {
         $inventoryService = app(InventoryService::class);
         $items = Item::with(['category', 'ingredients'])->withCount('modifiers')->get()->map(function (Item $item) use ($inventoryService) {
@@ -51,7 +54,7 @@ Route::middleware(['auth'])->group(function () {
             if ($item->inventory_type !== 'none') {
                 try {
                     $availableStock = $inventoryService->AvailableForItem($item);
-                } catch (\InvalidArgumentException) {
+                } catch (InvalidArgumentException) {
                 }
             }
 
@@ -62,73 +65,71 @@ Route::middleware(['auth'])->group(function () {
         });
 
         return Inertia::render('ItemManagementPage', ['items' => $items]);
-    })->name('item-management');
+    })->middleware('can:viewAny,'.Item::class)->name('item-management');
     Route::get('modifier-management', function () {
         return Inertia::render('ModifierManagementPage', [
             'modifierGroups' => ModifierGroup::withCount('modifiers')->with('modifiers')->orderBy('name')->get(),
             'modifiers' => Modifier::with('group')->orderBy('name')->get(),
         ]);
-    })->name('modifier-management');
-    Route::get('employee-management', [UserController::class, 'getUsers'])->name('employee-management');
-    Route::get('users/create', [UserController::class, 'getCreateUser'])->name('users.create');
-    Route::post('users', [UserController::class, 'createUser'])->name('users.store');
+    })->middleware('can:viewAny,'.ModifierGroup::class)->name('modifier-management');
+    Route::get('employee-management', [UserController::class, 'getUsers'])->middleware('can:viewAny,'.User::class)->name('employee-management');
+    Route::get('users/create', [UserController::class, 'getCreateUser'])->middleware('can:create,'.User::class)->name('users.create');
+    Route::post('users', [UserController::class, 'createUser'])->middleware('can:create,'.User::class)->name('users.store');
     Route::get('users/{user}/edit', function (User $user) {
         abort_if($user->role === 'admin', 403);
 
         return Inertia::render('UpdateUserPage', ['user' => $user]);
-    })->name('users.edit');
-    Route::patch('users/{user}', [UserController::class, 'updateUser'])->name('users.update');
-    Route::delete('users/{user}', [UserController::class, 'deleteUser'])->name('users.destroy');
+    })->middleware('can:update,user')->name('users.edit');
+    Route::patch('users/{user}', [UserController::class, 'updateUser'])->middleware('can:update,user')->name('users.update');
+    Route::delete('users/{user}', [UserController::class, 'deleteUser'])->middleware('can:delete,user')->name('users.destroy');
     Route::get('create-modifier-group', function () {
         return Inertia::render('CreateModifierGroupPage');
-    })->name('create-modifier-group');
+    })->middleware('can:create,'.ModifierGroup::class)->name('create-modifier-group');
     Route::get('create-modifier', function () {
         return Inertia::render('CreateModifierPage', [
             'modifierGroups' => ModifierGroup::orderBy('name')->get(['id', 'name']),
         ]);
-    })->name('create-modifier');
+    })->middleware('can:create,'.Modifier::class)->name('create-modifier');
     Route::get('modifier-groups/{modifierGroup}/edit', function (ModifierGroup $modifierGroup) {
         return Inertia::render('UpdateModifierGroupPage', [
             'modifierGroup' => $modifierGroup,
         ]);
-    })->name('modifier-groups.edit');
+    })->middleware('can:update,modifierGroup')->name('modifier-groups.edit');
     Route::get('modifiers/{modifier}/edit', function (Modifier $modifier) {
         return Inertia::render('UpdateModifierPage', [
             'modifier' => $modifier->load('group'),
             'modifierGroups' => ModifierGroup::orderBy('name')->get(['id', 'name']),
         ]);
-    })->name('modifiers.edit');
+    })->middleware('can:update,modifier')->name('modifiers.edit');
     Route::get('ingredient-management', function () {
         return Inertia::render('IngredientManagementPage', [
             'ingredientGroups' => IngredientGroup::withCount('ingredients')->orderBy('name')->get(),
             'ingredients' => Ingredient::with('ingredientGroup')->orderBy('name')->get(),
         ]);
-    })->name('ingredient-management');
+    })->middleware('can:viewAny,'.IngredientGroup::class)->name('ingredient-management');
     Route::get('create-ingredient-group', function () {
         return Inertia::render('CreateIngredientGroupPage');
-    })->name('create-ingredient-group');
+    })->middleware('can:create,'.IngredientGroup::class)->name('create-ingredient-group');
     Route::get('create-ingredient', function () {
         return Inertia::render('CreateIngredientPage', [
             'ingredientGroups' => IngredientGroup::orderBy('name')->get(['id', 'name']),
         ]);
-    })->name('create-ingredient');
+    })->middleware('can:create,'.Ingredient::class)->name('create-ingredient');
     Route::get('ingredient-groups/{ingredientGroup}/edit', function (IngredientGroup $ingredientGroup) {
         return Inertia::render('UpdateIngredientGroupPage', [
             'ingredientGroup' => $ingredientGroup,
         ]);
-    })->name('ingredient-groups.edit');
+    })->middleware('can:update,ingredientGroup')->name('ingredient-groups.edit');
     Route::get('ingredients/{ingredient}/edit', function (Ingredient $ingredient) {
         return Inertia::render('UpdateIngredientPage', [
             'ingredient' => $ingredient->load('ingredientGroup'),
             'ingredientGroups' => IngredientGroup::orderBy('name')->get(['id', 'name']),
         ]);
-    })->name('ingredients.edit');
-
-
+    })->middleware('can:update,ingredient')->name('ingredients.edit');
 
     Route::get('create-category', function () {
         return Inertia::render('CreateCategoryPage');
-    })->name('create-category');
+    })->middleware('can:create,'.Category::class)->name('create-category');
     Route::get('create-item', function () {
         return Inertia::render('CreateItemPage', [
             'categories' => Category::orderBy('name')->get(['id', 'name', 'type']),
@@ -139,19 +140,18 @@ Route::middleware(['auth'])->group(function () {
                 ->orderBy('name')
                 ->get(['id', 'name', 'is_required']),
         ]);
-    })->name('create-item');
+    })->middleware('can:create,'.Item::class)->name('create-item');
     Route::get('categories/{category}/edit', function (Category $category) {
         return Inertia::render('UpdateCategoryPage', [
             'category' => $category->loadCount('items'),
         ]);
-    })->name('categories.edit');
+    })->middleware('can:update,category')->name('categories.edit');
 
-
-    Route::get('categories', [CategoryController::class, 'getCategories']);
-    Route::post('categories', [CategoryController::class, 'createCategory'])->name('categories.store');
-    Route::get('categories/{category}', [CategoryController::class, 'getCategory']);
-    Route::patch('categories/{category}', [CategoryController::class, 'updateCategory'])->name('categories.update');
-    Route::delete('categories/{category}', [CategoryController::class, 'deleteCategory'])->name('categories.destroy');
+    Route::get('categories', [CategoryController::class, 'getCategories'])->middleware('can:viewAny,'.Category::class);
+    Route::post('categories', [CategoryController::class, 'createCategory'])->middleware('can:create,'.Category::class)->name('categories.store');
+    Route::get('categories/{category}', [CategoryController::class, 'getCategory'])->middleware('can:view,category');
+    Route::patch('categories/{category}', [CategoryController::class, 'updateCategory'])->middleware('can:update,category')->name('categories.update');
+    Route::delete('categories/{category}', [CategoryController::class, 'deleteCategory'])->middleware('can:delete,category')->name('categories.destroy');
     Route::get('items/{item}/edit', function (Item $item) {
         return Inertia::render('UpdateItemPage', [
             'item' => $item->load(['ingredients', 'modifiers']),
@@ -163,38 +163,38 @@ Route::middleware(['auth'])->group(function () {
                 ->orderBy('name')
                 ->get(['id', 'name', 'is_required']),
         ]);
-    })->name('items.edit');
-    Route::get('items', [ItemController::class, 'getItems']);
-    Route::get('items/{item}', [ItemController::class, 'getItem']);
-    Route::post('items', [ItemController::class, 'createItem'])->name('items.store');
-    Route::patch('items/{item}', [ItemController::class, 'updateItem'])->name('items.update');
-    Route::delete('items/{item}', [ItemController::class, 'deleteItem'])->name('items.destroy');
+    })->middleware('can:update,item')->name('items.edit');
+    Route::get('items', [ItemController::class, 'getItems'])->middleware('can:viewAny,'.Item::class);
+    Route::get('items/{item}', [ItemController::class, 'getItem'])->middleware('can:view,item');
+    Route::post('items', [ItemController::class, 'createItem'])->middleware('can:create,'.Item::class)->name('items.store');
+    Route::patch('items/{item}', [ItemController::class, 'updateItem'])->middleware('can:update,item')->name('items.update');
+    Route::delete('items/{item}', [ItemController::class, 'deleteItem'])->middleware('can:delete,item')->name('items.destroy');
 
-    Route::get('ingredient-groups', [IngredientGroupController::class, 'getIngredientGroups'])->name('ingredient-groups.index');
-    Route::post('ingredient-groups', [IngredientGroupController::class, 'createIngredientGroup'])->name('ingredient-groups.store');
-    Route::patch('ingredient-groups/{ingredientGroup}', [IngredientGroupController::class, 'updateIngredientGroup'])->name('ingredient-groups.update');
-    Route::delete('ingredient-groups/{ingredientGroup}', [IngredientGroupController::class, 'deleteIngredientGroup'])->name('ingredient-groups.destroy');
+    Route::get('ingredient-groups', [IngredientGroupController::class, 'getIngredientGroups'])->middleware('can:viewAny,'.IngredientGroup::class)->name('ingredient-groups.index');
+    Route::post('ingredient-groups', [IngredientGroupController::class, 'createIngredientGroup'])->middleware('can:create,'.IngredientGroup::class)->name('ingredient-groups.store');
+    Route::patch('ingredient-groups/{ingredientGroup}', [IngredientGroupController::class, 'updateIngredientGroup'])->middleware('can:update,ingredientGroup')->name('ingredient-groups.update');
+    Route::delete('ingredient-groups/{ingredientGroup}', [IngredientGroupController::class, 'deleteIngredientGroup'])->middleware('can:delete,ingredientGroup')->name('ingredient-groups.destroy');
 
-    Route::get('ingredients', [IngredientController::class, 'getIngredients'])->name('ingredients.index');
-    Route::post('ingredients', [IngredientController::class, 'createIngredient'])->name('ingredients.store');
-    Route::get('ingredients/{ingredient}', [IngredientController::class, 'getIngredient'])->name('ingredients.show');
-    Route::patch('ingredients/{ingredient}', [IngredientController::class, 'updateIngredient'])->name('ingredients.update');
-    Route::delete('ingredients/{ingredient}', [IngredientController::class, 'deleteIngredient'])->name('ingredients.destroy');
+    Route::get('ingredients', [IngredientController::class, 'getIngredients'])->middleware('can:viewAny,'.Ingredient::class)->name('ingredients.index');
+    Route::post('ingredients', [IngredientController::class, 'createIngredient'])->middleware('can:create,'.Ingredient::class)->name('ingredients.store');
+    Route::get('ingredients/{ingredient}', [IngredientController::class, 'getIngredient'])->middleware('can:view,ingredient')->name('ingredients.show');
+    Route::patch('ingredients/{ingredient}', [IngredientController::class, 'updateIngredient'])->middleware('can:update,ingredient')->name('ingredients.update');
+    Route::delete('ingredients/{ingredient}', [IngredientController::class, 'deleteIngredient'])->middleware('can:delete,ingredient')->name('ingredients.destroy');
 
-    Route::get('items/{item}/recipe', [ItemRecipeController::class, 'getItemRecipe'])->name('items.recipe.show');
-    Route::put('items/{item}/recipe', [ItemRecipeController::class, 'updateItemRecipe'])->name('items.recipe.update');
+    Route::get('items/{item}/recipe', [ItemRecipeController::class, 'getItemRecipe'])->middleware('can:view,item')->name('items.recipe.show');
+    Route::put('items/{item}/recipe', [ItemRecipeController::class, 'updateItemRecipe'])->middleware('can:update,item')->name('items.recipe.update');
 
-    Route::get('modifier-groups', [ModifierGroupController::class, 'getModifierGroups'])->name('modifier-groups.index');
-    Route::get('modifier-groups/{modifierGroup}', [ModifierGroupController::class, 'getModifierGroup'])->name('modifier-groups.show');
-    Route::post('modifier-groups', [ModifierGroupController::class, 'createModifierGroup'])->name('modifier-groups.store');
-    Route::patch('modifier-groups/{modifierGroup}', [ModifierGroupController::class, 'updateModifierGroup'])->name('modifier-groups.update');
-    Route::delete('modifier-groups/{modifierGroup}', [ModifierGroupController::class, 'deleteModifierGroup'])->name('modifier-groups.destroy');
+    Route::get('modifier-groups', [ModifierGroupController::class, 'getModifierGroups'])->middleware('can:viewAny,'.ModifierGroup::class)->name('modifier-groups.index');
+    Route::get('modifier-groups/{modifierGroup}', [ModifierGroupController::class, 'getModifierGroup'])->middleware('can:view,modifierGroup')->name('modifier-groups.show');
+    Route::post('modifier-groups', [ModifierGroupController::class, 'createModifierGroup'])->middleware('can:create,'.ModifierGroup::class)->name('modifier-groups.store');
+    Route::patch('modifier-groups/{modifierGroup}', [ModifierGroupController::class, 'updateModifierGroup'])->middleware('can:update,modifierGroup')->name('modifier-groups.update');
+    Route::delete('modifier-groups/{modifierGroup}', [ModifierGroupController::class, 'deleteModifierGroup'])->middleware('can:delete,modifierGroup')->name('modifier-groups.destroy');
 
-    Route::get('modifiers', [ModifierController::class, 'getModifiers'])->name('modifiers.index');
-    Route::get('modifiers/{modifier}', [ModifierController::class, 'getModifier'])->name('modifiers.show');
-    Route::post('modifiers', [ModifierController::class, 'createModifier'])->name('modifiers.store');
-    Route::patch('modifiers/{modifier}', [ModifierController::class, 'updateModifier'])->name('modifiers.update');
-    Route::delete('modifiers/{modifier}', [ModifierController::class, 'deleteModifier'])->name('modifiers.destroy');
+    Route::get('modifiers', [ModifierController::class, 'getModifiers'])->middleware('can:viewAny,'.Modifier::class)->name('modifiers.index');
+    Route::get('modifiers/{modifier}', [ModifierController::class, 'getModifier'])->middleware('can:view,modifier')->name('modifiers.show');
+    Route::post('modifiers', [ModifierController::class, 'createModifier'])->middleware('can:create,'.Modifier::class)->name('modifiers.store');
+    Route::patch('modifiers/{modifier}', [ModifierController::class, 'updateModifier'])->middleware('can:update,modifier')->name('modifiers.update');
+    Route::delete('modifiers/{modifier}', [ModifierController::class, 'deleteModifier'])->middleware('can:delete,modifier')->name('modifiers.destroy');
 });
 
 require __DIR__.'/settings.php';
