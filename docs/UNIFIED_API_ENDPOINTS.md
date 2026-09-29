@@ -403,7 +403,21 @@ Returns the refreshed ticket; `meta.approver` names who approved:
 { "success": true, "data": { "id": 10, "...": "..." }, "meta": { "approver": { "id": 2, "name": "Kring" } } }
 ```
 
-There is no endpoint to change a line's quantity — void and re-add (see §13).
+### PATCH `/tickets/{ticket}/items/{ticketItem}`
+
+Change a line's quantity **up or down**. Any staff — **no passcode**: this is not a removal. Ticket must be `open`, the line must not be voided.
+
+```json
+{ "quantity": 1 }
+```
+
+- `quantity`: integer, `>= 1`. There is no way to reach `0` here — dropping a line to zero is a removal, which stays passcode-gated on `DELETE /tickets/{ticket}/items/{ticketItem}` above.
+- Reserves the difference if the quantity goes up, releases it if it goes down — same stock rules as adding an item (`409` `Insufficient stock for item …` if raising it exceeds what's available; nothing changes on failure).
+- `line_total` is recomputed from the line's own `unit_price` and its modifiers' prices (unaffected by this call) at the new quantity; the ticket's `subtotal`/`total` are recomputed too.
+
+**Response `200`:** the refreshed ticket with `items.modifiers`.
+
+**Errors:** `422` if `quantity` is missing or `< 1`; `409` if the line is voided or the ticket isn't open, or on insufficient stock; `404` if the line belongs to another ticket.
 
 ### PATCH `/tickets/{ticket}/discount`
 
@@ -704,6 +718,7 @@ GET  /shifts/active                    → 404? → POST /shifts { starting_cash
 GET  /items                            → menu
 POST /tickets                          → ticket (#001, "john")
 POST /tickets/{id}/items               → reserve stock, repeat per item
+PATCH /tickets/{id}/items/{itemId}     → optional, adjust a line's quantity (no passcode)
 PATCH /tickets/{id}/discount           → optional
 POST /tickets/{id}/charges             → pay (split ok) → receipts in the response → print
 GET  /receipts                         → history / reprint
@@ -730,7 +745,6 @@ Passcode approval (void and refund approve/reject identify the manager/admin fro
 | ---- | ------ |
 | **Real-time / WebSockets** | No broadcasting code or package installed. The POS should use the manual sync button or polling for now. The event list in `ENHANCED_SPEC.md` §10 is still a plan. |
 | **KDS endpoints** (`GET /kds/orders`, item completion) | Not built. KDS completion is UI-only by design; only the read feed is missing. |
-| **Ticket line quantity edit** | No `PATCH /tickets/{id}/items/{ticketItem}`. Reducing a quantity currently means a passcode-gated void plus re-adding. |
 | **Server-enforced terminal isolation** | `terminal_id` is a client filter on `GET /tickets`; it is not bound to the token. |
 | **Employee / category / item admin over the API** | These live in the session-authenticated back office only, not in `/api/v1`. |
 | **Per-item charge assignment (`charge_items`)** | Dropped by design; charges are amounts-only with prorated receipts. |

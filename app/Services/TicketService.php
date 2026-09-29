@@ -157,6 +157,52 @@ class TicketService
         });
     }
 
+    /**
+     * Change a line's quantity up or down. No passcode: this is not a removal, so it does
+     * not go through PasscodeService. Reaching zero is a void instead — the request layer
+     * enforces quantity >= 1, and VoidItem (passcode-gated) is how a line is removed entirely.
+     */
+    public function UpdateItemQuantity(TicketItem $ticketItem, int $newQuantity): TicketItem
+    {
+        if ($newQuantity <= 0) {
+            throw new InvalidArgumentException('Quantity must be greater than zero; void the line to remove it.');
+        }
+
+        return DB::transaction(function () use ($ticketItem, $newQuantity): TicketItem {
+            $lockedItem = TicketItem::query()->lockForUpdate()->findOrFail($ticketItem->id);
+
+            if ($lockedItem->isVoided()) {
+                throw new InvalidArgumentException('Cannot change the quantity of a voided item.');
+            }
+
+            $ticket = Ticket::query()->lockForUpdate()->findOrFail($lockedItem->ticket_id);
+
+            if (! $ticket->isOpen()) {
+                throw new InvalidArgumentException('Cannot change item quantity on a ticket that is not open.');
+            }
+
+            $delta = $newQuantity - $lockedItem->quantity;
+
+            if ($delta > 0) {
+                $this->inventoryService->ReserveItem($lockedItem->item, $delta);
+            } elseif ($delta < 0) {
+                $this->inventoryService->ReleaseItem($lockedItem->item, abs($delta));
+            }
+
+            $modifierTotal = (float) $lockedItem->modifiers()->sum('price');
+            $lineTotal = round(((float) $lockedItem->unit_price + $modifierTotal) * $newQuantity, 2);
+
+            $lockedItem->update([
+                'quantity' => $newQuantity,
+                'line_total' => $lineTotal,
+            ]);
+
+            $this->recalculateTotals($ticket);
+
+            return $lockedItem->fresh(['modifiers']);
+        });
+    }
+
     public function SetDiscount(Ticket $ticket, float $discountAmount = 0, float $discountPercent = 0): Ticket
     {
         return DB::transaction(function () use ($ticket, $discountAmount, $discountPercent): Ticket {

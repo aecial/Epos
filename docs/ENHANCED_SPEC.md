@@ -390,7 +390,7 @@ Each POS device has a fixed `terminal_id` (e.g. `POS-01`) that it sends when cre
 #### 4. **CartScreen**
 
 - Items with quantities and modifiers
-- Edit quantity (+ / -) — _the API has no quantity-edit endpoint yet_ (today: void + re-add)
+- Edit quantity (+ / -) via `PATCH /tickets/{id}/items/{ticketItem}` — no passcode; dropping to zero still means voiding the line with a manager/admin passcode
 - Remove item — a manager/admin types their passcode; the passcode alone identifies them (`DELETE /tickets/{id}/items/{ticketItemId}` with `{ "passcode" }`; `meta.approver` in the response names who approved)
 - Apply discount (₱ or %) — `PATCH /tickets/{id}/discount`; a percent wins over a fixed amount
 - Order name (auto-suffixed by the server if a same-named ticket is open: john → john2)
@@ -707,11 +707,11 @@ Legend: `[x]` implemented and tested · `[~]` implemented on the server/API, cli
 - [x] Refund request + passcode approval/rejection, inventory restored, cash refunds netted from expected cash
 - [x] Special items: Special categories with Fee items (cashier enters the amount) and Custom items (cashier enters the name and amount) — API, receipts and back office
 - [x] Categories endpoint for the POS (`GET /categories`, `GET /categories/{id}`; active + POS-visible only)
+- [x] Ticket line quantity edit (`PATCH /tickets/{id}/items/{ticketItem}`; no passcode — see §6 CartScreen)
 
 **Still to build**
 
 - [~] Terminal isolation (POS sees own orders only) — `terminal_id` filter works; not enforced by token
-- [ ] Ticket line quantity edit (API)
 - [ ] KDS order feed + item completion UI (UI-only completion)
 - [ ] Real-time WebSocket updates
 - [ ] React Native POS app, including auto-print to the thermal printer

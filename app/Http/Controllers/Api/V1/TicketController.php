@@ -10,6 +10,7 @@ use App\Http\Requests\Ticket\CreateTicketRequest;
 use App\Http\Requests\Ticket\GetTicketsRequest;
 use App\Http\Requests\Ticket\MergeTicketsRequest;
 use App\Http\Requests\Ticket\SetTicketDiscountRequest;
+use App\Http\Requests\Ticket\UpdateTicketItemQuantityRequest;
 use App\Http\Requests\Ticket\VoidTicketItemRequest;
 use App\Models\Item;
 use App\Models\Shift;
@@ -91,6 +92,15 @@ class TicketController extends Controller
         );
 
         return $this->success($ticket->fresh(['items.modifiers']), 201, ['ticket_item_id' => $ticketItem->id]);
+    }
+
+    public function updateItemQuantity(UpdateTicketItemQuantityRequest $request, Ticket $ticket, TicketItem $ticketItem): JsonResponse
+    {
+        $this->assertBelongsToTicket($ticket, $ticketItem);
+
+        $this->ticketService->UpdateItemQuantity($ticketItem, (int) $request->validated('quantity'));
+
+        return $this->success($ticket->fresh(['items.modifiers']));
     }
 
     public function voidItem(VoidTicketItemRequest $request, Ticket $ticket, TicketItem $ticketItem): JsonResponse

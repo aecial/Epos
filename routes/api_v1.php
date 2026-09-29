@@ -38,6 +38,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('tickets', [TicketController::class, 'createTicket'])->name('api.v1.tickets.store');
     Route::get('tickets/{ticket}', [TicketController::class, 'getTicket'])->name('api.v1.tickets.show');
     Route::post('tickets/{ticket}/items', [TicketController::class, 'addItem'])->name('api.v1.tickets.items.store');
+    Route::patch('tickets/{ticket}/items/{ticketItem}', [TicketController::class, 'updateItemQuantity'])->name('api.v1.tickets.items.update');
     Route::delete('tickets/{ticket}/items/{ticketItem}', [TicketController::class, 'voidItem'])->name('api.v1.tickets.items.void');
     Route::patch('tickets/{ticket}/discount', [TicketController::class, 'setDiscount'])->name('api.v1.tickets.discount');
     Route::post('tickets/{ticket}/merge', [TicketController::class, 'mergeTickets'])->name('api.v1.tickets.merge');
