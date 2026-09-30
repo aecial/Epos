@@ -497,7 +497,7 @@ Pay the ticket. **One call, one transaction:** creates the charges, deducts inve
 | `charges`                  | required array, at least 1                                |
 | `charges.*.payment_method` | `cash` \| `gcash`                                         |
 | `charges.*.amount`         | numeric `>= 0` (`0` only for a ticket discounted to a `0` total — see Comps below) |
-| `charges.*.tendered_amount`| optional, `>= amount`; `change_due` is computed from it   |
+| `charges.*.tendered_amount`| optional, `>= amount`, **cash only**; `change_due` is computed from it. `422` if sent for `gcash` — a digital payment has no "tendered"/change |
 | `charges.*.payment_reference` | **required for `gcash`**, optional otherwise            |
 
 **Charges are amounts-only.** There is no per-item assignment: each charge covers a portion of the ticket total, and every receipt lists **all** ticket items with the ticket's discount **prorated** to that charge.

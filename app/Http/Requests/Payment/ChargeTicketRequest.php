@@ -24,7 +24,8 @@ class ChargeTicketRequest extends FormRequest
             // charge" rule, since the sum-equals-total check alone can't rule out e.g. two
             // zero-amount charges against a zero total.
             'charges.*.amount' => ['required', 'numeric', 'gte:0'],
-            'charges.*.tendered_amount' => ['sometimes', 'nullable', 'numeric', 'gte:charges.*.amount'],
+            // Cash only: GCash is a digital payment, so "tendered"/change never applies to it.
+            'charges.*.tendered_amount' => ['sometimes', 'nullable', 'numeric', 'gte:charges.*.amount', 'prohibited_if:charges.*.payment_method,gcash'],
             'charges.*.payment_reference' => ['required_if:charges.*.payment_method,gcash', 'nullable', 'string', 'max:255'],
         ];
     }
