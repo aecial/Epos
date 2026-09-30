@@ -56,6 +56,7 @@ docs/
 | **Special items**      | Items in a `special` category (Fee item: cashier types the amount; Custom item: cashier types name + amount). No inventory/cost/recipe/modifiers; discount applies; `ticket_items.line_type` = item/fee/custom (KDS hides `fee`). The word "charge" always means a payment — never use it for these |
 | **Ticket merge**       | Open tickets in the same shift fold into a target; sources become `merged` with zeroed money             |
 | **Comps**              | A ticket discounted to a `0` total is closed with a single `amount: 0` charge (`POST .../charges`), same endpoint as any payment. Inventory is still deducted; the shift's revenue/cash totals are not. More than one charge against a `0` total is rejected (`409`) — required so receipt discount proration never divides by a `0` total |
+| **Refund validation**  | `RefundService::RequestRefund` re-derives every bound from the database, never trusts client-supplied numbers: the `ticket_item_id` must belong to the ticket being refunded; requested quantity can't exceed what was purchased minus what's already pending/approved for that line; requested amount can't exceed the line's actual per-unit price × quantity; and the running total for the specific charge being refunded can't exceed what that charge collected. Ticket item and charge rows are locked for the duration so concurrent refund requests can't race past these checks. A `rejected` refund releases its quantity/amount back for a future request; `pending` and `approved` both count against the limit |
 
 ### Inventory Modes
 
@@ -108,6 +109,7 @@ docs/
 2. **POS API** (`/api/v1`, Sanctum) — done: auth, menu, shifts, shift transactions, tickets (create/add/void/discount/merge/cancel), payments, receipts, refunds
     - Still missing: server-enforced terminal isolation, KDS feed
     - Known issues: none outstanding. `DELETE /shifts/{shift}/transactions/{transaction}` intentionally has no manager/admin gate (create/update do) — any authenticated staff may remove a mistaken cash addition or expense entry
+    - Deleting a category/item/modifier/modifier group/ingredient/ingredient group that's referenced by sales history or a recipe is blocked at the database level (`restrictOnDelete()`); the back office catches the resulting `RecordInUseException` (`App\Services\Concerns\DeletesSafely`) and flashes a readable error instead of a raw `500`
 3. Back-office shift, orders/receipts, refunds and dashboard pages (planned)
 4. React Native POS app (planned)
 5. KDS app (planned)

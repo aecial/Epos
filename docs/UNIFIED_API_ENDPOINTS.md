@@ -43,7 +43,7 @@ Error:
 | 401  | Missing/invalid token — `Unauthenticated.`                                                                   |
 | 403  | Role not allowed, a passcode that matches no active manager/admin (`Passcode is invalid or the approver lacks permission.`), or a passcode shared by more than one of them |
 | 404  | Unknown id, or no active shift where one is required                                                         |
-| 409  | Business-rule conflict: no active shift, shift already open, open tickets block close, charge total mismatch, insufficient stock, ticket not open, refund already decided, etc. |
+| 409  | Business-rule conflict: no active shift, shift already open, open tickets block close, charge total mismatch, insufficient stock, ticket not open, refund already decided, a refund that doesn't stay within what was purchased/paid, etc. |
 | 422  | Validation failed                                                                                            |
 | 429  | Login throttled (6 attempts per minute), or 5 failed passcode attempts in a minute (sends `Retry-After`)      |
 
@@ -645,6 +645,7 @@ Request a refund. **Any role.**
 - `items`: at least one; `ticket_item_id` distinct; `quantity` integer `>= 1`; `amount` `> 0`
 - The refund `amount` is the sum of item amounts. Status starts `pending`.
 - `409` if the charge doesn't belong to the ticket or the ticket isn't `paid`.
+- `409` if a `ticket_item_id` doesn't belong to the ticket being refunded, if the requested `quantity` exceeds what's left to refund on that line (purchased minus whatever's `pending`/`approved` on prior refunds), if the requested `amount` exceeds that line's actual per-unit price × quantity, or if the refund's total would exceed what the targeted charge actually collected. These bounds are re-derived from the database inside a locked transaction on every request — nothing here is trusted from the client. A `rejected` refund's quantity/amount becomes refundable again.
 
 `201` with the refund and its `items`.
 
@@ -727,7 +728,7 @@ A passcode is a 4-digit PIN stored hashed (bcrypt) on the user. The POS never kn
 | 401  | `Unauthenticated.`                                                                                         |
 | 403  | `Passcode is invalid or the approver lacks permission.` · `This passcode is shared by more than one manager. It must be changed in the back office before it can be used.` · role-forbidden |
 | 404  | `Resource not found.` / `No active shift is open.`                                                         |
-| 409  | `Insufficient stock for item X.` · `Ticket is not open.` · `Tickets must belong to the same shift to be merged.` · `Refund has already been decided.` · charge amount mismatch · shift already open · open tickets exist |
+| 409  | `Insufficient stock for item X.` · `Ticket is not open.` · `Tickets must belong to the same shift to be merged.` · `Refund has already been decided.` · `Ticket item {id} does not belong to this ticket.` · `Refund quantity for ticket item {id} exceeds the remaining refundable quantity ({n}).` · `Refund amount for ticket item {id} exceeds its purchased value.` · `Refund amount exceeds what this charge collected.` · charge amount mismatch · shift already open · open tickets exist |
 | 422  | `The given data was invalid.` + `errors`                                                                   |
 | 429  | `Too many incorrect passcode attempts. Please try again in N seconds.` · login throttled                   |
 
@@ -758,7 +759,11 @@ Special items (fee and custom lines, entry-mode validation, no stock movement th
 
 Passcode approval (void and refund approve/reject identify the manager/admin from the passcode alone; wrong, cashier, inactive and shared passcodes are refused; 5 failures → `429`, success resets; back office passcode uniqueness) is covered by `PasscodeApprovalTest`.
 
-**Not yet covered by dedicated tests:** API login, shifts open/close and totals, shift transactions, refund request/listing, and ticket create/discount/cancel.
+Refund validation (cross-ticket `ticket_item_id` rejected, quantity/amount bounded by what was actually purchased and by what the targeted charge collected, the same units can't be refunded twice across separate requests whether pending or approved, a rejected refund frees its quantity/amount back up) is covered by `RefundValidationTest`.
+
+Back-office deletes that would otherwise violate a `restrictOnDelete()` foreign key (category/item/modifier/modifier group/ingredient/ingredient group referenced by sales history or a recipe) flash a readable error instead of crashing — covered by `DeleteInUseTest`.
+
+**Not yet covered by dedicated tests:** API login, shifts open/close and totals, shift transactions, refund listing, and ticket create/discount/cancel.
 
 ---
 

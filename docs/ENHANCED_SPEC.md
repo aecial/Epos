@@ -702,7 +702,7 @@ Legend: `[x]` implemented and tested · `[~]` implemented on the server/API, cli
 - [x] Ticket merging and ticket cancel
 - [x] Receipt issuing (one per charge), immutable snapshot, prorated discount, notes excluded
 - [x] Receipt history for all terminals (filter/search/paginate) and reprint log with watermark flag
-- [x] Refund request + passcode approval/rejection, inventory restored, cash refunds netted from expected cash
+- [x] Refund request + passcode approval/rejection, inventory restored, cash refunds netted from expected cash; requested item/quantity/amount are validated against the ticket and its purchase/payment history, not trusted from the client (`RefundValidationTest`)
 - [x] Special items: Special categories with Fee items (cashier enters the amount) and Custom items (cashier enters the name and amount) — API, receipts and back office
 - [x] Categories endpoint for the POS (`GET /categories`, `GET /categories/{id}`; active + POS-visible only)
 - [x] Ticket line quantity edit (`PATCH /tickets/{id}/items/{ticketItem}`; no passcode — see §6 CartScreen)
@@ -757,7 +757,7 @@ Legend: `[x]` implemented and tested · `[~]` implemented on the server/API, cli
 - **401 Unauthorized** — Missing/invalid token
 - **403 Forbidden** — Insufficient role, a passcode that matches no active admin/manager, or a passcode shared by more than one of them
 - **404 Not Found** — Resource doesn't exist, or no active shift where one is required
-- **409 Conflict** — Business-rule violation: shift already open, no active shift, open tickets block close, charge total mismatch, insufficient stock, ticket not open, refund already decided, tickets in different shifts
+- **409 Conflict** — Business-rule violation: shift already open, no active shift, open tickets block close, charge total mismatch, insufficient stock, ticket not open, refund already decided, a refund exceeding what was purchased/paid, tickets in different shifts. Back office only: deleting a category/item/modifier/modifier group/ingredient/ingredient group still referenced by sales history or a recipe (flashed as a readable error, not a raw `500`)
 - **422 Unprocessable Entity** — Validation failed
 - **429 Too Many Requests** — Login throttled (6 attempts per minute), or 5 failed passcode attempts in a minute
 
@@ -884,7 +884,7 @@ Automated (Pest) coverage today is marked ✅; the rest is manual or still to wr
 - [x] Void item with passcode (approver identified from the passcode alone; `PasscodeApprovalTest`)
 - [ ] Terminal 1 sees own orders, KDS sees all — _KDS not built_
 - [ ] Kitchen marks item done (UI only) — _KDS not built_
-- [ ] Request refund, manager approves (restore inventory; cash refund reduces expected cash) — _untested_
+- [x] Request refund, manager approves (restore inventory; cash refund reduces expected cash) — `RefundValidationTest`, `PasscodeApprovalTest`
 - [x] View receipt history (all terminals visible), filters, search, reprint log
 - [ ] WebSocket broadcasts on new order — _not built_
 - [ ] Close shift, verify totals (incl. blocked while tickets are open) — _partly covered by the merge test; otherwise untested_
