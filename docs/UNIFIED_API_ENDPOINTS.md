@@ -496,7 +496,7 @@ Pay the ticket. **One call, one transaction:** creates the charges, deducts inve
 | -------------------------- | --------------------------------------------------------- |
 | `charges`                  | required array, at least 1                                |
 | `charges.*.payment_method` | `cash` \| `gcash`                                         |
-| `charges.*.amount`         | numeric `> 0`                                             |
+| `charges.*.amount`         | numeric `>= 0` (`0` only for a ticket discounted to a `0` total — see Comps below) |
 | `charges.*.tendered_amount`| optional, `>= amount`; `change_due` is computed from it   |
 | `charges.*.payment_reference` | **required for `gcash`**, optional otherwise            |
 
@@ -508,6 +508,17 @@ Pay the ticket. **One call, one transaction:** creates the charges, deducts inve
 - The charges must sum to the total **exactly, to the centavo** → otherwise `409 ChargeAmountMismatch`.
 - `409` if the ticket isn't `open` (so a paid ticket can't be charged twice and stock is never deducted twice) or has no items.
 - Inventory is deducted (`direct` decrements `quantity`; `recipe` decrements ingredients) and reservations cleared.
+
+**Comps (a ticket discounted to `0`):** a 100%-discount or a fixed discount larger than the subtotal both floor the total at `0`. That ticket still has to be closed — the food was made and handed over, so stock still has to come off the shelf even though nothing was collected. Close it the same way, with a **single** charge of `amount: 0`:
+
+```json
+{ "charges": [{ "payment_method": "cash", "amount": 0 }] }
+```
+
+- Exactly one charge, amount `0` — `409` `A complimentary ticket (total ₱0) must be closed with a single zero-amount charge.` if more than one charge is sent (e.g. two `0` charges, or splitting the `0` across cash and gcash). A single zero-amount charge is required because the receipt's discount proration divides by the ticket total, which would be a division by zero for any charge but the last if there were more than one.
+- A `0` charge against a ticket whose real total is **not** `0` still fails the normal sum-mismatch check above — this only ever applies when the recomputed total is genuinely `0`.
+- The receipt is still issued and still shows the full `subtotal`/`discount`, just with `total: 0` — it's a record that the order was comped, not that nothing was ordered.
+- The shift's `total_revenue`/`total_cash` are unaffected — a comp adds `0` to both.
 
 **Response `200`:** the paid ticket with `charges.receipt`. Each receipt already carries the full printable `payload`, so the POS can print immediately without a second request:
 

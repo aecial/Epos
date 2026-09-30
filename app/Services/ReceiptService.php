@@ -68,9 +68,14 @@ class ReceiptService
         $totalCents = $this->toCents($ticket->total);
         $discountCents = $this->toCents($ticket->subtotal) - $totalCents;
 
-        if ($totalCents <= 0) {
-            throw new InvalidArgumentException('Cannot issue a receipt for a ticket with no payable total.');
+        if ($totalCents < 0) {
+            throw new InvalidArgumentException('Cannot issue a receipt for a ticket with a negative total.');
         }
+
+        // $totalCents === 0 is a comp (100% discount) - allowed, but only with exactly one
+        // charge: PaymentService::ChargeTicket enforces that before this is ever called, which
+        // is what keeps the intdiv() below safe (a single charge always takes the
+        // $remainingDiscount branch, never the divide-by-$totalCents one).
 
         $issuedAt = now();
         $date = $issuedAt->toDateString();

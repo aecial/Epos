@@ -58,12 +58,25 @@ class PaymentService
                 : $discountAmount;
             $total = max(0, round($subtotal - $effectiveDiscount, 2));
 
-            // Compare in whole centavos and require an exact match. (An earlier version
-            // tolerated 1 centavo, but receipt proration needs the charges to add up to
-            // the ticket total exactly.)
+            // Compare in whole centavos throughout - max(0, ...) above can hand back the int 0
+            // rather than the float 0.0, so a strict === 0.0 check on $total is not reliable.
+            $totalCents = (int) round($total * 100);
+
+            // A ticket discounted to zero (a comp) still has to be closed: stock was reserved
+            // and must be deducted, and the shift/receipt history needs a record of it. It's
+            // closed with exactly one zero-amount charge - the sum-equals-total check below
+            // can't by itself rule out e.g. two zero-amount charges against a zero total, and
+            // ReceiptService's discount proration divides by the total, which a second charge
+            // (index 0 of 2, not the last) would turn into a division by zero.
+            if ($totalCents === 0 && count($charges) !== 1) {
+                throw new InvalidArgumentException('A complimentary ticket (total ₱0) must be closed with a single zero-amount charge.');
+            }
+
+            // Require an exact match. (An earlier version tolerated 1 centavo, but receipt
+            // proration needs the charges to add up to the ticket total exactly.)
             $sumCharges = (int) round((float) array_sum(array_column($charges, 'amount')) * 100);
 
-            if ($sumCharges !== (int) round($total * 100)) {
+            if ($sumCharges !== $totalCents) {
                 throw new ChargeAmountMismatchException;
             }
 

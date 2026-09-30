@@ -55,6 +55,7 @@ docs/
 | **Payment atomicity**  | Charges, inventory deduction, ticket close and receipt generation succeed or roll back together          |
 | **Special items**      | Items in a `special` category (Fee item: cashier types the amount; Custom item: cashier types name + amount). No inventory/cost/recipe/modifiers; discount applies; `ticket_items.line_type` = item/fee/custom (KDS hides `fee`). The word "charge" always means a payment — never use it for these |
 | **Ticket merge**       | Open tickets in the same shift fold into a target; sources become `merged` with zeroed money             |
+| **Comps**              | A ticket discounted to a `0` total is closed with a single `amount: 0` charge (`POST .../charges`), same endpoint as any payment. Inventory is still deducted; the shift's revenue/cash totals are not. More than one charge against a `0` total is rejected (`409`) — required so receipt discount proration never divides by a `0` total |
 
 ### Inventory Modes
 

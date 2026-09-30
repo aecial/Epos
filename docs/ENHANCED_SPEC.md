@@ -409,6 +409,7 @@ Each POS device has a fixed `terminal_id` (e.g. `POS-01`) that it sends when cre
     - Split (cash + gcash) — enter an **amount** for each method
 - No per-item assignment: every receipt lists all items with a prorated discount
 - Validate charge sum = total (exact to the centavo; otherwise the API returns 409)
+- A ticket discounted all the way to a **₱0 total** (a comp) shows no payment buttons to pick between — one **"Close (no charge)"** action sends a single `amount: 0` charge so the order still closes and stock still comes off the shelf
 - `POST /tickets/{id}/charges`; the response contains one receipt payload per charge
 - **AUTO-PRINT Receipt** for each charge after confirmation
 - **Show Receipt on Screen** (can print again)
