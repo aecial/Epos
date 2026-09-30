@@ -6,6 +6,7 @@ use App\Exceptions\InsufficientInventoryException;
 use App\Exceptions\InvalidPasscodeException;
 use App\Exceptions\NoActiveShiftException;
 use App\Exceptions\OpenTicketsExistException;
+use App\Exceptions\RecordInUseException;
 use App\Exceptions\TooManyPasscodeAttemptsException;
 use App\Http\Middleware\HandleInertiaRequests;
 use Illuminate\Auth\AuthenticationException;
@@ -42,6 +43,7 @@ return Application::configure(basePath: dirname(__DIR__))
             OpenTicketsExistException::class,
             ChargeAmountMismatchException::class,
             InsufficientInventoryException::class,
+            RecordInUseException::class,
             InvalidArgumentException::class,
         ];
 

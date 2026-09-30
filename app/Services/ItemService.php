@@ -4,29 +4,40 @@ namespace App\Services;
 
 use App\Models\Category;
 use App\Models\Item;
+use App\Services\Concerns\DeletesSafely;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 
 class ItemService
 {
+    use DeletesSafely;
+
     public function __construct()
     {
         //
     }
-    public function CreateItem(array $itemData) {
+
+    public function CreateItem(array $itemData)
+    {
         $category = Category::query()->findOrFail($itemData['category_id']);
 
         return Item::create($this->NormalizeForCategory($itemData, $category));
     }
-    public function ReadAllItem(?int $categoryId = null) {
+
+    public function ReadAllItem(?int $categoryId = null)
+    {
         return Item::query()
             ->when($categoryId !== null, fn ($query) => $query->where('category_id', $categoryId))
             ->get();
     }
-    public function ReadItem(Item $item) {
+
+    public function ReadItem(Item $item)
+    {
         return $item;
     }
-    public function UpdateItem(array $itemData, Item $item)  {
+
+    public function UpdateItem(array $itemData, Item $item)
+    {
         $category = isset($itemData['category_id'])
             ? Category::query()->findOrFail($itemData['category_id'])
             : $item->category;
@@ -41,8 +52,10 @@ class ItemService
 
         return $item;
     }
-    public function DeleteItem(Item $item) {
-        return $item->delete();
+
+    public function DeleteItem(Item $item)
+    {
+        return $this->deleteOrFail($item, 'This item cannot be deleted because it is referenced by past orders.');
     }
 
     /**

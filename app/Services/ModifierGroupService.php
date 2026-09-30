@@ -3,9 +3,12 @@
 namespace App\Services;
 
 use App\Models\ModifierGroup;
+use App\Services\Concerns\DeletesSafely;
 
 class ModifierGroupService
 {
+    use DeletesSafely;
+
     public function CreateModifierGroup(array $data)
     {
         return ModifierGroup::create($data);
@@ -30,6 +33,6 @@ class ModifierGroupService
 
     public function DeleteModifierGroup(ModifierGroup $modifierGroup)
     {
-        return $modifierGroup->delete();
+        return $this->deleteOrFail($modifierGroup, 'This modifier group cannot be deleted because it is still referenced elsewhere.');
     }
 }

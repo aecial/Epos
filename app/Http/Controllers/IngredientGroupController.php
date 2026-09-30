@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Exceptions\RecordInUseException;
 use App\Http\Requests\IngredientGroup\CreateIngredientGroupRequest;
 use App\Http\Requests\IngredientGroup\UpdateIngredientGroupRequest;
 use App\Models\IngredientGroup;
@@ -41,6 +42,12 @@ class IngredientGroupController extends Controller
 
     public function deleteIngredientGroup(IngredientGroup $ingredientGroup)
     {
-        return $this->ingredientGroupService->DeleteIngredientGroup($ingredientGroup);
+        try {
+            $this->ingredientGroupService->DeleteIngredientGroup($ingredientGroup);
+        } catch (RecordInUseException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return redirect()->route('ingredient-management');
     }
 }

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Exceptions\RecordInUseException;
 use App\Http\Requests\Item\CreateItemRequest;
 use App\Http\Requests\Item\GetItemsRequest;
 use App\Http\Requests\Item\UpdateItemRequest;
@@ -15,17 +16,23 @@ class ItemController extends Controller
 {
     protected ItemService $itemService;
 
-    public function __construct(ItemService $itemService) {
+    public function __construct(ItemService $itemService)
+    {
         $this->itemService = $itemService;
     }
 
-    public function getItems(GetItemsRequest $request) {
+    public function getItems(GetItemsRequest $request)
+    {
         return $this->itemService->ReadAllItem($request->validated('category_id'));
     }
-    public function getItem(Item $item) {
+
+    public function getItem(Item $item)
+    {
         return $this->itemService->ReadItem($item);
     }
-    public function createItem(CreateItemRequest $request, ItemRecipeService $itemRecipeService, ItemModifierService $itemModifierService) {
+
+    public function createItem(CreateItemRequest $request, ItemRecipeService $itemRecipeService, ItemModifierService $itemModifierService)
+    {
         $data = $request->validated();
         $ingredients = $data['ingredients'] ?? null;
         $modifiers = $data['modifiers'] ?? null;
@@ -45,7 +52,9 @@ class ItemController extends Controller
 
         return redirect()->route('item-management');
     }
-    public function updateItem(UpdateItemRequest $request, Item $item, ItemRecipeService $itemRecipeService, ItemModifierService $itemModifierService) {
+
+    public function updateItem(UpdateItemRequest $request, Item $item, ItemRecipeService $itemRecipeService, ItemModifierService $itemModifierService)
+    {
         $data = $request->validated();
         $ingredients = $data['ingredients'] ?? null;
         $modifiers = $data['modifiers'] ?? null;
@@ -65,10 +74,15 @@ class ItemController extends Controller
 
         return redirect()->route('item-management');
     }
-    public function deleteItem(Item $item) {
-        $this->itemService->DeleteItem($item);
+
+    public function deleteItem(Item $item)
+    {
+        try {
+            $this->itemService->DeleteItem($item);
+        } catch (RecordInUseException $e) {
+            return back()->with('error', $e->getMessage());
+        }
 
         return redirect()->route('item-management');
     }
-
 }

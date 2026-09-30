@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Exceptions\RecordInUseException;
 use App\Http\Requests\Ingredient\CreateIngredientRequest;
 use App\Http\Requests\Ingredient\UpdateIngredientRequest;
 use App\Models\Ingredient;
@@ -28,13 +29,13 @@ class IngredientController extends Controller
 
     public function createIngredient(CreateIngredientRequest $request)
     {
-            $ingredient = $this->ingredientService->CreateIngredient($request->validated());
+        $ingredient = $this->ingredientService->CreateIngredient($request->validated());
 
-            if ($request->expectsJson()) {
-               return response()->json($ingredient, 201);
-            }
+        if ($request->expectsJson()) {
+            return response()->json($ingredient, 201);
+        }
 
-            return redirect()->route('ingredient-management');
+        return redirect()->route('ingredient-management');
     }
 
     public function updateIngredient(UpdateIngredientRequest $request, Ingredient $ingredient)
@@ -47,6 +48,12 @@ class IngredientController extends Controller
 
     public function deleteIngredient(Ingredient $ingredient)
     {
-        return $this->ingredientService->DeleteIngredient($ingredient);
+        try {
+            $this->ingredientService->DeleteIngredient($ingredient);
+        } catch (RecordInUseException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return redirect()->route('ingredient-management');
     }
 }

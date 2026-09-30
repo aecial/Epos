@@ -3,10 +3,13 @@
 namespace App\Services;
 
 use App\Models\Ingredient;
+use App\Services\Concerns\DeletesSafely;
 use Illuminate\Support\Facades\DB;
 
 class IngredientService
 {
+    use DeletesSafely;
+
     public function CreateIngredient(array $data): Ingredient
     {
         return Ingredient::create($data);
@@ -48,6 +51,6 @@ class IngredientService
 
     public function DeleteIngredient(Ingredient $ingredient): bool
     {
-        return (bool) $ingredient->delete();
+        return $this->deleteOrFail($ingredient, 'This ingredient cannot be deleted because it is used in a recipe or referenced by past orders.');
     }
 }

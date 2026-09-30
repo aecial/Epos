@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Exceptions\RecordInUseException;
 use App\Http\Requests\ModifierGroup\CreateModifierGroupRequest;
 use App\Http\Requests\ModifierGroup\UpdateModifierGroupRequest;
 use App\Models\ModifierGroup;
@@ -42,7 +43,11 @@ class ModifierGroupController extends Controller
 
     public function deleteModifierGroup(ModifierGroup $modifierGroup)
     {
-        $this->modifierGroupService->DeleteModifierGroup($modifierGroup);
+        try {
+            $this->modifierGroupService->DeleteModifierGroup($modifierGroup);
+        } catch (RecordInUseException $e) {
+            return back()->with('error', $e->getMessage());
+        }
 
         return redirect()->route('modifier-management');
     }

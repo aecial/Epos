@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Exceptions\RecordInUseException;
 use App\Http\Requests\Modifier\CreateModifierRequest;
 use App\Http\Requests\Modifier\UpdateModifierRequest;
 use App\Models\Modifier;
@@ -42,7 +43,11 @@ class ModifierController extends Controller
 
     public function deleteModifier(Modifier $modifier)
     {
-        $this->modifierService->DeleteModifier($modifier);
+        try {
+            $this->modifierService->DeleteModifier($modifier);
+        } catch (RecordInUseException $e) {
+            return back()->with('error', $e->getMessage());
+        }
 
         return redirect()->route('modifier-management');
     }

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Exceptions\RecordInUseException;
 use App\Http\Requests\Category\CreateCategoryRequest;
 use App\Http\Requests\Category\UpdateCategoryRequest;
 use App\Models\Category;
@@ -25,6 +26,7 @@ class CategoryController extends Controller
     {
         return $this->categoryService->ReadCategory($category);
     }
+
     public function createCategory(CreateCategoryRequest $request)
     {
         $this->categoryService->CreateCategory($request->validated());
@@ -41,7 +43,11 @@ class CategoryController extends Controller
 
     public function deleteCategory(Category $category)
     {
-        $this->categoryService->DeleteCategory($category);
+        try {
+            $this->categoryService->DeleteCategory($category);
+        } catch (RecordInUseException $e) {
+            return back()->with('error', $e->getMessage());
+        }
 
         return redirect()->route('category-management');
     }

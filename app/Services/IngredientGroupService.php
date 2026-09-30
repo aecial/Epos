@@ -3,9 +3,12 @@
 namespace App\Services;
 
 use App\Models\IngredientGroup;
+use App\Services\Concerns\DeletesSafely;
 
 class IngredientGroupService
 {
+    use DeletesSafely;
+
     public function CreateIngredientGroup(array $data): IngredientGroup
     {
         return IngredientGroup::create($data);
@@ -25,6 +28,6 @@ class IngredientGroupService
 
     public function DeleteIngredientGroup(IngredientGroup $group): bool
     {
-        return (bool) $group->delete();
+        return $this->deleteOrFail($group, 'This ingredient group cannot be deleted while it still has ingredients.');
     }
 }
