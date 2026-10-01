@@ -26,6 +26,14 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
     )
+    // The default Broadcast::routes() registers /broadcasting/auth under the web/session
+    // guard - useless for a bearer-token tablet client. This registers it under
+    // auth:sanctum at /api/v1/broadcasting/auth instead, so the same token every other
+    // /api/v1 request already sends also authenticates the channel subscription.
+    ->withBroadcasting(
+        __DIR__.'/../routes/channels.php',
+        ['middleware' => ['auth:sanctum'], 'prefix' => 'api/v1'],
+    )
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->web(append: [
             HandleInertiaRequests::class,
