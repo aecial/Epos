@@ -104,7 +104,7 @@ test('ordering reserves stock in both inventory modes but does not deduct yet', 
     $cashier = posUser();
     posOpenShift($cashier);
     $menu = friedItikMenu();
-    Sanctum::actingAs($cashier);
+    Sanctum::actingAs($cashier, ['*']);
 
     // Before ordering: the recipe is limited by its scarcest ingredient (10 ducks -> 10 servings).
     expect(app(InventoryService::class)->AvailableForItem($menu['itik']))->toBe(10.0);
@@ -135,7 +135,7 @@ test('paying deducts recipe ingredients and direct stock and clears every reserv
     $cashier = posUser();
     posOpenShift($cashier);
     $menu = friedItikMenu();
-    Sanctum::actingAs($cashier);
+    Sanctum::actingAs($cashier, ['*']);
 
     $ticketId = placeFriedItikOrder($this, $menu);
     paySplitHalfCashHalfGcash($this, $ticketId)->assertOk()->assertJsonPath('data.status', 'paid');
@@ -158,7 +158,7 @@ test('a paid ticket cannot be charged again, so stock is never deducted twice', 
     $cashier = posUser();
     posOpenShift($cashier);
     $menu = friedItikMenu();
-    Sanctum::actingAs($cashier);
+    Sanctum::actingAs($cashier, ['*']);
 
     $ticketId = placeFriedItikOrder($this, $menu);
     paySplitHalfCashHalfGcash($this, $ticketId)->assertOk();
@@ -175,7 +175,7 @@ test('a recipe dish cannot be ordered when one ingredient is short, and nothing 
     posOpenShift($cashier);
     $menu = friedItikMenu();
     $menu['duck']->update(['quantity' => 0]); // out of duck; oil and garlic are plentiful
-    Sanctum::actingAs($cashier);
+    Sanctum::actingAs($cashier, ['*']);
 
     $ticketId = $this->postJson('/api/v1/tickets', [
         'terminal_id' => 'POS-01', 'customer_name' => 'john', 'order_type' => 'dine_in',
@@ -194,7 +194,7 @@ test('a half cash half gcash payment is recorded and the shift sales totals are 
     $cashier = posUser();
     $shift = posOpenShift($cashier); // starting cash 1000
     $menu = friedItikMenu();
-    Sanctum::actingAs($cashier);
+    Sanctum::actingAs($cashier, ['*']);
 
     $ticketId = placeFriedItikOrder($this, $menu);
 

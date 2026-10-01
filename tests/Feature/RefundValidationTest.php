@@ -19,7 +19,7 @@ test('a ticket_item_id that belongs to a different ticket is rejected', function
     $ticketB = posTicket($shift, $cashier, 'jane');
     $lineB = posAddItem($ticketB, $item, 1);
 
-    Sanctum::actingAs($cashier);
+    Sanctum::actingAs($cashier, ['*']);
     $chargeA = $this->postJson("/api/v1/tickets/{$ticketA->id}/charges", [
         'charges' => [['payment_method' => 'cash', 'amount' => 100, 'tendered_amount' => 100]],
     ])->json('data.charges.0.id');
@@ -38,7 +38,7 @@ test('refund quantity cannot exceed what was purchased on the line', function ()
     $ticket = posTicket($shift, $cashier, 'john');
     $line = posAddItem($ticket, $item, 2);
 
-    Sanctum::actingAs($cashier);
+    Sanctum::actingAs($cashier, ['*']);
     $charge = $this->postJson("/api/v1/tickets/{$ticket->id}/charges", [
         'charges' => [['payment_method' => 'cash', 'amount' => 200, 'tendered_amount' => 200]],
     ])->json('data.charges.0.id');
@@ -61,7 +61,7 @@ test('refund amount cannot exceed the purchased value of the requested quantity'
     $ticket = posTicket($shift, $cashier, 'john');
     $line = posAddItem($ticket, $item, 1);
 
-    Sanctum::actingAs($cashier);
+    Sanctum::actingAs($cashier, ['*']);
     $charge = $this->postJson("/api/v1/tickets/{$ticket->id}/charges", [
         'charges' => [['payment_method' => 'cash', 'amount' => 100, 'tendered_amount' => 100]],
     ])->json('data.charges.0.id');
@@ -80,7 +80,7 @@ test('the same purchased units cannot be refunded twice across separate refund r
     $ticket = posTicket($shift, $manager, 'john');
     $line = posAddItem($ticket, $item, 2);
 
-    Sanctum::actingAs($manager);
+    Sanctum::actingAs($manager, ['*']);
     $charge = $this->postJson("/api/v1/tickets/{$ticket->id}/charges", [
         'charges' => [['payment_method' => 'cash', 'amount' => 200, 'tendered_amount' => 200]],
     ])->json('data.charges.0.id');
@@ -111,7 +111,7 @@ test('a still-pending refund also blocks a duplicate request for the same units'
     $ticket = posTicket($shift, $manager, 'john');
     $line = posAddItem($ticket, $item, 2);
 
-    Sanctum::actingAs($manager);
+    Sanctum::actingAs($manager, ['*']);
     $charge = $this->postJson("/api/v1/tickets/{$ticket->id}/charges", [
         'charges' => [['payment_method' => 'cash', 'amount' => 200, 'tendered_amount' => 200]],
     ])->json('data.charges.0.id');
@@ -136,7 +136,7 @@ test('rejecting a refund frees up the quantity for a legitimate new request', fu
     $ticket = posTicket($shift, $manager, 'john');
     $line = posAddItem($ticket, $item, 2);
 
-    Sanctum::actingAs($manager);
+    Sanctum::actingAs($manager, ['*']);
     $charge = $this->postJson("/api/v1/tickets/{$ticket->id}/charges", [
         'charges' => [['payment_method' => 'cash', 'amount' => 200, 'tendered_amount' => 200]],
     ])->json('data.charges.0.id');
@@ -163,7 +163,7 @@ test('a refund cannot claim more than what its specific charge collected in a sp
     $ticket = posTicket($shift, $manager, 'john');
     $line = posAddItem($ticket, $item, 1);
 
-    Sanctum::actingAs($manager);
+    Sanctum::actingAs($manager, ['*']);
     $charges = $this->postJson("/api/v1/tickets/{$ticket->id}/charges", [
         'charges' => [
             ['payment_method' => 'cash', 'amount' => 100, 'tendered_amount' => 100],
@@ -187,7 +187,7 @@ test('a legitimate refund within bounds is accepted and restores stock on approv
     $ticket = posTicket($shift, $manager, 'john');
     $line = posAddItem($ticket, $item, 2);
 
-    Sanctum::actingAs($manager);
+    Sanctum::actingAs($manager, ['*']);
     $charge = $this->postJson("/api/v1/tickets/{$ticket->id}/charges", [
         'charges' => [['payment_method' => 'cash', 'amount' => 200, 'tendered_amount' => 200]],
     ])->json('data.charges.0.id');

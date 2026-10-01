@@ -34,7 +34,15 @@ class AuthController extends Controller
             ]);
         }
 
-        $token = $user->createToken($request->validated('device_name', 'pos'))->plainTextToken;
+        // Every existing POS/back-office route requires the full-access ability
+        // (routes/api_v1.php); a token with no explicit scope gets Sanctum's default ['*'],
+        // which satisfies any ability check. A kds-scoped token gets nothing else.
+        $abilities = match ($request->validated('scope')) {
+            'kds' => ['kds:read', 'kds:complete'],
+            default => ['*'],
+        };
+
+        $token = $user->createToken($request->validated('device_name', 'pos'), $abilities)->plainTextToken;
 
         return $this->success([
             'token' => $token,

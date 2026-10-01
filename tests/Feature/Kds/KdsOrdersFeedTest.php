@@ -58,7 +58,7 @@ test('item and custom lines are shown; fee and voided lines are hidden', functio
     $toVoid = posAddItem($ticket, $item, 1);
     app(TicketService::class)->VoidItem($toVoid, $cashier, '1234');
 
-    Sanctum::actingAs($cashier);
+    Sanctum::actingAs($cashier, ['*']);
 
     $response = $this->getJson('/api/v1/kds/orders')->assertOk();
 
@@ -82,7 +82,7 @@ test('tickets are ordered strictly by created_at ascending, items within a card 
     $lineEarlier = posAddItem($ticketA, $item, 1);
     $lineEarlier->forceFill(['created_at' => now()->subMinutes(4)])->save();
 
-    Sanctum::actingAs($cashier);
+    Sanctum::actingAs($cashier, ['*']);
 
     $response = $this->getJson('/api/v1/kds/orders')->assertOk();
 
@@ -112,7 +112,7 @@ test('paid, cancelled and merged tickets are excluded from the feed', function (
     $open = posTicket($shift, $cashier, 'open-ticket');
     posAddItem($open, $item, 1);
 
-    Sanctum::actingAs($cashier);
+    Sanctum::actingAs($cashier, ['*']);
 
     $response = $this->getJson('/api/v1/kds/orders')->assertOk();
 
@@ -133,7 +133,7 @@ test('no price fields or terminal info appear anywhere in the payload', function
 
     app(TicketService::class)->AddItem($ticket, $item->fresh(), 1, [$modifier->id]);
 
-    Sanctum::actingAs($cashier);
+    Sanctum::actingAs($cashier, ['*']);
 
     $raw = $this->getJson('/api/v1/kds/orders')->assertOk()->getContent();
 
@@ -154,7 +154,7 @@ test('the completed flag reflects completed_at', function () {
     $done->update(['completed_at' => now()]);
     $pending = posAddItem($ticket, $item, 1);
 
-    Sanctum::actingAs($cashier);
+    Sanctum::actingAs($cashier, ['*']);
 
     $response = $this->getJson('/api/v1/kds/orders')->assertOk();
 

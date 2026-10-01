@@ -16,7 +16,7 @@ test('a gcash charge with a tendered_amount is rejected', function () {
     $ticket = posTicket($shift, $cashier, 'john');
     posAddItem($ticket, $item, 1);
 
-    Sanctum::actingAs($cashier);
+    Sanctum::actingAs($cashier, ['*']);
 
     $this->postJson("/api/v1/tickets/{$ticket->id}/charges", [
         'charges' => [[
@@ -36,7 +36,7 @@ test('a cash charge with a tendered_amount is unaffected', function () {
     $ticket = posTicket($shift, $cashier, 'john');
     posAddItem($ticket, $item, 1);
 
-    Sanctum::actingAs($cashier);
+    Sanctum::actingAs($cashier, ['*']);
 
     $this->postJson("/api/v1/tickets/{$ticket->id}/charges", [
         'charges' => [['payment_method' => 'cash', 'amount' => 100, 'tendered_amount' => 150]],
@@ -53,7 +53,7 @@ test('a gcash charge with no tendered_amount is unaffected', function () {
     $ticket = posTicket($shift, $cashier, 'john');
     posAddItem($ticket, $item, 1);
 
-    Sanctum::actingAs($cashier);
+    Sanctum::actingAs($cashier, ['*']);
 
     $this->postJson("/api/v1/tickets/{$ticket->id}/charges", [
         'charges' => [['payment_method' => 'gcash', 'amount' => 100, 'payment_reference' => 'GC-2']],
@@ -70,7 +70,7 @@ test('in a split payment, only the gcash line needs to omit tendered_amount', fu
     $ticket = posTicket($shift, $cashier, 'john');
     posAddItem($ticket, $item, 1);
 
-    Sanctum::actingAs($cashier);
+    Sanctum::actingAs($cashier, ['*']);
 
     // The cash half keeps its tendered_amount; only the gcash half is bad. Catches a naive
     // fix that checks the request globally instead of per charge.

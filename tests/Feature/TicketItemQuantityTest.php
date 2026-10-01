@@ -14,7 +14,7 @@ test('a cashier can lower a line quantity without a passcode, releasing the diff
 
     expect($burger->fresh()->reserved_quantity)->toBe(3);
 
-    Sanctum::actingAs($cashier);
+    Sanctum::actingAs($cashier, ['*']);
 
     $this->patchJson("/api/v1/tickets/{$ticket->id}/items/{$line->id}", ['quantity' => 1])
         ->assertOk()
@@ -33,7 +33,7 @@ test('a cashier can raise a line quantity without a passcode, reserving more', f
     $ticket = posTicket($shift, $cashier, 'john');
     $line = posAddItem($ticket, $burger, 1);
 
-    Sanctum::actingAs($cashier);
+    Sanctum::actingAs($cashier, ['*']);
 
     $this->patchJson("/api/v1/tickets/{$ticket->id}/items/{$line->id}", ['quantity' => 4])
         ->assertOk()
@@ -50,7 +50,7 @@ test('raising the quantity past available stock is rejected and nothing changes'
     $ticket = posTicket($shift, $cashier, 'john');
     $line = posAddItem($ticket, $burger, 2);
 
-    Sanctum::actingAs($cashier);
+    Sanctum::actingAs($cashier, ['*']);
 
     $this->patchJson("/api/v1/tickets/{$ticket->id}/items/{$line->id}", ['quantity' => 10])
         ->assertStatus(409);
@@ -66,7 +66,7 @@ test('quantity cannot be dropped to zero through this endpoint; voiding is requi
     $ticket = posTicket($shift, $cashier, 'john');
     $line = posAddItem($ticket, $burger, 2);
 
-    Sanctum::actingAs($cashier);
+    Sanctum::actingAs($cashier, ['*']);
 
     $this->patchJson("/api/v1/tickets/{$ticket->id}/items/{$line->id}", ['quantity' => 0])
         ->assertUnprocessable()
@@ -83,7 +83,7 @@ test('a voided line cannot have its quantity changed', function () {
 
     app(TicketService::class)->VoidItem($line, $cashier, '1234');
 
-    Sanctum::actingAs($cashier);
+    Sanctum::actingAs($cashier, ['*']);
 
     $this->patchJson("/api/v1/tickets/{$ticket->id}/items/{$line->id}", ['quantity' => 1])
         ->assertStatus(409);
@@ -98,7 +98,7 @@ test('quantity cannot be changed once the ticket is no longer open', function ()
 
     app(TicketService::class)->CancelTicket($ticket, $cashier);
 
-    Sanctum::actingAs($cashier);
+    Sanctum::actingAs($cashier, ['*']);
 
     $this->patchJson("/api/v1/tickets/{$ticket->id}/items/{$line->id}", ['quantity' => 1])
         ->assertStatus(409);
@@ -114,7 +114,7 @@ test('changing quantity recomputes the total on a line with modifiers', function
     $ticket = posTicket($shift, $cashier, 'john');
     $line = app(TicketService::class)->AddItem($ticket, $burger->fresh(), 2, [$cheese->id]);
 
-    Sanctum::actingAs($cashier);
+    Sanctum::actingAs($cashier, ['*']);
 
     $this->patchJson("/api/v1/tickets/{$ticket->id}/items/{$line->id}", ['quantity' => 3])
         ->assertOk()

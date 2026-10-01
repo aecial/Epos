@@ -19,6 +19,10 @@ class ApiLoginRequest extends FormRequest
             // Free-text label for the issued token, e.g. "POS-01" or a device id -
             // lets a manager tell tokens apart later without guessing which tablet is which.
             'device_name' => ['sometimes', 'string', 'max:255'],
+            // Allow-list of restricted token scopes. Omitted => full access (Sanctum's default
+            // ['*'] abilities). 'kds' issues a token restricted to kds:read/kds:complete only -
+            // see AuthController::login().
+            'scope' => ['sometimes', 'string', 'in:kds'],
         ];
     }
 }

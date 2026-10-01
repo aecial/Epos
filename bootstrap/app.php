@@ -17,6 +17,8 @@ use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
+use Laravel\Sanctum\Http\Middleware\CheckAbilities;
+use Laravel\Sanctum\Http\Middleware\CheckForAnyAbility;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -38,6 +40,15 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->web(append: [
             HandleInertiaRequests::class,
             AddLinkHeadersForPreloadedAssets::class,
+        ]);
+
+        $middleware->alias([
+            // Satisfied if the token has ANY of the given abilities - what every
+            // ability:<x> check in routes/api_v1.php needs.
+            'ability' => CheckForAnyAbility::class,
+            // Satisfied only if the token has ALL of the given abilities. Not used by any
+            // route yet, registered alongside its sibling per Sanctum's documented pair.
+            'abilities' => CheckAbilities::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {

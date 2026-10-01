@@ -37,7 +37,7 @@ test('a cashier can list the menu, sorted by name, without cost data', function 
     apiItem($itik, 'Sisig Itik', ['base_price' => 380]);
     apiItem($itik, 'Fried Itik', ['base_price' => 295]);
 
-    Sanctum::actingAs(posUser('cashier'));
+    Sanctum::actingAs(posUser('cashier'), ['*']);
 
     $response = $this->getJson('/api/v1/items')
         ->assertOk()
@@ -61,7 +61,7 @@ test('the menu can be filtered by category', function () {
     apiItem($itik, 'Fried Itik');
     apiItem($pork, 'Pork Sisig');
 
-    Sanctum::actingAs(posUser());
+    Sanctum::actingAs(posUser(), ['*']);
 
     $this->getJson("/api/v1/items?category_id={$itik->id}")
         ->assertOk()
@@ -74,7 +74,7 @@ test('the menu can be filtered by category', function () {
 });
 
 test('the category filter is validated', function () {
-    Sanctum::actingAs(posUser());
+    Sanctum::actingAs(posUser(), ['*']);
 
     $this->getJson('/api/v1/items?category_id=999999')
         ->assertUnprocessable()
@@ -89,7 +89,7 @@ test('filtering by a category with no items returns an empty list', function () 
     $empty = apiCategory('Desserts');
     apiItem(apiCategory('Itik'), 'Fried Itik');
 
-    Sanctum::actingAs(posUser());
+    Sanctum::actingAs(posUser(), ['*']);
 
     $this->getJson("/api/v1/items?category_id={$empty->id}")
         ->assertOk()
@@ -105,7 +105,7 @@ test('hidden items and items in categories hidden from the POS never reach the m
     apiItem($itik, 'Secret Special', ['status' => 'hidden']);         // never shown
     apiItem($backOfficeOnly, 'Staff Adobo');                           // category not on POS
 
-    Sanctum::actingAs(posUser());
+    Sanctum::actingAs(posUser(), ['*']);
 
     $response = $this->getJson('/api/v1/items')->assertOk()->assertJsonCount(2, 'data');
 
@@ -136,7 +136,7 @@ test('available_stock reflects reservations for direct items, ingredients for re
     // A recipe dish nobody has configured ingredients for yet: must not crash the menu.
     apiItem($category, 'Half-built Dish', ['inventory_type' => 'recipe', 'quantity' => 0]);
 
-    Sanctum::actingAs(posUser());
+    Sanctum::actingAs(posUser(), ['*']);
 
     $byName = collect($this->getJson('/api/v1/items')->assertOk()->json('data'))->keyBy('name');
 
@@ -160,7 +160,7 @@ test('items list only their active modifiers with prices and groups, in the conf
     $item->modifiers()->attach($retired->id, ['price_modifier' => 5, 'status' => 'active', 'display_order' => 3]);
     $item->modifiers()->attach($offForThisItem->id, ['price_modifier' => 90, 'status' => 'inactive', 'display_order' => 4]);
 
-    Sanctum::actingAs(posUser());
+    Sanctum::actingAs(posUser(), ['*']);
 
     $modifiers = $this->getJson('/api/v1/items')->assertOk()->json('data.0.modifiers');
 
@@ -172,7 +172,7 @@ test('items list only their active modifiers with prices and groups, in the conf
 test('a single item can be fetched', function () {
     $item = apiItem(apiCategory('Itik'), 'Fried Itik', ['base_price' => 295]);
 
-    Sanctum::actingAs(posUser());
+    Sanctum::actingAs(posUser(), ['*']);
 
     $this->getJson("/api/v1/items/{$item->id}")
         ->assertOk()
@@ -186,7 +186,7 @@ test('a single hidden item, or one in a POS-hidden category, is a clean 404', fu
     $hidden = apiItem(apiCategory('Itik'), 'Secret Special', ['status' => 'hidden']);
     $staff = apiItem(apiCategory('Staff Meals', visibleToPos: false), 'Staff Adobo');
 
-    Sanctum::actingAs(posUser());
+    Sanctum::actingAs(posUser(), ['*']);
 
     $this->getJson("/api/v1/items/{$hidden->id}")->assertNotFound()->assertJsonPath('success', false);
     $this->getJson("/api/v1/items/{$staff->id}")->assertNotFound();

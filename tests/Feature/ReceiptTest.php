@@ -16,7 +16,7 @@ test('paying issues one receipt per charge, numbered in sequence, with each char
     posAddItem($ticket, posItem('Fried Itik', 100), 2, 'Extra crispy');
     app(TicketService::class)->SetDiscount($ticket, 0, 10); // 200 - 10% = 180
 
-    Sanctum::actingAs($cashier);
+    Sanctum::actingAs($cashier, ['*']);
 
     $today = now()->toDateString();
 
@@ -102,7 +102,7 @@ test('a receipt is a stored snapshot and does not change when the underlying dat
 
     TicketItem::query()->update(['item_name' => 'Renamed Later', 'line_total' => 1]);
 
-    Sanctum::actingAs($cashier);
+    Sanctum::actingAs($cashier, ['*']);
 
     $this->getJson("/api/v1/receipts/{$receipt->id}")
         ->assertOk()
@@ -117,7 +117,7 @@ test('a charge total that is off by even one centavo is rejected', function () {
     $ticket = posTicket($shift, $cashier, 'john');
     posAddItem($ticket, posItem('Burger', 100), 1);
 
-    Sanctum::actingAs($cashier);
+    Sanctum::actingAs($cashier, ['*']);
 
     $this->postJson("/api/v1/tickets/{$ticket->id}/charges", [
         'charges' => [['payment_method' => 'cash', 'amount' => 100.01]],
@@ -183,7 +183,7 @@ test('receipt history is paginated, filterable, searchable and visible to every 
     posPay($three, $cashier, [['payment_method' => 'cash', 'amount' => 100]]);
 
     // A different cashier on a different terminal still sees everything.
-    Sanctum::actingAs(posUser());
+    Sanctum::actingAs(posUser(), ['*']);
 
     $this->getJson('/api/v1/receipts')
         ->assertOk()
@@ -214,7 +214,7 @@ test('receipt history is paginated, filterable, searchable and visible to every 
 });
 
 test('history filters are validated', function () {
-    Sanctum::actingAs(posUser());
+    Sanctum::actingAs(posUser(), ['*']);
 
     $this->getJson('/api/v1/receipts?payment_method=bitcoin')->assertUnprocessable();
     $this->getJson('/api/v1/receipts?per_page=1000')->assertUnprocessable();
@@ -229,7 +229,7 @@ test('reprinting logs a duplicate without creating a new receipt', function () {
     posAddItem($ticket, posItem('Burger', 100), 1);
     $receipt = posPay($ticket, $cashier, [['payment_method' => 'cash', 'amount' => 100]])->charges->first()->receipt;
 
-    Sanctum::actingAs($manager);
+    Sanctum::actingAs($manager, ['*']);
 
     $this->postJson("/api/v1/receipts/{$receipt->id}/reprint")
         ->assertOk()
@@ -262,7 +262,7 @@ test('receipt endpoints require authentication', function () {
 });
 
 test('an unknown receipt is a clean 404', function () {
-    Sanctum::actingAs(posUser());
+    Sanctum::actingAs(posUser(), ['*']);
 
     $this->getJson('/api/v1/receipts/999999')->assertNotFound()->assertJsonPath('success', false);
 });

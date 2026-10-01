@@ -52,7 +52,7 @@ test('voiding with a manager passcode records that manager as the approver', fun
     $cashier = posUser();
     $manager = User::factory()->create(['role' => 'manager', 'passcode' => '2468', 'name' => 'Kring']);
     $line = passcodeLine($cashier);
-    Sanctum::actingAs($cashier);
+    Sanctum::actingAs($cashier, ['*']);
 
     voidLine($line, '2468')
         ->assertOk()
@@ -70,7 +70,7 @@ test('an admin passcode also approves a void', function () {
     $cashier = posUser();
     $admin = User::factory()->create(['role' => 'admin', 'passcode' => '5046']);
     $line = passcodeLine($cashier);
-    Sanctum::actingAs($cashier);
+    Sanctum::actingAs($cashier, ['*']);
 
     voidLine($line, '5046')->assertOk()->assertJsonPath('meta.approver.id', $admin->id);
 
@@ -81,7 +81,7 @@ test('a passcode that does not belong to an active manager or admin is refused',
     $cashier = posUser(); // has the factory passcode '1234'
     User::factory()->create($holder);
     $line = passcodeLine($cashier);
-    Sanctum::actingAs($cashier);
+    Sanctum::actingAs($cashier, ['*']);
 
     voidLine($line, '1234')
         ->assertForbidden()
@@ -100,7 +100,7 @@ test('a passcode shared by two approvers is refused rather than guessed', functi
     User::factory()->create(['role' => 'manager', 'passcode' => '2468']);
     User::factory()->create(['role' => 'admin', 'passcode' => '2468']);
     $line = passcodeLine($cashier);
-    Sanctum::actingAs($cashier);
+    Sanctum::actingAs($cashier, ['*']);
 
     voidLine($line, '2468')
         ->assertForbidden()
@@ -112,7 +112,7 @@ test('a passcode shared by two approvers is refused rather than guessed', functi
 test('the void request only needs a four digit passcode', function () {
     $cashier = posUser();
     $line = passcodeLine($cashier);
-    Sanctum::actingAs($cashier);
+    Sanctum::actingAs($cashier, ['*']);
 
     voidLine($line, '12')->assertUnprocessable()->assertJsonValidationErrors('passcode');
 
@@ -138,7 +138,7 @@ test('approving a refund records the manager identified by the passcode', functi
     $cashier = posUser();
     $manager = User::factory()->create(['role' => 'manager', 'passcode' => '2468', 'name' => 'Kring']);
     $refund = pendingRefund($cashier);
-    Sanctum::actingAs($cashier);
+    Sanctum::actingAs($cashier, ['*']);
 
     $this->putJson("/api/v1/refunds/{$refund->id}/approve", ['passcode' => '2468'])
         ->assertOk()
@@ -153,7 +153,7 @@ test('rejecting a refund records the admin identified by the passcode', function
     $cashier = posUser();
     $admin = User::factory()->create(['role' => 'admin', 'passcode' => '5046']);
     $refund = pendingRefund($cashier);
-    Sanctum::actingAs($cashier);
+    Sanctum::actingAs($cashier, ['*']);
 
     $this->putJson("/api/v1/refunds/{$refund->id}/reject", ['passcode' => '5046'])
         ->assertOk()
@@ -167,7 +167,7 @@ test('a refund cannot be decided with a wrong passcode', function () {
     $cashier = posUser();
     User::factory()->create(['role' => 'manager', 'passcode' => '2468']);
     $refund = pendingRefund($cashier);
-    Sanctum::actingAs($cashier);
+    Sanctum::actingAs($cashier, ['*']);
 
     $this->putJson("/api/v1/refunds/{$refund->id}/approve", ['passcode' => '1111'])->assertForbidden();
     $this->putJson("/api/v1/refunds/{$refund->id}/reject", ['passcode' => '1111'])->assertForbidden();
@@ -182,7 +182,7 @@ test('five failed passcode attempts lock the user out for a minute', function ()
     User::factory()->create(['role' => 'manager', 'passcode' => '2468']);
     $line = passcodeLine($cashier);
     $second = posAddItem($line->ticket, posItem('Fries', 50));
-    Sanctum::actingAs($cashier);
+    Sanctum::actingAs($cashier, ['*']);
 
     foreach (range(1, 5) as $attempt) {
         voidLine($line, '9999')->assertForbidden();
@@ -198,12 +198,12 @@ test('five failed passcode attempts lock the user out for a minute', function ()
     expect($line->fresh()->isVoided())->toBeFalse();
 
     // The lock is per logged-in user: another cashier is unaffected.
-    Sanctum::actingAs(posUser());
+    Sanctum::actingAs(posUser(), ['*']);
     voidLine($line, '2468')->assertOk();
 
     // ...and it expires.
     $this->travel(61)->seconds();
-    Sanctum::actingAs($cashier);
+    Sanctum::actingAs($cashier, ['*']);
     voidLine($second, '2468')->assertOk();
 });
 
@@ -212,7 +212,7 @@ test('a successful passcode clears the failed attempt count', function () {
     User::factory()->create(['role' => 'manager', 'passcode' => '2468']);
     $first = passcodeLine($cashier);
     $second = posAddItem($first->ticket, posItem('Fries', 50));
-    Sanctum::actingAs($cashier);
+    Sanctum::actingAs($cashier, ['*']);
 
     foreach (range(1, 4) as $attempt) {
         voidLine($first, '9999')->assertForbidden();

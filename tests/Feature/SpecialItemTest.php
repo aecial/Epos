@@ -171,7 +171,7 @@ test('a Fee item takes the cashier-typed amount and is snapshotted as a fee', fu
     $cashier = posUser();
     $ticket = openTicketFor($cashier);
     $fee = feeItem(default: 30);
-    Sanctum::actingAs($cashier);
+    Sanctum::actingAs($cashier, ['*']);
 
     $this->postJson("/api/v1/tickets/{$ticket->id}/items", ['item_id' => $fee->id, 'quantity' => 1, 'unit_price' => 50])
         ->assertCreated()
@@ -188,7 +188,7 @@ test('a Custom item takes the typed name and amount and is snapshotted as custom
     $cashier = posUser();
     $ticket = openTicketFor($cashier);
     $custom = customItem();
-    Sanctum::actingAs($cashier);
+    Sanctum::actingAs($cashier, ['*']);
 
     $this->postJson("/api/v1/tickets/{$ticket->id}/items", [
         'item_id' => $custom->id,
@@ -216,7 +216,7 @@ test('missing or forbidden price/name fields are rejected per entry mode', funct
         'custom' => customItem(),
         'menu' => posItem('Burger', 100),
     };
-    Sanctum::actingAs($cashier);
+    Sanctum::actingAs($cashier, ['*']);
 
     $this->postJson("/api/v1/tickets/{$ticket->id}/items", ['item_id' => $item->id, 'quantity' => 1, ...$extra])
         ->assertUnprocessable()
@@ -249,7 +249,7 @@ test('a fixed amount fee in a special category needs no cashier input and is sti
         'inventory_type' => 'none',
         'status' => 'available',
     ]);
-    Sanctum::actingAs($cashier);
+    Sanctum::actingAs($cashier, ['*']);
 
     $this->postJson("/api/v1/tickets/{$ticket->id}/items", ['item_id' => $packaging->id, 'quantity' => 1])
         ->assertCreated()
@@ -266,7 +266,7 @@ test('a regular menu line is still an item and sells at its base price', functio
     $cashier = posUser();
     $ticket = openTicketFor($cashier);
     $burger = posItem('Burger', 100);
-    Sanctum::actingAs($cashier);
+    Sanctum::actingAs($cashier, ['*']);
 
     $this->postJson("/api/v1/tickets/{$ticket->id}/items", ['item_id' => $burger->id, 'quantity' => 2])
         ->assertCreated()
@@ -295,7 +295,7 @@ test('special lines are discounted, paid, receipted and never touch stock', func
     $burger = posItem('Burger', 100, quantity: 10);
     $fee = feeItem();
     $custom = customItem();
-    Sanctum::actingAs($cashier);
+    Sanctum::actingAs($cashier, ['*']);
 
     $add = fn (array $body) => $this->postJson("/api/v1/tickets/{$ticket->id}/items", ['quantity' => 1, ...$body])->assertCreated();
     $add(['item_id' => $burger->id]);
@@ -338,7 +338,7 @@ test('a special line can be voided only with a manager passcode and never moves 
     $manager = User::factory()->create(['role' => 'manager', 'passcode' => '1234']);
     $ticket = openTicketFor($cashier);
     $fee = feeItem();
-    Sanctum::actingAs($cashier);
+    Sanctum::actingAs($cashier, ['*']);
 
     $lineId = $this->postJson("/api/v1/tickets/{$ticket->id}/items", ['item_id' => $fee->id, 'quantity' => 1, 'unit_price' => 50])
         ->assertCreated()
@@ -360,7 +360,7 @@ test('special lines survive a merge with their type and amount intact', function
     $shift = posOpenShift($cashier);
     $target = posTicket($shift, $cashier, 'john');
     $source = posTicket($shift, $cashier, 'maria');
-    Sanctum::actingAs($cashier);
+    Sanctum::actingAs($cashier, ['*']);
 
     $this->postJson("/api/v1/tickets/{$source->id}/items", ['item_id' => customItem()->id, 'quantity' => 1, 'unit_price' => 300, 'custom_name' => 'Birthday Cake'])
         ->assertCreated();
@@ -379,7 +379,7 @@ test('the POS menu tells the app how each item is priced and which category type
     $burger = posItem('Burger', 100);
     $fee = feeItem();
     $custom = customItem();
-    Sanctum::actingAs($cashier);
+    Sanctum::actingAs($cashier, ['*']);
 
     $rows = collect($this->getJson('/api/v1/items')->assertOk()->json('data'))->keyBy('id');
 
@@ -396,7 +396,7 @@ test('refunding a special line restores no stock', function () {
     $manager = User::factory()->create(['role' => 'manager', 'passcode' => '1234']);
     $ticket = openTicketFor($cashier);
     $fee = feeItem();
-    Sanctum::actingAs($cashier);
+    Sanctum::actingAs($cashier, ['*']);
 
     $lineId = $this->postJson("/api/v1/tickets/{$ticket->id}/items", ['item_id' => $fee->id, 'quantity' => 1, 'unit_price' => 50])
         ->assertCreated()

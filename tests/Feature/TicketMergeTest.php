@@ -17,7 +17,7 @@ test('merging moves every line onto the target and leaves the sources as zeroed 
     posAddItem($target, $burger, 2);
     $riceLine = posAddItem($source, $rice, 2);
 
-    Sanctum::actingAs($cashier);
+    Sanctum::actingAs($cashier, ['*']);
 
     $this->postJson("/api/v1/tickets/{$target->id}/merge", ['merge_from_ticket_ids' => [$source->id]])
         ->assertOk()
@@ -105,7 +105,7 @@ test('only open tickets can be merged and a rejected merge changes nothing', fun
     posAddItem($cancelled, $rice, 1);
     app(TicketService::class)->CancelTicket($cancelled, $cashier);
 
-    Sanctum::actingAs($cashier);
+    Sanctum::actingAs($cashier, ['*']);
 
     $this->postJson("/api/v1/tickets/{$target->id}/merge", ['merge_from_ticket_ids' => [$cancelled->id]])
         ->assertStatus(409);
@@ -136,7 +136,7 @@ test('tickets from different shifts cannot be merged', function () {
         'status' => 'open',
     ]);
 
-    Sanctum::actingAs($cashier);
+    Sanctum::actingAs($cashier, ['*']);
 
     $this->postJson("/api/v1/tickets/{$target->id}/merge", ['merge_from_ticket_ids' => [$foreign->id]])
         ->assertStatus(409);
@@ -149,7 +149,7 @@ test('a ticket cannot be merged into itself', function () {
     $shift = posOpenShift($cashier);
     $target = posTicket($shift, $cashier, 'john');
 
-    Sanctum::actingAs($cashier);
+    Sanctum::actingAs($cashier, ['*']);
 
     $this->postJson("/api/v1/tickets/{$target->id}/merge", ['merge_from_ticket_ids' => [$target->id]])
         ->assertStatus(409);
@@ -160,7 +160,7 @@ test('merge requires at least one valid ticket id', function () {
     $shift = posOpenShift($cashier);
     $target = posTicket($shift, $cashier, 'john');
 
-    Sanctum::actingAs($cashier);
+    Sanctum::actingAs($cashier, ['*']);
 
     $this->postJson("/api/v1/tickets/{$target->id}/merge", ['merge_from_ticket_ids' => []])
         ->assertUnprocessable()
@@ -211,7 +211,7 @@ test('a merged ticket is paid once, prints one receipt with every order number, 
     posAddItem($target, $burger, 2);
     posAddItem($source, $rice, 2);
 
-    Sanctum::actingAs($cashier);
+    Sanctum::actingAs($cashier, ['*']);
 
     $this->postJson("/api/v1/tickets/{$target->id}/merge", ['merge_from_ticket_ids' => [$source->id]])->assertOk();
 

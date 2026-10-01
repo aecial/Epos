@@ -16,7 +16,7 @@ test('marking an item complete sets completed_at', function () {
     $ticket = posTicket($shift, $cashier, 'john');
     $line = posAddItem($ticket, $item, 1);
 
-    Sanctum::actingAs($cashier);
+    Sanctum::actingAs($cashier, ['*']);
 
     $this->patchJson("/api/v1/kds/orders/items/{$line->id}/complete", ['completed' => true])
         ->assertOk()
@@ -34,7 +34,7 @@ test('marking an item incomplete clears completed_at', function () {
     $line = posAddItem($ticket, $item, 1);
     $line->update(['completed_at' => now()]);
 
-    Sanctum::actingAs($cashier);
+    Sanctum::actingAs($cashier, ['*']);
 
     $this->patchJson("/api/v1/kds/orders/items/{$line->id}/complete", ['completed' => false])
         ->assertOk()
@@ -52,7 +52,7 @@ test('completion state cannot be changed on a voided item', function () {
     $line = posAddItem($ticket, $item, 1);
     app(TicketService::class)->VoidItem($line, $cashier, '1234');
 
-    Sanctum::actingAs($cashier);
+    Sanctum::actingAs($cashier, ['*']);
 
     $this->patchJson("/api/v1/kds/orders/items/{$line->id}/complete", ['completed' => true])
         ->assertStatus(409);
@@ -66,7 +66,7 @@ test('completion state cannot be changed once the ticket is no longer open', fun
     $line = posAddItem($ticket, $item, 1);
     posPay($ticket, $cashier, [['payment_method' => 'cash', 'amount' => 100, 'tendered_amount' => 100]]);
 
-    Sanctum::actingAs($cashier);
+    Sanctum::actingAs($cashier, ['*']);
 
     $this->patchJson("/api/v1/kds/orders/items/{$line->id}/complete", ['completed' => true])
         ->assertStatus(409);
@@ -90,7 +90,7 @@ test('completed requires a boolean', function () {
     $ticket = posTicket($shift, $cashier, 'john');
     $line = posAddItem($ticket, $item, 1);
 
-    Sanctum::actingAs($cashier);
+    Sanctum::actingAs($cashier, ['*']);
 
     $this->patchJson("/api/v1/kds/orders/items/{$line->id}/complete", ['completed' => 'yes'])
         ->assertStatus(422)

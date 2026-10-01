@@ -19,7 +19,7 @@ test('a cashier can list POS-visible categories, sorted by name', function () {
     apiCategoryOfType('Hidden From POS', 'menu', false);
     apiCategoryOfType('Inactive', 'menu', true, 'inactive');
 
-    Sanctum::actingAs(posUser('cashier'));
+    Sanctum::actingAs(posUser('cashier'), ['*']);
 
     $response = $this->getJson('/api/v1/categories')->assertOk();
 
@@ -32,7 +32,7 @@ test('a cashier can list POS-visible categories, sorted by name', function () {
 test('a special category is included with its type', function () {
     apiCategoryOfType('Fees', 'special');
 
-    Sanctum::actingAs(posUser('cashier'));
+    Sanctum::actingAs(posUser('cashier'), ['*']);
 
     $this->getJson('/api/v1/categories')
         ->assertOk()
@@ -42,7 +42,7 @@ test('a special category is included with its type', function () {
 test('a single POS-visible category can be fetched', function () {
     $category = apiCategoryOfType('Mains');
 
-    Sanctum::actingAs(posUser('cashier'));
+    Sanctum::actingAs(posUser('cashier'), ['*']);
 
     $this->getJson("/api/v1/categories/{$category->id}")
         ->assertOk()
@@ -53,7 +53,7 @@ test('a single POS-visible category can be fetched', function () {
 test('a category hidden from the POS is a 404', function () {
     $category = apiCategoryOfType('Back Office Only', 'menu', false);
 
-    Sanctum::actingAs(posUser('cashier'));
+    Sanctum::actingAs(posUser('cashier'), ['*']);
 
     $this->getJson("/api/v1/categories/{$category->id}")->assertNotFound();
 });
@@ -61,7 +61,7 @@ test('a category hidden from the POS is a 404', function () {
 test('an inactive category is a 404', function () {
     $category = apiCategoryOfType('Retired', 'menu', true, 'inactive');
 
-    Sanctum::actingAs(posUser('cashier'));
+    Sanctum::actingAs(posUser('cashier'), ['*']);
 
     $this->getJson("/api/v1/categories/{$category->id}")->assertNotFound();
 });

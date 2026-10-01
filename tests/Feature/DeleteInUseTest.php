@@ -22,7 +22,7 @@ test('deleting a category referenced by a paid order flashes an error instead of
     $ticket = posTicket($shift, $manager, 'john');
     posAddItem($ticket, $item, 1);
 
-    Sanctum::actingAs($manager);
+    Sanctum::actingAs($manager, ['*']);
     $this->postJson("/api/v1/tickets/{$ticket->id}/charges", [
         'charges' => [['payment_method' => 'cash', 'amount' => 100, 'tendered_amount' => 100]],
     ])->assertOk();
@@ -44,7 +44,7 @@ test('deleting a modifier referenced by a paid order flashes an error instead of
     $item->modifiers()->attach($modifier->id, ['status' => 'active', 'display_order' => 1]);
     $ticket = posTicket($shift, $manager, 'john');
 
-    Sanctum::actingAs($manager);
+    Sanctum::actingAs($manager, ['*']);
     $this->postJson("/api/v1/tickets/{$ticket->id}/items", [
         'item_id' => $item->id, 'quantity' => 1, 'modifier_ids' => [$modifier->id],
     ])->assertStatus(201);
@@ -67,7 +67,7 @@ test('deleting an item referenced by a paid order flashes an error instead of cr
     $ticket = posTicket($shift, $manager, 'john');
     posAddItem($ticket, $item, 1);
 
-    Sanctum::actingAs($manager);
+    Sanctum::actingAs($manager, ['*']);
     $this->postJson("/api/v1/tickets/{$ticket->id}/charges", [
         'charges' => [['payment_method' => 'cash', 'amount' => 100, 'tendered_amount' => 100]],
     ])->assertOk();

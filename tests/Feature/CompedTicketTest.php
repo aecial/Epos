@@ -18,7 +18,7 @@ test('a 100%-discounted ticket is closed with a single $0 charge, and stock is s
     posAddItem($ticket, $item, 2); // subtotal 200
     app(TicketService::class)->SetDiscount($ticket, 0, 100); // 100% off -> total 0
 
-    Sanctum::actingAs($cashier);
+    Sanctum::actingAs($cashier, ['*']);
 
     $response = $this->postJson("/api/v1/tickets/{$ticket->id}/charges", [
         'charges' => [['payment_method' => 'cash', 'amount' => 0]],
@@ -50,7 +50,7 @@ test('a ticket discounted to $0 via a fixed amount larger than the subtotal can 
     posAddItem($ticket, $item, 1); // subtotal 50
     app(TicketService::class)->SetDiscount($ticket, 999, 0); // fixed discount far exceeds subtotal
 
-    Sanctum::actingAs($cashier);
+    Sanctum::actingAs($cashier, ['*']);
 
     $this->postJson("/api/v1/tickets/{$ticket->id}/charges", [
         'charges' => [['payment_method' => 'cash', 'amount' => 0]],
@@ -65,7 +65,7 @@ test('a comped ticket does not inflate the shift\'s cash sales total', function 
     posAddItem($ticket, $item, 1);
     app(TicketService::class)->SetDiscount($ticket, 0, 100);
 
-    Sanctum::actingAs($cashier);
+    Sanctum::actingAs($cashier, ['*']);
 
     $this->postJson("/api/v1/tickets/{$ticket->id}/charges", [
         'charges' => [['payment_method' => 'cash', 'amount' => 0]],
@@ -86,7 +86,7 @@ test('two zero-amount charges against a $0 total are rejected, not a server erro
     posAddItem($ticket, $item, 1);
     app(TicketService::class)->SetDiscount($ticket, 0, 100);
 
-    Sanctum::actingAs($cashier);
+    Sanctum::actingAs($cashier, ['*']);
 
     $this->postJson("/api/v1/tickets/{$ticket->id}/charges", [
         'charges' => [
@@ -106,7 +106,7 @@ test('a zero-amount charge against a real (non-zero) total is still rejected', f
     $ticket = posTicket($shift, $cashier, 'john');
     posAddItem($ticket, $item, 1); // total 100, no discount
 
-    Sanctum::actingAs($cashier);
+    Sanctum::actingAs($cashier, ['*']);
 
     $this->postJson("/api/v1/tickets/{$ticket->id}/charges", [
         'charges' => [['payment_method' => 'cash', 'amount' => 0]],
@@ -124,7 +124,7 @@ test('a $0 charge cannot be split across cash and gcash to sneak past the single
     posAddItem($ticket, $item, 1);
     app(TicketService::class)->SetDiscount($ticket, 0, 100);
 
-    Sanctum::actingAs($cashier);
+    Sanctum::actingAs($cashier, ['*']);
 
     $this->postJson("/api/v1/tickets/{$ticket->id}/charges", [
         'charges' => [
