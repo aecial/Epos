@@ -41,7 +41,7 @@ Error:
 | 200  | OK                                                                                                           |
 | 201  | Created (login, open shift, create ticket/transaction/refund, add item)                                      |
 | 401  | Missing/invalid token — `Unauthenticated.`                                                                   |
-| 403  | Role not allowed, a passcode that matches no active manager/admin (`Passcode is invalid or the approver lacks permission.`), or a passcode shared by more than one of them |
+| 403  | Role not allowed, a passcode that matches no active manager/admin (`Passcode is invalid or the approver lacks permission.`), a passcode shared by more than one of them, or a token's ability doesn't cover the route (e.g. a `kds`-scoped token calling anything outside §8.5) |
 | 404  | Unknown id, or no active shift where one is required                                                         |
 | 409  | Business-rule conflict: no active shift, shift already open, open tickets block close, charge total mismatch, insufficient stock, ticket not open, refund already decided, a refund that doesn't stay within what was purchased/paid, etc. |
 | 422  | Validation failed                                                                                            |
@@ -60,6 +60,8 @@ Any domain rule a service rejects with `InvalidArgumentException` (for example "
 
 `admin`, `manager`, `cashier`. A token belongs to one user. Role checks are noted per endpoint; "any staff" means any authenticated user.
 
+A token also carries Sanctum abilities, independent of the user's role: every route in §2–§8 (everything except §8.5 KDS) requires the `full-access` ability, which a normal login (`scope` omitted) always has. A `scope: "kds"` login instead gets only `kds:read`/`kds:complete` (§1, §8.5) and is forbidden (`403`) from everything else, regardless of the underlying user's role.
+
 ---
 
 ## 1. AUTHENTICATION
@@ -71,10 +73,12 @@ Log in with `username` (not email) and password. Throttled: 6 requests per minut
 **Body**
 
 ```json
-{ "username": "dangbi", "password": "pass1234", "device_name": "POS-01" }
+{ "username": "dangbi", "password": "pass1234", "device_name": "POS-01", "scope": "kds" }
 ```
 
 `device_name` is optional (default `pos`); it labels the token so a manager can tell tablets apart on the back office's Employee Management → Devices page (below).
+
+`scope` is optional. Omitted, the token gets Sanctum's default `['*']` abilities — full access to every `/api/v1` route, same as today. `"kds"` instead issues a token restricted to the `kds:read`/`kds:complete` abilities only (see §8.5) — use this for a kitchen display tablet so a lost/stolen device can't touch payments, tickets or refunds. Any staff account can mint a kds-scoped token with their own credentials, same as any POS terminal login.
 
 Tokens never expire on their own (`config/sanctum.php` `expiration` is `null`) — a terminal logs in once and stays signed in until a manager/admin revokes it. Pass a stable, meaningful `device_name` (e.g. the `terminal_id`, not the default `pos`) so that revoke list is actually useful.
 
@@ -676,6 +680,77 @@ Returns the refund; `approved_by` holds the deciding user's id and `meta.approve
 
 ---
 
+## 8.5. KDS (Kitchen Display System)
+
+The kitchen-facing read feed and completion toggle. Unlike every other `/api/v1` route, these two can be reached by a token scoped to `kds:read`/`kds:complete` only (§1) in addition to a full-access one.
+
+### GET `/kds/orders`
+
+**Requires the `kds:read` ability** (or full access). Every open ticket, strictly `created_at` ASC across all terminals, each with its kitchen-relevant lines in the order they were added.
+
+Excludes: paid/cancelled/merged tickets, voided lines, `fee` line_type lines (fee lines never reach the kitchen). Never includes prices or `terminal_id` - the KDS is a kitchen-only, no-money, no-terminal view.
+
+```json
+{
+    "success": true,
+    "data": [
+        {
+            "ticket_id": 10,
+            "order_number": "#001",
+            "customer_name": "john",
+            "order_type": "dine_in",
+            "created_at": "2026-10-01T12:00:00.000000Z",
+            "items": [
+                {
+                    "ticket_item_id": 55,
+                    "item_name": "Fried Itik",
+                    "quantity": 2,
+                    "notes": "Extra crispy",
+                    "completed": false,
+                    "modifiers": [{ "name": "Large" }]
+                }
+            ]
+        }
+    ]
+}
+```
+
+### PATCH `/kds/orders/items/{ticketItem}/complete`
+
+**Requires the `kds:complete` ability** (or full access). Toggles `ticket_items.completed_at`; no passcode, since this isn't a removal.
+
+**Body**
+
+```json
+{ "completed": true }
+```
+
+- `409` if the item is voided, or its ticket is no longer `open`.
+
+`200` with `{ "ticket_item_id": 55, "completed": true }`.
+
+Completion is persisted (not UI-only) so it survives a tablet reload and stays in sync across multiple KDS screens - but it's operational kitchen-workflow state, not audit history: nothing in receipts, payments or refunds reads it, and a nightly scheduled command (`kds:clear-completed`, `dailyAt('03:00')`) sweeps every `completed_at` back to `null` regardless of ticket status.
+
+### Realtime: the `kds.orders` channel
+
+A private channel broadcasting the events below, via Laravel Reverb. Any authenticated token (full-access or kds-scoped) may subscribe.
+
+Because the client here is a bearer-token tablet, not a browser session, the broadcasting auth endpoint is `POST /api/v1/broadcasting/auth` (Sanctum-guarded) rather than Laravel's default session-guarded `/broadcasting/auth`.
+
+| Event | Fired on | Payload |
+| --- | --- | --- |
+| `ticket.created` | A ticket is created | Full card, shaped like a `GET /kds/orders` row |
+| `ticket.updated` | Items added/voided, quantity changed, or a merge target's lines changed | Full card |
+| `ticket.paid` | The ticket left the feed (paid) | `{ ticket_id, order_number }` |
+| `ticket.cancelled` | The ticket left the feed (cancelled) | `{ ticket_id, order_number }` |
+| `ticket.merged` | Source ticket(s) left the feed (merged into a target) | `{ ticket_id, order_number, removed_ticket_ids, removed_order_numbers }` |
+| `item.completed` | `PATCH .../complete` with `completed: true` | `{ ticket_id, ticket_item_id }` |
+| `item.uncompleted` | `PATCH .../complete` with `completed: false` | `{ ticket_id, ticket_item_id }` |
+
+Every broadcast fires after its underlying `DB::transaction()` already committed, so a rollback never produces a false push, and every dispatch is wrapped in a try/catch - a Reverb outage degrades to "the tablet falls back to polling `GET /kds/orders`," never a failed POS request. Changing a ticket's discount broadcasts nothing (the KDS card carries no prices, so a discount change is invisible to it).
+
+---
+
 ## 9. AUDIT TRAIL SUMMARY
 
 | Action              | Recorded                                                         |
@@ -710,7 +785,7 @@ Approve refund → restore   (quantity += qty)
 
 ### Transactions and locking
 
-Creating a ticket locks the shift row to serialize order-number and name assignment across terminals. Payment locks the ticket, then the shift (receipt numbering). Merges lock every involved ticket in ascending id order to avoid deadlocks. Refund decisions lock the refund row.
+Creating a ticket locks the shift row to serialize order-number and name assignment across terminals. Payment locks the ticket, then the shift (receipt numbering). Merges lock every involved ticket in ascending id order to avoid deadlocks. Refund decisions lock the refund row. The KDS completion toggle locks the ticket item, then its ticket, same pattern as voiding or changing quantity.
 
 ### Passcodes
 
@@ -726,9 +801,9 @@ A passcode is a 4-digit PIN stored hashed (bcrypt) on the user. The POS never kn
 | HTTP | Typical `message`                                                                                          |
 | ---- | ---------------------------------------------------------------------------------------------------------- |
 | 401  | `Unauthenticated.`                                                                                         |
-| 403  | `Passcode is invalid or the approver lacks permission.` · `This passcode is shared by more than one manager. It must be changed in the back office before it can be used.` · role-forbidden |
+| 403  | `Passcode is invalid or the approver lacks permission.` · `This passcode is shared by more than one manager. It must be changed in the back office before it can be used.` · role-forbidden · token ability doesn't cover the route |
 | 404  | `Resource not found.` / `No active shift is open.`                                                         |
-| 409  | `Insufficient stock for item X.` · `Ticket is not open.` · `Tickets must belong to the same shift to be merged.` · `Refund has already been decided.` · `Ticket item {id} does not belong to this ticket.` · `Refund quantity for ticket item {id} exceeds the remaining refundable quantity ({n}).` · `Refund amount for ticket item {id} exceeds its purchased value.` · `Refund amount exceeds what this charge collected.` · charge amount mismatch · shift already open · open tickets exist |
+| 409  | `Insufficient stock for item X.` · `Ticket is not open.` · `Tickets must belong to the same shift to be merged.` · `Refund has already been decided.` · `Ticket item {id} does not belong to this ticket.` · `Refund quantity for ticket item {id} exceeds the remaining refundable quantity ({n}).` · `Refund amount for ticket item {id} exceeds its purchased value.` · `Refund amount exceeds what this charge collected.` · `Cannot change the completion state of a voided item.` · `Cannot change item completion state on a ticket that is not open.` · charge amount mismatch · shift already open · open tickets exist |
 | 422  | `The given data was invalid.` + `errors`                                                                   |
 | 429  | `Too many incorrect passcode attempts. Please try again in N seconds.` · login throttled                   |
 
@@ -763,6 +838,8 @@ Refund validation (cross-ticket `ticket_item_id` rejected, quantity/amount bound
 
 Back-office deletes that would otherwise violate a `restrictOnDelete()` foreign key (category/item/modifier/modifier group/ingredient/ingredient group referenced by sales history or a recipe) flash a readable error instead of crashing — covered by `DeleteInUseTest`.
 
+KDS (feed ordering/filtering/field omissions, completion toggle persistence and its voided/not-open guards, the nightly `kds:clear-completed` sweep, and a kds-scoped Sanctum token being forbidden from every other route) is covered by `tests/Feature/Kds/*`. Realtime broadcasting (every mutation dispatches the right event with the right payload, a rolled-back mutation dispatches nothing, `SetDiscount` dispatches nothing) is covered by `KdsBroadcastTest`.
+
 **Not yet covered by dedicated tests:** API login, shifts open/close and totals, shift transactions, refund listing, and ticket create/discount/cancel.
 
 ---
@@ -771,8 +848,8 @@ Back-office deletes that would otherwise violate a `restrictOnDelete()` foreign 
 
 | Item | Status |
 | ---- | ------ |
-| **Real-time / WebSockets** | No broadcasting code or package installed. The POS should use the manual sync button or polling for now. The event list in `ENHANCED_SPEC.md` §10 is still a plan. |
-| **KDS endpoints** (`GET /kds/orders`, item completion) | Not built. KDS completion is UI-only by design; only the read feed is missing. |
+| **Real-time / WebSockets for general POS sync** | The KDS channel (`kds.orders`, §8.5) is implemented via Laravel Reverb. `shift.{shift_id}`/`terminal.{terminal_id}` and the `inventory.updated`/`refund.*` events in `ENHANCED_SPEC.md` §10 are not - POS terminals still use the manual sync button or polling. |
+| **KDS tablet client (the actual display app)** | `GET /kds/orders`, the completion toggle and the realtime channel it will use are implemented (§8.5). The React Native display itself is not built. |
 | **Server-enforced terminal isolation** | `terminal_id` is a client filter on `GET /tickets`; it is not bound to the token. |
 | **Employee / category / item admin over the API** | These live in the session-authenticated back office only, not in `/api/v1`. |
 | **Per-item charge assignment (`charge_items`)** | Dropped by design; charges are amounts-only with prorated receipts. |

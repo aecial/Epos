@@ -2,7 +2,7 @@
 
 **Stack:** Laravel 12 + Inertia React back office · React Native Expo (planned POS + KDS) · MySQL
 **Hardware:** Intel NUC + TP-Link Deco M5 · Goojrpt PT-210 thermal printer (Local Deployment after Development of the overall Application)
-**Real-time:** beyondcode/laravel-websockets (planned; nothing installed yet)  
+**Real-time:** Laravel Reverb (Pusher-protocol-compatible) — implemented for the KDS channel (`kds.orders`); general POS/back-office sync not yet wired
 **Auth:** Laravel web/session authentication for the back office; Laravel Sanctum bearer tokens for the POS API (`/api/v1`, implemented)
 
 ---
@@ -43,7 +43,8 @@ docs/
 
 | Rule                   | Detail                                                                                                   |
 | ---------------------- | -------------------------------------------------------------------------------------------------------- |
-| **KDS order**          | Strictly `created_at` ASC (FIFO across all terminals)                                                    |
+| **KDS order**          | Strictly `created_at` ASC (FIFO across all terminals); served by `GET /api/v1/kds/orders` (excludes paid/cancelled/merged tickets, voided lines and `fee` lines; no prices or `terminal_id`), pushed live on the `kds.orders` Reverb channel |
+| **KDS completion**     | Persisted as `ticket_items.completed_at` (nullable timestamp), toggled via `PATCH /api/v1/kds/orders/items/{ticketItem}/complete` (no passcode), broadcasts `item.completed`/`item.uncompleted`. Not audit/historical data — swept back to `null` every night by `kds:clear-completed` (`routes/console.php`, `dailyAt('03:00')`; confirm that time against real operating hours) regardless of ticket status |
 | **Terminal isolation** | POS only sees its own open tickets                                                                       |
 | **Inventory**          | Direct items use item stock; recipe items use shared ingredient stock; reserve on add, deduct on payment |
 | **Shift lock**         | One open shift at a time (DB UNIQUE INDEX)                                                               |
@@ -79,6 +80,7 @@ docs/
     - Refund approval/rejection → same passcode-only lookup → `approved_by` set to the matching manager/admin user id
     - The passcode alone identifies the approver (no `approver_id`), so it must be unique among active managers/admins; cashiers and inactive users never match
 - POS Sanctum tokens never expire on their own (`config/sanctum.php` `expiration` is `null`) — a terminal logs in once and stays signed in. A manager/admin revokes a device from Employee Management → Devices (`/users/{id}/sessions`); the revoked token is rejected on its very next request. Not available for admin accounts
+- `POST /auth/login` accepts an optional `scope: "kds"`, issuing a token restricted to the `kds:read`/`kds:complete` abilities instead of full access (`*`) — for a kitchen display tablet, so a lost/stolen device can't touch payments, tickets or refunds. Every other route requires the `full-access` ability, which an unscoped login always has (Sanctum's default). Revoked the same way as any other device
 - Roles: `admin` · `manager` · `cashier`
 
 ---
@@ -106,14 +108,14 @@ docs/
 
 1. **Back office** (Laravel Inertia React) — done, except item image upload (only an `image_url` string) and the stats/report pages below
     - Auth (login page), users, categories, items, modifier groups/modifiers, ingredient groups/ingredients, recipes
-2. **POS API** (`/api/v1`, Sanctum) — done: auth, menu, shifts, shift transactions, tickets (create/add/void/discount/merge/cancel), payments, receipts, refunds
-    - Still missing: server-enforced terminal isolation, KDS feed
+2. **POS API** (`/api/v1`, Sanctum) — done: auth, menu, shifts, shift transactions, tickets (create/add/void/discount/merge/cancel), payments, receipts, refunds, KDS feed + completion
+    - Still missing: server-enforced terminal isolation
     - Known issues: none outstanding. `DELETE /shifts/{shift}/transactions/{transaction}` intentionally has no manager/admin gate (create/update do) — any authenticated staff may remove a mistaken cash addition or expense entry
     - Deleting a category/item/modifier/modifier group/ingredient/ingredient group that's referenced by sales history or a recipe is blocked at the database level (`restrictOnDelete()`); the back office catches the resulting `RecordInUseException` (`App\Services\Concerns\DeletesSafely`) and flashes a readable error instead of a raw `500`
 3. Back-office shift, orders/receipts, refunds and dashboard pages (planned)
 4. React Native POS app (planned)
-5. KDS app (planned)
-6. Real-time (planned WebSockets)
+5. KDS app — API, completion persistence and realtime channel done (above); the tablet display itself is planned
+6. Real-time — done for the KDS channel (Laravel Reverb); general POS/back-office sync (`shift.{shift_id}`, `inventory.updated`, `refund.*`) still planned
 
 See `docs/UNIFIED_API_ENDPOINTS.md` §13 and `docs/ENHANCED_SPEC.md` §11 for the detailed status.
 
@@ -123,10 +125,10 @@ See `docs/UNIFIED_API_ENDPOINTS.md` §13 and `docs/ENHANCED_SPEC.md` §11 for th
 
 - No offline queue — real-time only
 - No complex tax logic
-- KDS completion is UI-only (no DB timestamp)
+- KDS completion is persisted (`ticket_items.completed_at`), toggled via the KDS API, broadcast on toggle, and cleared nightly — not retained as audit/historical data (supersedes the original "UI-only, no DB timestamp" plan)
 - No per-modifier cost tracking
 - Margin calc on frontend: `(base_price - cost_price) / base_price * 100`
-- WebSockets via Laravel (not Node/Socket.io)
+- WebSockets via Laravel (Reverb) — not Node/Socket.io, not `beyondcode/laravel-websockets` (unmaintained)
 - Remote access via Tailscale
 - No offline queue; current inventory behavior assumes real-time access
 

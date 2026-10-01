@@ -513,9 +513,9 @@ Notes:
 
 ---
 
-## 8. KDS SCREEN (Kitchen Display System) — _planned_
+## 8. KDS SCREEN (Kitchen Display System) — _API implemented; client app planned_
 
-> Not built. The backend already stores what the KDS needs (ticket lines with `notes`, modifiers, `created_at`, `order_type`, voided lines), but there is no KDS read endpoint (`GET /kds/orders`) and no real-time channel yet. Completion state stays UI-only by design (no DB timestamp in v1). The feed must be ordered strictly by `created_at` ASC, exclude paid/cancelled/merged tickets and voided lines, and expose no prices.
+> `GET /api/v1/kds/orders` and the realtime `kds.orders` channel (Laravel Reverb) are implemented — see `UNIFIED_API_ENDPOINTS.md` §8.5. The feed is ordered strictly by `created_at` ASC, excludes paid/cancelled/merged tickets, voided lines and `fee` lines, and exposes no prices or terminal info. Completion is persisted as `ticket_items.completed_at` (toggled via `PATCH /api/v1/kds/orders/items/{ticketItem}/complete`, broadcast on toggle) and swept back to null nightly by the `kds:clear-completed` scheduled command — operational kitchen-workflow state, not audit history, superseding the original "UI-only, no DB timestamp" plan. The actual tablet display (React Native) below is still unbuilt — only the backend it will call exists today.
 
 ### Display
 
@@ -619,63 +619,62 @@ For GCash the payment line shows the reference instead of tendered/change.
 
 ---
 
-## 10. REAL-TIME UPDATES (WebSockets) — _planned_
+## 10. REAL-TIME UPDATES (WebSockets) — _implemented for KDS; the rest is still planned_
 
-> Not built: there is no broadcasting code and no WebSocket package installed. Until then, POS terminals rely on the manual sync button/polling (`GET /items`, `GET /tickets`, `GET /shifts/active`). The events below are the intended design. Note that `beyondcode/laravel-websockets` is effectively unmaintained; Laravel Reverb is the first-party, Pusher-protocol-compatible alternative — decide before implementing (CLAUDE.md lists WebSockets via Laravel as a locked decision).
+> Laravel Reverb (first-party, Pusher-protocol-compatible) is installed — `beyondcode/laravel-websockets` was never adopted; it's effectively unmaintained and Reverb replaces it outright, settling the decision CLAUDE.md previously left open. Only the KDS channel below is wired up. POS terminals still rely on the manual sync button/polling for everything else (`GET /items`, `GET /tickets`, `GET /shifts/active`) — `inventory.updated`, `refund.requested` and `refund.approved` remain unbroadcast.
 
 ### Broadcasting Channels
 
-- `shift.{shift_id}` → all users in same shift
-- `terminal.{terminal_id}` → specific POS terminal (optional)
+- `kds.orders` → **implemented**. One private channel, authenticated via Sanctum at `POST /api/v1/broadcasting/auth` (not the default session-guarded `/broadcasting/auth` — see `UNIFIED_API_ENDPOINTS.md` §8.5). Deliberately not shift- or terminal-scoped: the KDS must show every terminal's orders, and since only one shift is ever open at a time, a shift-scoped channel would force constant resubscription for no benefit.
+- `shift.{shift_id}` → not implemented. Originally planned for general POS/back-office sync.
+- `terminal.{terminal_id}` → not implemented.
 
-### Events Broadcast
+### Events Broadcast on `kds.orders` — implemented
 
-1. **ticket.created** — New ticket created
-
-    ```json
-    { "event": "ticket.created", "data": { ticket object } }
-    ```
-
-2. **ticket.updated** — Items added/removed, discount changed
+1. **ticket.created** — a new open ticket
 
     ```json
-    { "event": "ticket.updated", "data": { ticket object } }
+    { "event": "ticket.created", "data": { ticket_id, order_number, customer_name, order_type, created_at, items: [...] } }
     ```
 
-3. **ticket.paid** — Order completed
+2. **ticket.updated** — items added/voided/quantity changed, or a merge target's lines changed (same shape as `ticket.created`)
+
+3. **ticket.paid** — the ticket left the KDS feed because it was paid
 
     ```json
     { "event": "ticket.paid", "data": { ticket_id, order_number } }
     ```
 
-4. **ticket.merged** — Tickets merged
+4. **ticket.cancelled** — the ticket left the feed because it was cancelled. Not in the original event list; added to close a gap (nothing told the KDS to drop a cancelled order)
 
     ```json
-    { "event": "ticket.merged", "data": { new_ticket_id, merged_from: [#001, #002] } }
+    { "event": "ticket.cancelled", "data": { ticket_id, order_number } }
     ```
 
-5. **inventory.updated** — Item reserved/deducted
+5. **ticket.merged** — one or more tickets were folded into a target and left the feed
 
     ```json
-    { "event": "inventory.updated", "data": { item_id, quantity, reserved_quantity } }
+    { "event": "ticket.merged", "data": { ticket_id, order_number, removed_ticket_ids: [...], removed_order_numbers: [...] } }
     ```
 
-6. **item.completed** — Kitchen marks item done (KDS)
+6. **item.completed** — kitchen marked a line done
 
     ```json
     { "event": "item.completed", "data": { ticket_id, ticket_item_id } }
     ```
 
-7. **refund.requested** — Refund pending approval
+7. **item.uncompleted** — kitchen marked a line not-done again. Not in the original event list, which had no undo counterpart despite the UI spec (§8) allowing it
 
     ```json
-    { "event": "refund.requested", "data": { refund object } }
+    { "event": "item.uncompleted", "data": { ticket_id, ticket_item_id } }
     ```
 
-8. **refund.approved** — Refund approved by admin
-    ```json
-    { "event": "refund.approved", "data": { refund_id, ticket_id } }
-    ```
+A ticket card's payload never includes prices or `terminal_id`, matching §8's "no prices... no terminal info" requirement. Changing a ticket's discount broadcasts nothing — the KDS card shows no money, so a discount change is invisible to it.
+
+### Events — not implemented
+
+- **inventory.updated** — no KDS or other current consumer.
+- **refund.requested** / **refund.approved** — no KDS or other current consumer.
 
 ---
 
@@ -706,14 +705,15 @@ Legend: `[x]` implemented and tested · `[~]` implemented on the server/API, cli
 - [x] Special items: Special categories with Fee items (cashier enters the amount) and Custom items (cashier enters the name and amount) — API, receipts and back office
 - [x] Categories endpoint for the POS (`GET /categories`, `GET /categories/{id}`; active + POS-visible only)
 - [x] Ticket line quantity edit (`PATCH /tickets/{id}/items/{ticketItem}`; no passcode — see §6 CartScreen)
+- [x] KDS order feed (`GET /kds/orders`) + item completion API (`PATCH .../complete`), persisted as `ticket_items.completed_at` and broadcast live — see §8, §10
+- [x] Realtime broadcasting for the KDS channel (Laravel Reverb) — `KdsBroadcastTest`; a Sanctum-scoped tablet token (`kds:read`/`kds:complete` abilities, `KdsTokenScopeTest`) can reach only the KDS endpoints
 
 **Still to build**
 
 - [~] Terminal isolation (POS sees own orders only) — `terminal_id` filter works; not enforced by token
-- [ ] KDS order feed + item completion UI (UI-only completion)
-- [ ] Real-time WebSocket updates
+- [~] Real-time WebSocket updates — KDS channel implemented; general POS/back-office sync (`shift.{shift_id}`, `inventory.updated`, `refund.*`) is not
 - [ ] React Native POS app, including auto-print to the thermal printer
-- [ ] KDS app
+- [ ] KDS app (tablet client UI) — the API and realtime channel it will call are implemented; the display itself is not
 - [ ] Back-office pages: shifts, orders/receipts, refunds, dashboard stats
 
 ### Nice-to-Have (v1)
@@ -775,7 +775,7 @@ WiFi Mesh (TP-Link Deco M5)
 ├─ Intel NUC (LAN)
 │  ├─ Laravel app: REST API (/api/v1) + Inertia back office (Port 8000)
 │  ├─ MySQL Database
-│  └─ WebSocket server (Port 6001) — planned
+│  └─ WebSocket server (Laravel Reverb, port 8080) — implemented for the KDS channel
 │
 ├─ POS Tablet 1 (WiFi)
 │  ├─ React Native Expo App
@@ -796,7 +796,7 @@ WiFi Mesh (TP-Link Deco M5)
 
 - All devices on same LAN via WiFi mesh
 - API accessible at `http://nuc-ip:8000/api/v1`; back office at `http://nuc-ip:8000`
-- WebSockets at `ws://nuc-ip:6001` (planned)
+- WebSockets (Laravel Reverb) at `ws://nuc-ip:8080` — implemented for the KDS channel
 - No offline queue: the POS needs a live connection to the NUC (locked decision). Remote access via Tailscale.
 
 ---
@@ -853,10 +853,9 @@ WiFi Mesh (TP-Link Deco M5)
     - Payment, inventory deduction, ticket close and receipt generation run in one transaction
     - Inventory rows, tickets, shifts and refunds are locked (`lockForUpdate`) — tickets in a fixed id order for merges — to prevent races between terminals
 
-8. **WebSocket Broadcasting** _(planned)_
-    - Broadcast to `shift.{shift_id}` channel
-    - All terminals in same shift get real-time updates
-    - Exclude sender with `.toOthers()` to avoid echo
+8. **WebSocket Broadcasting** — implemented for KDS, _general POS/back-office sync still planned_
+    - KDS: every relevant `TicketService`/`PaymentService` mutation broadcasts on the private `kds.orders` channel (Laravel Reverb), fired after its `DB::transaction()` returns so a rollback never produces a false push; wrapped in try/catch so a Reverb outage degrades to the tablet's normal polling fallback instead of a failed request. No `.toOthers()` - the KDS channel has no echo concern since the terminal that made the change isn't the one subscribed to it
+    - General POS sync (`shift.{shift_id}`, with `.toOthers()` to avoid echoing a terminal's own change back to itself) remains unimplemented
 
 9. **Money handling**
 
@@ -882,11 +881,12 @@ Automated (Pest) coverage today is marked ✅; the rest is manual or still to wr
 - [x] Merge tickets (rules, chained merges, single receipt with all order numbers)
 - [ ] Cancel ticket (unreserve inventory) — _untested_
 - [x] Void item with passcode (approver identified from the passcode alone; `PasscodeApprovalTest`)
-- [ ] Terminal 1 sees own orders, KDS sees all — _KDS not built_
-- [ ] Kitchen marks item done (UI only) — _KDS not built_
+- [ ] Terminal 1 sees own orders — _terminal isolation still client-filter-only, not built_
+- [x] KDS sees all terminals, strictly `created_at` ASC, no prices/terminal info — `KdsOrdersFeedTest`
+- [x] Kitchen marks item done / undone (persisted, not UI-only) — `KdsItemCompletionTest`
 - [x] Request refund, manager approves (restore inventory; cash refund reduces expected cash) — `RefundValidationTest`, `PasscodeApprovalTest`
 - [x] View receipt history (all terminals visible), filters, search, reprint log
-- [ ] WebSocket broadcasts on new order — _not built_
+- [x] WebSocket broadcasts on ticket/item changes (KDS channel) — `KdsBroadcastTest`; general POS broadcasts (`shift.{shift_id}`) still unbuilt
 - [ ] Close shift, verify totals (incl. blocked while tickets are open) — _partly covered by the merge test; otherwise untested_
 - [ ] Printer offline, fallback to digital receipt — _POS app_
 - [x] Token expiry & re-login flow — tokens never expire on their own; a manager/admin can revoke one from Employee Management → Devices, and the revoked token is immediately rejected by the API (`UserSessionsTest`). The POS app's re-login-on-401 UI is still to build
