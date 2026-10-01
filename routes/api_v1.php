@@ -58,4 +58,5 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('refunds/{refund}/reject', [RefundController::class, 'rejectRefund'])->name('api.v1.refunds.reject');
 
     Route::get('kds/orders', [KdsController::class, 'getOrders'])->name('api.v1.kds.orders.index');
+    Route::patch('kds/orders/items/{ticketItem}/complete', [KdsController::class, 'setItemCompletion'])->name('api.v1.kds.orders.items.complete');
 });

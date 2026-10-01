@@ -203,6 +203,32 @@ class TicketService
         });
     }
 
+    /**
+     * KDS completion toggle. No passcode: this isn't a removal, same reasoning as
+     * UpdateItemQuantity. Not persisted as audit/historical data - a nightly job
+     * (kds:clear-completed) sweeps completed_at back to null regardless of ticket status.
+     */
+    public function SetItemCompletion(TicketItem $ticketItem, bool $completed): TicketItem
+    {
+        return DB::transaction(function () use ($ticketItem, $completed): TicketItem {
+            $lockedItem = TicketItem::query()->lockForUpdate()->findOrFail($ticketItem->id);
+
+            if ($lockedItem->isVoided()) {
+                throw new InvalidArgumentException('Cannot change the completion state of a voided item.');
+            }
+
+            $ticket = Ticket::query()->lockForUpdate()->findOrFail($lockedItem->ticket_id);
+
+            if (! $ticket->isOpen()) {
+                throw new InvalidArgumentException('Cannot change item completion state on a ticket that is not open.');
+            }
+
+            $lockedItem->update(['completed_at' => $completed ? now() : null]);
+
+            return $lockedItem;
+        });
+    }
+
     public function SetDiscount(Ticket $ticket, float $discountAmount = 0, float $discountPercent = 0): Ticket
     {
         return DB::transaction(function () use ($ticket, $discountAmount, $discountPercent): Ticket {
