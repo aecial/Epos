@@ -2,6 +2,12 @@
 
 namespace App\Services;
 
+use App\Events\Kds\ItemCompleted;
+use App\Events\Kds\ItemUncompleted;
+use App\Events\Kds\TicketCancelled;
+use App\Events\Kds\TicketCreated;
+use App\Events\Kds\TicketMerged;
+use App\Events\Kds\TicketUpdated;
 use App\Exceptions\NoActiveShiftException;
 use App\Models\Item;
 use App\Models\Modifier;
@@ -10,11 +16,14 @@ use App\Models\Ticket;
 use App\Models\TicketItem;
 use App\Models\TicketItemModifier;
 use App\Models\User;
+use App\Services\Concerns\BroadcastsSafely;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
 class TicketService
 {
+    use BroadcastsSafely;
+
     public function __construct(
         private InventoryService $inventoryService,
         private PasscodeService $passcodeService,
@@ -22,7 +31,7 @@ class TicketService
 
     public function CreateTicket(Shift $shift, User $createdBy, string $terminalId, string $customerName, string $orderType): Ticket
     {
-        return DB::transaction(function () use ($shift, $createdBy, $terminalId, $customerName, $orderType): Ticket {
+        $ticket = DB::transaction(function () use ($shift, $createdBy, $terminalId, $customerName, $orderType): Ticket {
             // Locking the shift row serializes order-number and name assignment
             // across concurrent terminals for the duration of this transaction.
             $lockedShift = Shift::query()->lockForUpdate()->findOrFail($shift->id);
@@ -46,6 +55,10 @@ class TicketService
                 'total' => 0,
             ]);
         });
+
+        $this->broadcastSafely(fn () => broadcast(new TicketCreated($ticket)));
+
+        return $ticket;
     }
 
     /**
@@ -74,7 +87,7 @@ class TicketService
             throw new InvalidArgumentException('Price must be greater than zero.');
         }
 
-        return DB::transaction(function () use ($ticket, $item, $quantity, $modifierIds, $notes, $unitPrice, $customName, $entryMode): TicketItem {
+        $ticketItem = DB::transaction(function () use ($ticket, $item, $quantity, $modifierIds, $notes, $unitPrice, $customName, $entryMode): TicketItem {
             $lockedTicket = Ticket::query()->lockForUpdate()->findOrFail($ticket->id);
 
             if (! $lockedTicket->isOpen()) {
@@ -118,6 +131,10 @@ class TicketService
 
             return $ticketItem->refresh();
         });
+
+        $this->broadcastSafely(fn () => broadcast(new TicketUpdated($ticketItem->ticket)));
+
+        return $ticketItem;
     }
 
     /**
@@ -130,7 +147,7 @@ class TicketService
     {
         $approver = $this->passcodeService->ResolveApprover($requestedBy, $passcode);
 
-        return DB::transaction(function () use ($ticketItem, $requestedBy, $approver): TicketItem {
+        $voided = DB::transaction(function () use ($ticketItem, $requestedBy, $approver): TicketItem {
             $lockedItem = TicketItem::query()->lockForUpdate()->findOrFail($ticketItem->id);
 
             if ($lockedItem->isVoided()) {
@@ -155,6 +172,10 @@ class TicketService
 
             return $lockedItem;
         });
+
+        $this->broadcastSafely(fn () => broadcast(new TicketUpdated($voided->ticket)));
+
+        return $voided;
     }
 
     /**
@@ -168,7 +189,7 @@ class TicketService
             throw new InvalidArgumentException('Quantity must be greater than zero; void the line to remove it.');
         }
 
-        return DB::transaction(function () use ($ticketItem, $newQuantity): TicketItem {
+        $updated = DB::transaction(function () use ($ticketItem, $newQuantity): TicketItem {
             $lockedItem = TicketItem::query()->lockForUpdate()->findOrFail($ticketItem->id);
 
             if ($lockedItem->isVoided()) {
@@ -201,6 +222,10 @@ class TicketService
 
             return $lockedItem->fresh(['modifiers']);
         });
+
+        $this->broadcastSafely(fn () => broadcast(new TicketUpdated($updated->ticket)));
+
+        return $updated;
     }
 
     /**
@@ -210,7 +235,7 @@ class TicketService
      */
     public function SetItemCompletion(TicketItem $ticketItem, bool $completed): TicketItem
     {
-        return DB::transaction(function () use ($ticketItem, $completed): TicketItem {
+        $updated = DB::transaction(function () use ($ticketItem, $completed): TicketItem {
             $lockedItem = TicketItem::query()->lockForUpdate()->findOrFail($ticketItem->id);
 
             if ($lockedItem->isVoided()) {
@@ -227,6 +252,10 @@ class TicketService
 
             return $lockedItem;
         });
+
+        $this->broadcastSafely(fn () => broadcast($completed ? new ItemCompleted($updated) : new ItemUncompleted($updated)));
+
+        return $updated;
     }
 
     public function SetDiscount(Ticket $ticket, float $discountAmount = 0, float $discountPercent = 0): Ticket
@@ -251,7 +280,7 @@ class TicketService
 
     public function CancelTicket(Ticket $ticket, User $cancelledBy): Ticket
     {
-        return DB::transaction(function () use ($ticket, $cancelledBy): Ticket {
+        $cancelled = DB::transaction(function () use ($ticket, $cancelledBy): Ticket {
             $lockedTicket = Ticket::query()->lockForUpdate()->findOrFail($ticket->id);
 
             if (! $lockedTicket->isOpen()) {
@@ -276,6 +305,10 @@ class TicketService
 
             return $lockedTicket;
         });
+
+        $this->broadcastSafely(fn () => broadcast(new TicketCancelled($cancelled)));
+
+        return $cancelled;
     }
 
     /**
@@ -297,7 +330,7 @@ class TicketService
             throw new InvalidArgumentException('A ticket cannot be merged into itself.');
         }
 
-        return DB::transaction(function () use ($target, $sourceIds, $mergedBy): Ticket {
+        [$merged, $removedTicketIds, $removedOrderNumbers] = DB::transaction(function () use ($target, $sourceIds, $mergedBy): array {
             // Lock every ticket involved in ascending id order. A fixed order means two
             // merges that touch overlapping tickets queue up instead of deadlocking.
             $ids = array_merge($sourceIds, [(int) $target->id]);
@@ -322,6 +355,11 @@ class TicketService
 
             $lockedTarget = $tickets[(int) $target->id];
             $sources = $tickets->except((int) $target->id);
+            // Eloquent Collection::except() re-indexes its result with array_values(), so the
+            // source tickets' original id-keyed position is gone here - modelKeys() reads the
+            // primary key directly instead of trusting the (now positional) collection keys.
+            $removedTicketIds = $sources->modelKeys();
+            $removedOrderNumbers = $sources->pluck('order_number')->all();
 
             // Carry every ticket's discount over as one fixed amount. Each ticket's
             // effective discount is simply subtotal - total (it already reflects the
@@ -374,8 +412,13 @@ class TicketService
 
             $this->recalculateTotals($lockedTarget);
 
-            return $lockedTarget->fresh(['items.modifiers', 'mergedTickets']);
+            return [$lockedTarget->fresh(['items.modifiers', 'mergedTickets']), $removedTicketIds, $removedOrderNumbers];
         });
+
+        $this->broadcastSafely(fn () => broadcast(new TicketMerged($merged, $removedTicketIds, $removedOrderNumbers)));
+        $this->broadcastSafely(fn () => broadcast(new TicketUpdated($merged)));
+
+        return $merged;
     }
 
     /**

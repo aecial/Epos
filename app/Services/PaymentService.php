@@ -2,16 +2,20 @@
 
 namespace App\Services;
 
+use App\Events\Kds\TicketPaid;
 use App\Exceptions\ChargeAmountMismatchException;
 use App\Models\Charge;
 use App\Models\Ticket;
 use App\Models\TicketItem;
 use App\Models\User;
+use App\Services\Concerns\BroadcastsSafely;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
 class PaymentService
 {
+    use BroadcastsSafely;
+
     public function __construct(
         private InventoryService $inventoryService,
         private ReceiptService $receiptService,
@@ -31,7 +35,7 @@ class PaymentService
             throw new InvalidArgumentException('At least one charge is required.');
         }
 
-        return DB::transaction(function () use ($ticket, $cashier, $charges): Ticket {
+        $paid = DB::transaction(function () use ($ticket, $cashier, $charges): Ticket {
             $lockedTicket = Ticket::query()->lockForUpdate()->findOrFail($ticket->id);
 
             if (! $lockedTicket->isOpen()) {
@@ -115,5 +119,9 @@ class PaymentService
 
             return $lockedTicket->fresh(['charges.receipt']);
         });
+
+        $this->broadcastSafely(fn () => broadcast(new TicketPaid($paid)));
+
+        return $paid;
     }
 }

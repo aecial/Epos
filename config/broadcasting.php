@@ -42,7 +42,12 @@ return [
                 'useTLS' => env('REVERB_SCHEME', 'https') === 'https',
             ],
             'client_options' => [
-                // Guzzle client options: https://docs.guzzlephp.org/en/stable/request-options.html
+                // Without these, a down/unreachable Reverb process makes every ticket mutation
+                // (create/add item/void/pay/etc.) hang for ~3s before TicketService's
+                // broadcastSafely() catches the failure - a real cashier-facing stall, not a
+                // graceful degradation. Bounded tight since Reverb runs on the same LAN/NUC.
+                'connect_timeout' => 1,
+                'timeout' => 2,
             ],
         ],
 
