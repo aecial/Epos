@@ -25,12 +25,14 @@ class TicketItem extends Model
         'voided_at',
         'voided_by',
         'voided_requested_by',
+        'completed_at',
     ];
 
     protected function casts(): array
     {
         return [
             'voided_at' => 'datetime',
+            'completed_at' => 'datetime',
         ];
     }
 
@@ -67,5 +69,10 @@ class TicketItem extends Model
     public function isVoided(): bool
     {
         return $this->voided_at !== null;
+    }
+
+    public function isCompleted(): bool
+    {
+        return $this->completed_at !== null;
     }
 }
