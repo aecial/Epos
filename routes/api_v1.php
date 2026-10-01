@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\CategoryController;
 use App\Http\Controllers\Api\V1\ItemController;
+use App\Http\Controllers\Api\V1\KdsController;
 use App\Http\Controllers\Api\V1\PaymentController;
 use App\Http\Controllers\Api\V1\ReceiptController;
 use App\Http\Controllers\Api\V1\RefundController;
@@ -55,4 +56,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('refunds', [RefundController::class, 'requestRefund'])->name('api.v1.refunds.store');
     Route::put('refunds/{refund}/approve', [RefundController::class, 'approveRefund'])->name('api.v1.refunds.approve');
     Route::put('refunds/{refund}/reject', [RefundController::class, 'rejectRefund'])->name('api.v1.refunds.reject');
+
+    Route::get('kds/orders', [KdsController::class, 'getOrders'])->name('api.v1.kds.orders.index');
 });
