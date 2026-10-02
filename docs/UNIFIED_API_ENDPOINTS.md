@@ -42,7 +42,7 @@ Error:
 | 201  | Created (login, open shift, create ticket/transaction/refund, add item)                                      |
 | 401  | Missing/invalid token — `Unauthenticated.`                                                                   |
 | 403  | Role not allowed, a passcode that matches no active manager/admin (`Passcode is invalid or the approver lacks permission.`), a passcode shared by more than one of them, or a token's ability doesn't cover the route (e.g. a `kds`-scoped token calling anything outside §8.5) |
-| 404  | Unknown id, or no active shift where one is required                                                         |
+| 404  | Unknown id, another cashier's ticket (§5), or no active shift where one is required                          |
 | 409  | Business-rule conflict: no active shift, shift already open, open tickets block close, charge total mismatch, insufficient stock, ticket not open, refund already decided, a refund that doesn't stay within what was purchased/paid, etc. |
 | 422  | Validation failed                                                                                            |
 | 429  | Login throttled (6 attempts per minute), or 5 failed passcode attempts in a minute (sends `Retry-After`)      |
@@ -325,19 +325,27 @@ Soft delete (`deleted_at`, `deleted_by`); excluded from totals afterwards. `409`
 
 A ticket is one customer's open order. Statuses: `open` → `paid` | `cancelled` | `merged`.
 
+### Who can see and act on a ticket
+
+Ticket access is **bound to the logged-in account**:
+
+- A **cashier** sees and acts only on tickets **they opened** (`created_by`).
+- A **manager or admin** sees and acts on **every** ticket, e.g. to settle a tab when its cashier is away.
+- Another cashier's ticket is `404` (`Resource not found.`), identical to an unknown id, on every per-ticket route: show, add/change/void an item, discount, merge, cancel and `POST /tickets/{ticket}/charges` (§6).
+- KDS (§8.5), receipts (§7) and refunds (§8) are **not** scoped: they see every ticket.
+- `terminal_id` is only a label the client sends on creation; it never decides access.
+
 ### GET `/tickets`
 
-Query (all optional):
+A cashier's list holds only their own tickets; a manager's/admin's holds everyone's. Query (all optional):
 
-| Param         | Notes                                                                                                   |
-| ------------- | ------------------------------------------------------------------------------------------------------- |
-| `shift_id`    | Defaults to the active shift. `404` if none is open.                                                    |
-| `terminal_id` | POS terminals should always send their own id for isolation. Back office omits it to see every terminal. |
-| `status`      | `open` (default), `paid`, `merged`, `cancelled`                                                         |
+| Param         | Notes                                                                                                  |
+| ------------- | ------------------------------------------------------------------------------------------------------ |
+| `shift_id`    | Defaults to the active shift. `404` if none is open.                                                   |
+| `terminal_id` | Optional label filter (e.g. a manager narrowing to one counter). It does not widen what a cashier sees. |
+| `status`      | `open` (default), `paid`, `merged`, `cancelled`                                                        |
 
 Returns tickets ordered by `created_at` ascending, each with `items_count` (non-voided lines only).
-
-> Terminal isolation is a **client-supplied filter**; the server does not enforce it from the token (see §13).
 
 ### POST `/tickets`
 
@@ -347,7 +355,7 @@ Create a ticket on the active shift. Any staff.
 { "terminal_id": "POS-01", "customer_name": "john", "order_type": "dine_in" }
 ```
 
-- `terminal_id`: required string, max 50
+- `terminal_id`: required string, max 50. A label (e.g. the tablet's name); not an access rule.
 - `customer_name`: required string, max 255
 - `order_type`: `dine_in` | `takeout`
 
@@ -465,6 +473,7 @@ Merge other open tickets **into** the ticket in the URL (the target).
 **Rules** (checked under row locks; a rejected merge changes nothing):
 
 - All tickets must be `open` and in the **same shift**; the target can't be in its own list → `409`.
+- A **cashier** may only merge tickets they opened: a source id they don't own fails validation (`422` on `merge_from_ticket_ids.N`, without confirming it exists) and the service refuses it with `409` (`You can only merge tickets you opened.`). A manager/admin may merge any tickets in the same shift.
 - Source lines are physically moved onto the target and remember their origin in `merged_from_ticket_id` (an earlier origin is never overwritten on chained merges).
 - Sources become `merged` (`merged_into_ticket_id`, `merged_by`, `merged_at`) with all money zeroed, so the amount lives only on the target.
 - Discounts from every ticket combine into **one fixed `discount_amount`** on the target; `discount_percent` becomes `0`.
@@ -810,8 +819,8 @@ A passcode is a 4-digit PIN stored hashed (bcrypt) on the user. The POS never kn
 | ---- | ---------------------------------------------------------------------------------------------------------- |
 | 401  | `Unauthenticated.`                                                                                         |
 | 403  | `Passcode is invalid or the approver lacks permission.` · `This passcode is shared by more than one manager. It must be changed in the back office before it can be used.` · role-forbidden · token ability doesn't cover the route |
-| 404  | `Resource not found.` / `No active shift is open.`                                                         |
-| 409  | `Insufficient stock for item X.` · `Ticket is not open.` · `Tickets must belong to the same shift to be merged.` · `Refund has already been decided.` · `Ticket item {id} does not belong to this ticket.` · `Refund quantity for ticket item {id} exceeds the remaining refundable quantity ({n}).` · `Refund amount for ticket item {id} exceeds its purchased value.` · `Refund amount exceeds what this charge collected.` · `Cannot change the completion state of a voided item.` · `Cannot change item completion state on a ticket that is not open.` · charge amount mismatch · shift already open · open tickets exist |
+| 404  | `Resource not found.` (also another cashier's ticket) / `No active shift is open.`                         |
+| 409  | `Insufficient stock for item X.` · `Ticket is not open.` · `Tickets must belong to the same shift to be merged.` · `You can only merge tickets you opened.` · `Refund has already been decided.` · `Ticket item {id} does not belong to this ticket.` · `Refund quantity for ticket item {id} exceeds the remaining refundable quantity ({n}).` · `Refund amount for ticket item {id} exceeds its purchased value.` · `Refund amount exceeds what this charge collected.` · `Cannot change the completion state of a voided item.` · `Cannot change item completion state on a ticket that is not open.` · charge amount mismatch · shift already open · open tickets exist |
 | 422  | `The given data was invalid.` + `errors`                                                                   |
 | 429  | `Too many incorrect passcode attempts. Please try again in N seconds.` · login throttled                   |
 
@@ -848,6 +857,8 @@ Back-office deletes that would otherwise violate a `restrictOnDelete()` foreign 
 
 KDS (feed ordering/filtering/field omissions, completion toggle persistence and its voided/not-open guards, the nightly `kds:clear-completed` sweep, and a kds-scoped Sanctum token being forbidden from every other route) is covered by `tests/Feature/Kds/*`. Realtime broadcasting (every mutation dispatches the right event with the right payload, a rolled-back mutation dispatches nothing, `SetDiscount` dispatches nothing) is covered by `KdsBroadcastTest`.
 
+Ticket access (another cashier gets `404` on every per-ticket route and the ticket is untouched, a manager/admin can view/add to/pay any ticket, a cashier lists only their own tickets in any status while a manager/admin lists all, merges can't pull in another cashier's ticket in the request or the service, a manager/admin can merge across cashiers, KDS and receipts still see everything) is covered by `TicketOwnershipTest`.
+
 **Not yet covered by dedicated tests:** API login, shifts open/close and totals, shift transactions, refund listing, and ticket create/discount/cancel.
 
 ---
@@ -858,7 +869,6 @@ KDS (feed ordering/filtering/field omissions, completion toggle persistence and 
 | ---- | ------ |
 | **Real-time / WebSockets for general POS sync** | The KDS channel (`kds.orders`, §8.5) is implemented via Laravel Reverb. `shift.{shift_id}`/`terminal.{terminal_id}` and the `inventory.updated`/`refund.*` events in `ENHANCED_SPEC.md` §10 are not - POS terminals still use the manual sync button or polling. |
 | **KDS tablet client (the actual display app)** | `GET /kds/orders`, the completion toggle and the realtime channel it will use are implemented (§8.5). The React Native display itself is not built. |
-| **Server-enforced terminal isolation** | `terminal_id` is a client filter on `GET /tickets`; it is not bound to the token. |
 | **Employee / category / item admin over the API** | These live in the session-authenticated back office only, not in `/api/v1`. |
 | **Per-item charge assignment (`charge_items`)** | Dropped by design; charges are amounts-only with prorated receipts. |
 | **Back-office pages for shifts, orders/receipts, refunds, dashboard stats, reports** | Data and API exist; no Inertia pages yet. |

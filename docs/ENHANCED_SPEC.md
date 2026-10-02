@@ -25,7 +25,7 @@ A complete point-of-sale (POS), kitchen display system (KDS), and restaurant man
 
 - **Single active shift** at a time (any staff opens it → tickets are created → any staff closes it once no ticket is open)
 - **Real-time inventory** tracking with a reserve → deduct → restore system (direct, recipe, or untracked items)
-- **Terminal-specific** POS screens (each tablet passes its `terminal_id` and sees only its own open tickets)
+- **Account-bound** POS screens (a cashier sees only the tickets they opened; a manager/admin logged into a POS sees every ticket)
 - **Unified KDS** (all terminals' orders visible to kitchen) _(planned)_
 - **Split charges** (cash + GCash on the same ticket; one receipt per payment method; amounts-only, no per-item assignment)
 - **Ticket merging** (fold 2+ open tickets in the same shift into one bill; the receipt lists every order number)
@@ -352,7 +352,12 @@ This matrix reflects what the code enforces today. "Manage" means the back-offic
 
 **Passcodes:** a 4-digit PIN stored hashed on the user. For a void or refund decision a manager/admin types their passcode on the POS and the POS sends only `passcode`; the server checks it against every active admin/manager and records the one it belongs to as the approver. Cashiers and inactive users never match. A passcode that matches nobody is refused (`403`); one that matches more than one approver is also refused (`403`) until it is changed in the back office, so passcodes must be unique among active managers/admins (the Employees form enforces this). Five failed attempts in a minute by the signed-in user return `429`. The signed-in cashier is recorded as the requester, the approver as the authorizer.
 
-**Terminal isolation:** any authenticated user may create tickets. Isolation between terminals is achieved by each POS sending its `terminal_id` when creating tickets and when listing them; it is not yet enforced from the token.
+**Ticket access (server-enforced, account bound):**
+- **A cashier sees and acts only on tickets they opened** (`created_by`). Another cashier's ticket is `404`, on the list and on every per-ticket action, including payment.
+- **A manager or admin sees and acts on every ticket,** from any POS login: oversight, and settling a tab when its cashier has left.
+- **Merging:** a cashier may merge only tickets they opened; a manager/admin may merge any tickets in the same shift.
+- **Not scoped:** KDS, receipts and refunds see every ticket.
+- **`terminal_id`** is only a label the POS sends on creation and an optional list filter; it never decides access.
 
 ---
 
@@ -360,7 +365,7 @@ This matrix reflects what the code enforces today. "Manage" means the back-offic
 
 ### Screen Hierarchy (React Native) — _planned; the API behind each screen is implemented_
 
-Each POS device has a fixed `terminal_id` (e.g. `POS-01`) that it sends when creating and listing tickets.
+Each POS device has a fixed `terminal_id` (e.g. `POS-01`) that it sends when creating tickets, as a label. Which tickets a screen shows follows the logged-in account, not the device.
 
 #### 1. **LoginScreen**
 
@@ -384,7 +389,7 @@ Each POS device has a fixed `terminal_id` (e.g. `POS-01`) that it sends when cre
 - Tap item → choose modifiers (a group with `is_required` must be satisfied) → `POST /tickets/{id}/items`, which reserves stock
 - **Specials section:** items whose `category.type = special` are shown as their own section. By `entry_mode`: `fixed` adds immediately; `price` (Fee item) opens an amount keypad pre-filled with `base_price`; `name_price` (Custom item) opens a name + amount form. Send `unit_price` / `custom_name` with the add-item call
 - Cart badge (top-right) → go to CartScreen
-- **Terminal sees only own open tickets** in sidebar (`GET /tickets?terminal_id=…`)
+- **Cashier sees only their own open tickets** in the sidebar (`GET /tickets`, scoped server-side by account); a manager/admin sees everyone's
 - Receipt history is **not** terminal-filtered: every terminal sees every receipt (`GET /receipts`)
 
 #### 4. **CartScreen**
@@ -416,7 +421,7 @@ Each POS device has a fixed `terminal_id` (e.g. `POS-01`) that it sends when cre
 
 #### 6. **OrderHistoryScreen**
 
-- List of open tickets (own terminal only)
+- List of open tickets (own tickets for a cashier; all tickets for a manager/admin)
 - Can merge 2+ tickets (`POST /tickets/{targetId}/merge`)
 - Can cancel ticket (before payment; releases the reservation)
 - Can view/edit in-progress tickets
@@ -710,7 +715,7 @@ Legend: `[x]` implemented and tested · `[~]` implemented on the server/API, cli
 
 **Still to build**
 
-- [~] Terminal isolation (POS sees own orders only) — `terminal_id` filter works; not enforced by token
+- [x] Ticket access bound to the account (a cashier sees only their own tickets; managers/admins see all) — `TicketOwnershipTest`
 - [~] Real-time WebSocket updates — KDS channel implemented; general POS/back-office sync (`shift.{shift_id}`, `inventory.updated`, `refund.*`) is not
 - [ ] React Native POS app, including auto-print to the thermal printer
 - [ ] KDS app (tablet client UI) — the API and realtime channel it will call are implemented; the display itself is not
@@ -756,8 +761,8 @@ Legend: `[x]` implemented and tested · `[~]` implemented on the server/API, cli
 
 - **401 Unauthorized** — Missing/invalid token
 - **403 Forbidden** — Insufficient role, a passcode that matches no active admin/manager, or a passcode shared by more than one of them
-- **404 Not Found** — Resource doesn't exist, or no active shift where one is required
-- **409 Conflict** — Business-rule violation: shift already open, no active shift, open tickets block close, charge total mismatch, insufficient stock, ticket not open, refund already decided, a refund exceeding what was purchased/paid, tickets in different shifts. Back office only: deleting a category/item/modifier/modifier group/ingredient/ingredient group still referenced by sales history or a recipe (flashed as a readable error, not a raw `500`)
+- **404 Not Found** — Resource doesn't exist, another cashier's ticket, or no active shift where one is required
+- **409 Conflict** — Business-rule violation: shift already open, no active shift, open tickets block close, charge total mismatch, insufficient stock, ticket not open, refund already decided, a refund exceeding what was purchased/paid, tickets in different shifts, a cashier merging a ticket they didn't open. Back office only: deleting a category/item/modifier/modifier group/ingredient/ingredient group still referenced by sales history or a recipe (flashed as a readable error, not a raw `500`)
 - **422 Unprocessable Entity** — Validation failed
 - **429 Too Many Requests** — Login throttled (6 attempts per minute), or 5 failed passcode attempts in a minute
 
@@ -805,10 +810,10 @@ WiFi Mesh (TP-Link Deco M5)
 
 ### Key Implementation Points
 
-1. **Terminal ID Tracking**
+1. **Terminal ID and ticket access**
 
-    - Each POS tablet sends `terminal_id` on ticket creation
-    - Used to isolate orders and receipts per terminal
+    - Each POS tablet sends `terminal_id` on ticket creation, as a label (and optional list filter)
+    - Access is by account, not device: `TicketPolicy::manage` gates every per-ticket route (cashier: own tickets; manager/admin: all); receipts and refunds stay unscoped
 
 2. **Inventory Reserve Logic**
 
@@ -881,7 +886,7 @@ Automated (Pest) coverage today is marked ✅; the rest is manual or still to wr
 - [x] Merge tickets (rules, chained merges, single receipt with all order numbers)
 - [ ] Cancel ticket (unreserve inventory) — _untested_
 - [x] Void item with passcode (approver identified from the passcode alone; `PasscodeApprovalTest`)
-- [ ] Terminal 1 sees own orders — _terminal isolation still client-filter-only, not built_
+- [x] A cashier sees only their own orders; another cashier can't see, act on or merge them; a manager/admin sees and acts on all — `TicketOwnershipTest`
 - [x] KDS sees all terminals, strictly `created_at` ASC, no prices/terminal info — `KdsOrdersFeedTest`
 - [x] Kitchen marks item done / undone (persisted, not UI-only) — `KdsItemCompletionTest`
 - [x] Request refund, manager approves (restore inventory; cash refund reduces expected cash) — `RefundValidationTest`, `PasscodeApprovalTest`
