@@ -73,5 +73,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::patch('orders/items/{ticketItem}/complete', [KdsController::class, 'setItemCompletion'])
             ->middleware('ability:kds:complete')
             ->name('orders.items.complete');
+
+        Route::patch('orders/{ticket}/complete', [KdsController::class, 'completeTicket'])
+            ->middleware('ability:kds:complete')
+            ->name('orders.complete');
     });
 });

@@ -56,6 +56,10 @@ test('a kds-scoped token can reach both kds routes', function () {
     $this->withHeader('Authorization', "Bearer {$token}")
         ->patchJson("/api/v1/kds/orders/items/{$line->id}/complete", ['completed' => true])
         ->assertOk();
+
+    $this->withHeader('Authorization', "Bearer {$token}")
+        ->patchJson("/api/v1/kds/orders/{$ticket->id}/complete")
+        ->assertOk();
 });
 
 test('a kds-scoped token is forbidden from every full-access route', function () {

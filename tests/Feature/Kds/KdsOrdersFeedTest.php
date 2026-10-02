@@ -184,3 +184,30 @@ test('a ticket with every item completed disappears from the feed until somethin
     $items = collect($response->json('data.0.items'));
     expect($items->pluck('ticket_item_id')->all())->toBe([$addOn->id]);
 });
+
+test('bumping a whole ticket then adding more shows only the new lines, not what was already served', function () {
+    $cashier = posUser();
+    $shift = posOpenShift($cashier);
+    $friedItik = posItem('Fried Itik', 150);
+    $rice = posItem('Rice', 20);
+    $softdrink = posItem('Softdrink', 30);
+    $ticket = posTicket($shift, $cashier, 'john');
+
+    posAddItem($ticket, $friedItik, 1);
+    posAddItem($ticket, $rice, 2);
+
+    Sanctum::actingAs($cashier, ['*']);
+
+    $this->patchJson("/api/v1/kds/orders/{$ticket->id}/complete")->assertOk();
+    $this->getJson('/api/v1/kds/orders')->assertOk()->assertJsonCount(0, 'data');
+
+    $newRice = app(TicketService::class)->AddItem($ticket, $rice, 2);
+    $newSoftdrink = app(TicketService::class)->AddItem($ticket, $softdrink, 1);
+
+    $response = $this->getJson('/api/v1/kds/orders')->assertOk();
+    expect($response->json('data'))->toHaveCount(1);
+
+    $items = collect($response->json('data.0.items'));
+    expect($items->pluck('ticket_item_id')->all())->toBe([$newRice->id, $newSoftdrink->id]);
+    expect($items->pluck('item_name')->all())->toBe(['Rice', 'Softdrink']);
+});

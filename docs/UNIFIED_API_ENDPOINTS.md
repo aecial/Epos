@@ -730,6 +730,15 @@ Excludes: paid/cancelled/merged tickets, voided lines, `fee` line_type lines (fe
 
 Completion is persisted (not UI-only) so it survives a tablet reload and stays in sync across multiple KDS screens - but it's operational kitchen-workflow state, not audit history: nothing in receipts, payments or refunds reads it, and a nightly scheduled command (`kds:clear-completed`, `dailyAt('03:00')`) sweeps every `completed_at` back to `null` regardless of ticket status.
 
+### PATCH `/kds/orders/{ticket}/complete`
+
+**Requires the `kds:complete` ability** (or full access). Bumps every pending (non-voided, kitchen-visible) line on the ticket in one action - the "tap the customer name" gesture, instead of toggling each item individually. No body.
+
+- `409` if the ticket is no longer `open`.
+- Voided lines and lines already completed are left untouched.
+
+`200` with `{ "ticket_id": 10, "completed": true }`. Broadcasts `ticket.updated`; since every line is now completed, the resulting card has nothing pending left and drops off the feed until something new is added to the ticket.
+
 ### Realtime: the `kds.orders` channel
 
 A private channel broadcasting the events below, via Laravel Reverb. Any authenticated token (full-access or kds-scoped) may subscribe.

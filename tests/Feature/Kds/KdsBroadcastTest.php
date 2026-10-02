@@ -122,6 +122,18 @@ test('toggling item completion dispatches item.completed and item.uncompleted', 
     Event::assertDispatched(ItemUncompleted::class);
 });
 
+test('completing a whole ticket dispatches ticket.updated', function () {
+    $cashier = posUser();
+    $shift = posOpenShift($cashier);
+    $item = posItem('Burger', 100);
+    $ticket = posTicket($shift, $cashier, 'john');
+    posAddItem($ticket, $item, 2);
+
+    app(TicketService::class)->CompleteTicketItems($ticket);
+
+    Event::assertDispatched(TicketUpdated::class);
+});
+
 test('changing the discount dispatches no kds event', function () {
     $cashier = posUser();
     $shift = posOpenShift($cashier);

@@ -258,6 +258,36 @@ class TicketService
         return $updated;
     }
 
+    /**
+     * Bumps every pending (non-voided, kitchen-visible) line on the ticket in one action - the
+     * KDS "tap the customer name" gesture, instead of tapping each item individually. Broadcasts
+     * ticket.updated: the resulting card has nothing left pending, so the feed drops it until a
+     * new item is added.
+     */
+    public function CompleteTicketItems(Ticket $ticket): Ticket
+    {
+        $completed = DB::transaction(function () use ($ticket): Ticket {
+            $lockedTicket = Ticket::query()->lockForUpdate()->findOrFail($ticket->id);
+
+            if (! $lockedTicket->isOpen()) {
+                throw new InvalidArgumentException('Cannot complete items on a ticket that is not open.');
+            }
+
+            TicketItem::query()
+                ->where('ticket_id', $lockedTicket->id)
+                ->whereNull('voided_at')
+                ->whereNull('completed_at')
+                ->whereIn('line_type', ['item', 'custom'])
+                ->update(['completed_at' => now()]);
+
+            return $lockedTicket;
+        });
+
+        $this->broadcastSafely(fn () => broadcast(new TicketUpdated($completed)));
+
+        return $completed;
+    }
+
     public function SetDiscount(Ticket $ticket, float $discountAmount = 0, float $discountPercent = 0): Ticket
     {
         return DB::transaction(function () use ($ticket, $discountAmount, $discountPercent): Ticket {
