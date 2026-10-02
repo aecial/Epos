@@ -41,6 +41,11 @@ class TicketController extends Controller
 
         $tickets = Ticket::query()
             ->where('shift_id', $shift->id)
+            // A cashier sees only the tickets they opened; a manager/admin sees every ticket.
+            ->unless(
+                $request->user()->isAdminOrManager(),
+                fn ($query) => $query->whereBelongsTo($request->user(), 'createdBy')
+            )
             ->when(
                 $request->validated('terminal_id'),
                 fn ($query, $terminalId) => $query->where('terminal_id', $terminalId)

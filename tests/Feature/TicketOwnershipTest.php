@@ -76,6 +76,44 @@ test('a manager or admin can view, add to and pay any cashier\'s ticket', functi
     expect($ticket->fresh()->status)->toBe('paid');
 })->with(['manager', 'admin']);
 
+test('a cashier lists only the tickets they opened, in any status', function () {
+    $alice = posUser();
+    $bob = posUser();
+    $shift = posOpenShift($alice);
+    $item = posItem('Burger', 100);
+
+    $aliceOpen = posTicket($shift, $alice, 'john');
+    $alicePaid = posTicket($shift, $alice, 'jane');
+    posAddItem($alicePaid, $item, 1);
+    posPay($alicePaid, $alice, [['payment_method' => 'cash', 'amount' => 100, 'tendered_amount' => 100]]);
+    $bobOpen = posTicket($shift, $bob, 'maria');
+
+    Sanctum::actingAs($alice, ['*']);
+    $this->getJson('/api/v1/tickets')->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.id', $aliceOpen->id);
+    $this->getJson('/api/v1/tickets?status=paid')->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.id', $alicePaid->id);
+
+    Sanctum::actingAs($bob, ['*']);
+    $this->getJson('/api/v1/tickets')->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.id', $bobOpen->id);
+    $this->getJson('/api/v1/tickets?status=paid')->assertOk()->assertJsonCount(0, 'data');
+});
+
+test('a manager or admin lists every cashier\'s tickets, and terminal_id still narrows the list', function (string $role) {
+    $alice = posUser();
+    $bob = posUser();
+    $shift = posOpenShift($alice);
+
+    $one = posTicket($shift, $alice, 'john', 'POS-01');
+    $two = posTicket($shift, $bob, 'maria', 'POS-02');
+
+    Sanctum::actingAs(posUser($role), ['*']);
+
+    $ids = collect($this->getJson('/api/v1/tickets')->assertOk()->json('data'))->pluck('id')->sort()->values()->all();
+    expect($ids)->toBe([$one->id, $two->id]);
+
+    $this->getJson('/api/v1/tickets?terminal_id=POS-02')
+        ->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.id', $two->id);
+})->with(['manager', 'admin']);
+
 test('a kitchen tablet logged in as anyone still completes every cashier\'s items', function () {
     $owner = posUser();
     [$ticket, $line] = ownedTicketWithLine($owner);
