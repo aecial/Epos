@@ -42,15 +42,17 @@ Route::middleware('auth:sanctum')->group(function () {
 
         Route::get('tickets', [TicketController::class, 'getTickets'])->name('api.v1.tickets.index');
         Route::post('tickets', [TicketController::class, 'createTicket'])->name('api.v1.tickets.store');
-        Route::get('tickets/{ticket}', [TicketController::class, 'getTicket'])->name('api.v1.tickets.show');
-        Route::post('tickets/{ticket}/items', [TicketController::class, 'addItem'])->name('api.v1.tickets.items.store');
-        Route::patch('tickets/{ticket}/items/{ticketItem}', [TicketController::class, 'updateItemQuantity'])->name('api.v1.tickets.items.update');
-        Route::delete('tickets/{ticket}/items/{ticketItem}', [TicketController::class, 'voidItem'])->name('api.v1.tickets.items.void');
-        Route::patch('tickets/{ticket}/discount', [TicketController::class, 'setDiscount'])->name('api.v1.tickets.discount');
-        Route::post('tickets/{ticket}/merge', [TicketController::class, 'mergeTickets'])->name('api.v1.tickets.merge');
-        Route::post('tickets/{ticket}/cancel', [TicketController::class, 'cancelTicket'])->name('api.v1.tickets.cancel');
+        // Every {ticket} route below is gated by TicketPolicy::manage: a cashier reaches only
+        // the tickets they opened, a manager/admin any.
+        Route::get('tickets/{ticket}', [TicketController::class, 'getTicket'])->can('manage', 'ticket')->name('api.v1.tickets.show');
+        Route::post('tickets/{ticket}/items', [TicketController::class, 'addItem'])->can('manage', 'ticket')->name('api.v1.tickets.items.store');
+        Route::patch('tickets/{ticket}/items/{ticketItem}', [TicketController::class, 'updateItemQuantity'])->can('manage', 'ticket')->name('api.v1.tickets.items.update');
+        Route::delete('tickets/{ticket}/items/{ticketItem}', [TicketController::class, 'voidItem'])->can('manage', 'ticket')->name('api.v1.tickets.items.void');
+        Route::patch('tickets/{ticket}/discount', [TicketController::class, 'setDiscount'])->can('manage', 'ticket')->name('api.v1.tickets.discount');
+        Route::post('tickets/{ticket}/merge', [TicketController::class, 'mergeTickets'])->can('manage', 'ticket')->name('api.v1.tickets.merge');
+        Route::post('tickets/{ticket}/cancel', [TicketController::class, 'cancelTicket'])->can('manage', 'ticket')->name('api.v1.tickets.cancel');
 
-        Route::post('tickets/{ticket}/charges', [PaymentController::class, 'chargeTicket'])->name('api.v1.tickets.charges.store');
+        Route::post('tickets/{ticket}/charges', [PaymentController::class, 'chargeTicket'])->can('manage', 'ticket')->name('api.v1.tickets.charges.store');
 
         Route::get('receipts', [ReceiptController::class, 'getReceipts'])->name('api.v1.receipts.index');
         Route::get('receipts/{receipt}', [ReceiptController::class, 'getReceipt'])->name('api.v1.receipts.show');

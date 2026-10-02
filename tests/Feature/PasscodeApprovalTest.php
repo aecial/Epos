@@ -197,9 +197,12 @@ test('five failed passcode attempts lock the user out for a minute', function ()
 
     expect($line->fresh()->isVoided())->toBeFalse();
 
-    // The lock is per logged-in user: another cashier is unaffected.
-    Sanctum::actingAs(posUser(), ['*']);
-    voidLine($line, '2468')->assertOk();
+    // The lock is per logged-in user: another cashier is unaffected (on their own ticket -
+    // a cashier can't reach someone else's).
+    $other = posUser();
+    $otherLine = posAddItem(posTicket($line->ticket->shift, $other, 'maria'), posItem('Soup', 80));
+    Sanctum::actingAs($other, ['*']);
+    voidLine($otherLine, '2468')->assertOk();
 
     // ...and it expires.
     $this->travel(61)->seconds();
