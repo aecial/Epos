@@ -74,13 +74,24 @@ class InventoryService
         });
     }
 
+    /**
+     * Sellable units, re-read from the database. For a single item whose loaded state may be stale.
+     */
     public function AvailableForItem(Item $item): float
     {
-        $freshItem = Item::query()->findOrFail($item->id);
+        return $this->AvailableFromLoaded(Item::query()->with('ingredients')->findOrFail($item->id));
+    }
 
-        return match ($freshItem->inventory_type) {
-            'direct' => max(0, (int) $freshItem->quantity - (int) $freshItem->reserved_quantity),
-            'recipe' => $this->availableRecipeQuantity($freshItem),
+    /**
+     * Sellable units computed from the item's already-loaded attributes and `ingredients`
+     * relation, without querying. For lists that eager-loaded `ingredients` in the same
+     * request. A display figure only: ReserveItem re-checks under row locks.
+     */
+    public function AvailableFromLoaded(Item $item): float
+    {
+        return match ($item->inventory_type) {
+            'direct' => max(0, (int) $item->quantity - (int) $item->reserved_quantity),
+            'recipe' => $this->availableRecipeServings($item),
             'none' => INF,
             default => throw new InvalidArgumentException('Unsupported inventory type.'),
         };
@@ -230,14 +241,13 @@ class InventoryService
         }
     }
 
-    private function availableRecipeQuantity(Item $item): float
+    private function availableRecipeServings(Item $item): float
     {
-        $requirements = $item->ingredients()->get();
         $availableServings = INF;
 
-        foreach ($requirements as $recipe) {
-            $available = (float) $recipe->quantity - (float) $recipe->reserved_quantity;
-            $required = (float) $recipe->pivot->quantity_required;
+        foreach ($item->ingredients as $ingredient) {
+            $available = (float) $ingredient->quantity - (float) $ingredient->reserved_quantity;
+            $required = (float) $ingredient->pivot->quantity_required;
             $availableServings = min($availableServings, floor(($available + 0.000001) / $required));
         }
 

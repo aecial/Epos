@@ -53,7 +53,7 @@ Route::middleware(['auth'])->group(function () {
 
             if ($item->inventory_type !== 'none') {
                 try {
-                    $availableStock = $inventoryService->AvailableForItem($item);
+                    $availableStock = $inventoryService->AvailableFromLoaded($item);
                 } catch (InvalidArgumentException) {
                 }
             }

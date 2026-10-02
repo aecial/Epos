@@ -79,7 +79,7 @@ class ItemController extends Controller
         }
 
         try {
-            return $this->inventoryService->AvailableForItem($item);
+            return $this->inventoryService->AvailableFromLoaded($item);
         } catch (InvalidArgumentException) {
             // A recipe item with no ingredients configured yet.
             return null;

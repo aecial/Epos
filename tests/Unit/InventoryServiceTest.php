@@ -8,6 +8,7 @@ use App\Models\Item;
 use App\Services\InventoryService;
 use App\Services\ItemRecipeService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 uses(TestCase::class, RefreshDatabase::class);
@@ -149,6 +150,20 @@ test('fractional recipe quantities reserve the correct raw material amount', fun
 
     expect($this->itik->reserved_quantity)->toBe('1.500')
         ->and($this->inventory->AvailableForItem($item))->toBe(17.0);
+});
+
+test('AvailableFromLoaded computes stock from loaded data without querying', function () {
+    $friedItik = createRecipeItem('Fried Itik', $this->category, $this->itik);
+    $this->itik->update(['reserved_quantity' => 4]);
+    $loaded = $friedItik->fresh('ingredients');
+
+    DB::flushQueryLog();
+    DB::enableQueryLog();
+    $available = $this->inventory->AvailableFromLoaded($loaded);
+    DB::disableQueryLog();
+
+    expect($available)->toBe(6.0)
+        ->and(DB::getQueryLog())->toBe([]);
 });
 
 test('direct items continue using their own quantity inventory', function () {
