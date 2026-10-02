@@ -385,6 +385,10 @@ class TicketService
                 if ((int) $ticket->shift_id !== (int) $target->shift_id) {
                     throw new InvalidArgumentException('Tickets must belong to the same shift to be merged.');
                 }
+
+                if (! $mergedBy->isAdminOrManager() && (int) $ticket->created_by !== (int) $mergedBy->id) {
+                    throw new InvalidArgumentException('You can only merge tickets you opened.');
+                }
             }
 
             $lockedTarget = $tickets[(int) $target->id];

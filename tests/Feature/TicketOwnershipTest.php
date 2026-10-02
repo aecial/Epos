@@ -3,6 +3,7 @@
 use App\Models\Ticket;
 use App\Models\TicketItem;
 use App\Models\User;
+use App\Services\TicketService;
 use Laravel\Sanctum\Sanctum;
 
 /*
@@ -112,6 +113,56 @@ test('a manager or admin lists every cashier\'s tickets, and terminal_id still n
 
     $this->getJson('/api/v1/tickets?terminal_id=POS-02')
         ->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.id', $two->id);
+})->with(['manager', 'admin']);
+
+test('a cashier cannot merge another cashier\'s ticket into their own', function () {
+    $alice = posUser();
+    $bob = posUser();
+    $shift = posOpenShift($alice);
+    $target = posTicket($shift, $alice, 'john');
+    $foreign = posTicket($shift, $bob, 'maria');
+
+    Sanctum::actingAs($alice, ['*']);
+
+    $this->postJson("/api/v1/tickets/{$target->id}/merge", ['merge_from_ticket_ids' => [$foreign->id]])
+        ->assertStatus(422)
+        ->assertJsonValidationErrors('merge_from_ticket_ids.0');
+
+    expect($target->fresh()->status)->toBe('open')
+        ->and($foreign->fresh()->status)->toBe('open');
+});
+
+test('the merge service itself refuses a cashier merging tickets they did not open', function () {
+    $alice = posUser();
+    $bob = posUser();
+    $shift = posOpenShift($alice);
+    $target = posTicket($shift, $alice, 'john');
+    $foreign = posTicket($shift, $bob, 'maria');
+
+    expect(fn () => app(TicketService::class)->MergeTickets($target, [$foreign->id], $alice))
+        ->toThrow(InvalidArgumentException::class, 'You can only merge tickets you opened.');
+
+    expect($target->fresh()->status)->toBe('open')
+        ->and($foreign->fresh()->status)->toBe('open');
+});
+
+test('a manager or admin can merge tickets opened by different cashiers', function (string $role) {
+    $alice = posUser();
+    $bob = posUser();
+    $shift = posOpenShift($alice);
+    $item = posItem('Burger', 100);
+    $target = posTicket($shift, $alice, 'john');
+    $source = posTicket($shift, $bob, 'maria');
+    posAddItem($target, $item, 1);
+    posAddItem($source, $item, 1);
+
+    Sanctum::actingAs(posUser($role), ['*']);
+
+    $this->postJson("/api/v1/tickets/{$target->id}/merge", ['merge_from_ticket_ids' => [$source->id]])
+        ->assertOk()
+        ->assertJsonPath('data.total', 200);
+
+    expect($source->fresh()->status)->toBe('merged');
 })->with(['manager', 'admin']);
 
 test('a kitchen tablet logged in as anyone still completes every cashier\'s items', function () {
