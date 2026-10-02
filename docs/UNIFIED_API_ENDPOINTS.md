@@ -688,7 +688,7 @@ The kitchen-facing read feed and completion toggle. Unlike every other `/api/v1`
 
 **Requires the `kds:read` ability** (or full access). Every open ticket, strictly `created_at` ASC across all terminals, each with its kitchen-relevant lines in the order they were added.
 
-Excludes: paid/cancelled/merged tickets, voided lines, `fee` line_type lines (fee lines never reach the kitchen). Never includes prices or `terminal_id` - the KDS is a kitchen-only, no-money, no-terminal view.
+Excludes: paid/cancelled/merged tickets, voided lines, `fee` line_type lines (fee lines never reach the kitchen), and **completed lines** - a bumped item drops off the feed entirely rather than appearing checked off. A ticket with no pending lines left disappears from this response until something new is added to it, and that add-on then appears alone, not mixed back in with the already-served lines. Never includes prices or `terminal_id` - the KDS is a kitchen-only, no-money, no-terminal view.
 
 ```json
 {
@@ -706,7 +706,6 @@ Excludes: paid/cancelled/merged tickets, voided lines, `fee` line_type lines (fe
                     "item_name": "Fried Itik",
                     "quantity": 2,
                     "notes": "Extra crispy",
-                    "completed": false,
                     "modifiers": [{ "name": "Large" }]
                 }
             ]
@@ -740,7 +739,7 @@ Because the client here is a bearer-token tablet, not a browser session, the bro
 | Event | Fired on | Payload |
 | --- | --- | --- |
 | `ticket.created` | A ticket is created | Full card, shaped like a `GET /kds/orders` row |
-| `ticket.updated` | Items added/voided, quantity changed, or a merge target's lines changed | Full card |
+| `ticket.updated` | Items added/voided, quantity changed, or a merge target's lines changed | Full card (pending lines only - a card can arrive with an empty `items` array, meaning the kitchen should drop it) |
 | `ticket.paid` | The ticket left the feed (paid) | `{ ticket_id, order_number }` |
 | `ticket.cancelled` | The ticket left the feed (cancelled) | `{ ticket_id, order_number }` |
 | `ticket.merged` | Source ticket(s) left the feed (merged into a target) | `{ ticket_id, order_number, removed_ticket_ids, removed_order_numbers }` |

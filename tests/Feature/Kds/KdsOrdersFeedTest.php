@@ -76,6 +76,7 @@ test('tickets are ordered strictly by created_at ascending, items within a card 
     $ticketA->forceFill(['created_at' => now()->subMinutes(5)])->save();
     $ticketB = posTicket($shift, $cashier, 'bob');
     $ticketB->forceFill(['created_at' => now()->subMinutes(2)])->save();
+    posAddItem($ticketB, $item, 1);
 
     $lineLater = posAddItem($ticketA, $item, 1);
     $lineLater->forceFill(['created_at' => now()->subMinutes(1)])->save();
@@ -106,6 +107,7 @@ test('paid, cancelled and merged tickets are excluded from the feed', function (
     app(TicketService::class)->CancelTicket($cancelled, $cashier);
 
     $target = posTicket($shift, $cashier, 'target-ticket');
+    posAddItem($target, $item, 1);
     $source = posTicket($shift, $cashier, 'source-ticket');
     app(TicketService::class)->MergeTickets($target, [$source->id], $cashier);
 
@@ -144,7 +146,7 @@ test('no price fields or terminal info appear anywhere in the payload', function
         ->not->toContain('price');
 });
 
-test('the completed flag reflects completed_at', function () {
+test('completed items drop off the feed entirely, pending ones remain', function () {
     $cashier = posUser();
     $shift = posOpenShift($cashier);
     $item = posItem('Burger', 100);
@@ -158,7 +160,27 @@ test('the completed flag reflects completed_at', function () {
 
     $response = $this->getJson('/api/v1/kds/orders')->assertOk();
 
-    $items = collect($response->json('data.0.items'))->keyBy('ticket_item_id');
-    expect($items[$done->id]['completed'])->toBeTrue();
-    expect($items[$pending->id]['completed'])->toBeFalse();
+    $items = collect($response->json('data.0.items'));
+    expect($items->pluck('ticket_item_id')->all())->toBe([$pending->id]);
+});
+
+test('a ticket with every item completed disappears from the feed until something new is added', function () {
+    $cashier = posUser();
+    $shift = posOpenShift($cashier);
+    $item = posItem('Burger', 100);
+    $ticket = posTicket($shift, $cashier, 'john');
+
+    $served = posAddItem($ticket, $item, 1);
+    $served->update(['completed_at' => now()]);
+
+    Sanctum::actingAs($cashier, ['*']);
+
+    $this->getJson('/api/v1/kds/orders')->assertOk()->assertJsonCount(0, 'data');
+
+    $addOn = app(TicketService::class)->AddItem($ticket, $item, 1);
+
+    $response = $this->getJson('/api/v1/kds/orders')->assertOk();
+    expect($response->json('data'))->toHaveCount(1);
+    $items = collect($response->json('data.0.items'));
+    expect($items->pluck('ticket_item_id')->all())->toBe([$addOn->id]);
 });

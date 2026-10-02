@@ -30,7 +30,8 @@ class KdsService
             ->groupBy('ticket_id');
 
         return $tickets
-            ->map(fn (Ticket $ticket): array => $this->presentCard($ticket, $itemsByTicket->get($ticket->id, collect())))
+            ->filter(fn (Ticket $ticket): bool => $itemsByTicket->has($ticket->id))
+            ->map(fn (Ticket $ticket): array => $this->presentCard($ticket, $itemsByTicket->get($ticket->id)))
             ->values()
             ->all();
     }
@@ -49,13 +50,16 @@ class KdsService
     }
 
     /**
-     * Non-voided, kitchen-visible lines (fee lines are hidden per CLAUDE.md's explicit rule),
-     * in the order they were added.
+     * Non-voided, not-yet-completed, kitchen-visible lines (fee lines are hidden per CLAUDE.md's
+     * explicit rule), in the order they were added. Completed lines drop off the feed entirely -
+     * bumping an item removes it from the card, so a later add-on to an already-served ticket
+     * shows only the new line(s), never the already-completed ones.
      */
     private function kitchenItemsQuery(): Builder
     {
         return TicketItem::query()
             ->whereNull('voided_at')
+            ->whereNull('completed_at')
             ->whereIn('line_type', ['item', 'custom'])
             ->orderBy('created_at')
             ->with('modifiers');
@@ -77,7 +81,6 @@ class KdsService
                 'item_name' => $item->item_name,
                 'quantity' => $item->quantity,
                 'notes' => $item->notes,
-                'completed' => $item->isCompleted(),
                 'modifiers' => $item->modifiers
                     ->map(fn (TicketItemModifier $modifier): array => ['name' => $modifier->name])
                     ->values()
