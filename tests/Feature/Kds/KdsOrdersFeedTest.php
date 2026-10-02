@@ -211,3 +211,26 @@ test('bumping a whole ticket then adding more shows only the new lines, not what
     expect($items->pluck('ticket_item_id')->all())->toBe([$newRice->id, $newSoftdrink->id]);
     expect($items->pluck('item_name')->all())->toBe(['Rice', 'Softdrink']);
 });
+
+test('adding an item while others on the ticket are still pending appends to the same card, not a new one', function () {
+    $cashier = posUser();
+    $shift = posOpenShift($cashier);
+    $friedItik = posItem('Fried Itik', 150);
+    $rice = posItem('Rice', 20);
+    $ticket = posTicket($shift, $cashier, 'john');
+
+    $existing = posAddItem($ticket, $friedItik, 1);
+
+    Sanctum::actingAs($cashier, ['*']);
+
+    $this->getJson('/api/v1/kds/orders')->assertOk()->assertJsonCount(1, 'data');
+
+    $newItem = app(TicketService::class)->AddItem($ticket, $rice, 2);
+
+    $response = $this->getJson('/api/v1/kds/orders')->assertOk();
+    expect($response->json('data'))->toHaveCount(1);
+    expect($response->json('data.0.ticket_id'))->toBe($ticket->id);
+
+    $items = collect($response->json('data.0.items'));
+    expect($items->pluck('ticket_item_id')->all())->toBe([$existing->id, $newItem->id]);
+});
