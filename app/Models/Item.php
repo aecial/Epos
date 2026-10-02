@@ -23,6 +23,7 @@ class Item extends Model
         'image_url',
         'status',
     ];
+
     public function category(): BelongsTo
     {
         return $this->belongsTo(Category::class);
@@ -31,13 +32,25 @@ class Item extends Model
     public function modifiers(): BelongsToMany
     {
         return $this->belongsToMany(Modifier::class)
+            ->using(ItemModifier::class)
             ->withPivot(['price_modifier', 'status', 'display_order'])
             ->withTimestamps();
+    }
+
+    /**
+     * Modifiers the POS may sell on this item: active globally and active for this item.
+     */
+    public function sellableModifiers(): BelongsToMany
+    {
+        return $this->modifiers()
+            ->where('modifiers.status', 'active')
+            ->wherePivot('status', 'active');
     }
 
     public function ingredients(): BelongsToMany
     {
         return $this->belongsToMany(Ingredient::class, 'item_ingredient')
+            ->using(ItemIngredient::class)
             ->withPivot(['quantity_required', 'unit'])
             ->withTimestamps();
     }

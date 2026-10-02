@@ -29,6 +29,7 @@ class Modifier extends Model
     public function items(): BelongsToMany
     {
         return $this->belongsToMany(Item::class)
+            ->using(ItemModifier::class)
             ->withPivot(['price_modifier', 'status', 'display_order'])
             ->withTimestamps();
     }

@@ -38,6 +38,7 @@ class Ingredient extends Model
     public function items(): BelongsToMany
     {
         return $this->belongsToMany(Item::class, 'item_ingredient')
+            ->using(ItemIngredient::class)
             ->withPivot(['quantity_required', 'unit'])
             ->withTimestamps();
     }

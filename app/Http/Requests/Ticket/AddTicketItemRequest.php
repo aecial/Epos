@@ -44,7 +44,14 @@ class AddTicketItemRequest extends FormRequest
                     return;
                 }
 
-                $entryMode = Item::query()->whereKey($this->input('item_id'))->value('entry_mode') ?? 'fixed';
+                $item = Item::query()->findOrFail($this->input('item_id'));
+                $modifierIds = $this->input('modifier_ids', []);
+
+                if ($modifierIds !== [] && $item->sellableModifiers()->whereKey($modifierIds)->count() !== count($modifierIds)) {
+                    $validator->errors()->add('modifier_ids', 'One or more modifiers are not available for this item.');
+                }
+
+                $entryMode = $item->entry_mode ?? 'fixed';
                 $needsPrice = in_array($entryMode, ['price', 'name_price'], true);
                 $needsName = $entryMode === 'name_price';
 

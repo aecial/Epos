@@ -94,11 +94,15 @@ class TicketService
                 throw new InvalidArgumentException('Cannot add items to a ticket that is not open.');
             }
 
-            $this->inventoryService->ReserveItem($item, $quantity);
-
             $itemModifiers = $modifierIds === []
                 ? collect()
-                : $item->modifiers()->whereIn('modifiers.id', $modifierIds)->get();
+                : $item->sellableModifiers()->whereKey($modifierIds)->get();
+
+            if ($itemModifiers->count() !== count(array_unique($modifierIds))) {
+                throw new InvalidArgumentException("One or more modifiers are not available for {$item->name}.");
+            }
+
+            $this->inventoryService->ReserveItem($item, $quantity);
 
             $unitPrice ??= (float) $item->base_price;
             $modifierTotal = (float) $itemModifiers->sum(fn (Modifier $modifier): float => (float) $modifier->pivot->price_modifier);

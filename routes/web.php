@@ -157,7 +157,7 @@ Route::middleware(['auth'])->group(function () {
     Route::delete('categories/{category}', [CategoryController::class, 'deleteCategory'])->middleware('can:delete,category')->name('categories.destroy');
     Route::get('items/{item}/edit', function (Item $item) {
         return Inertia::render('UpdateItemPage', [
-            'item' => $item->load(['ingredients', 'modifiers']),
+            'item' => $item->load(['ingredients', 'modifiers' => fn ($query) => $query->orderByPivot('display_order')]),
             'categories' => Category::orderBy('name')->get(['id', 'name', 'type']),
             'ingredients' => Ingredient::where('status', 'active')->orderBy('name')->get(['id', 'name', 'unit']),
             'modifierGroups' => ModifierGroup::query()

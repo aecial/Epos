@@ -196,14 +196,14 @@ class InventoryService
      */
     private function lockedRequirements(Item $item): array
     {
-        $recipes = $item->ingredients()->get()->sortBy('id');
+        // Ascending id order keeps lock acquisition consistent across concurrent transactions.
+        $ingredients = $item->ingredients()->orderBy('ingredients.id')->lockForUpdate()->get();
         $requirements = [];
 
-        foreach ($recipes as $recipe) {
-            $ingredient = Ingredient::query()->lockForUpdate()->findOrFail($recipe->id);
+        foreach ($ingredients as $ingredient) {
             $requirements[] = [
                 'ingredient' => $ingredient,
-                'quantity' => (float) $recipe->pivot->quantity_required,
+                'quantity' => (float) $ingredient->pivot->quantity_required,
             ];
         }
 

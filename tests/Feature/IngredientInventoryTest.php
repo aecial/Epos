@@ -52,7 +52,7 @@ test('manager can create raw materials and assign them to a recipe item', functi
         ]],
     ])->assertSuccessful()
         ->assertJsonPath('ingredients.0.id', $ingredient->id)
-        ->assertJsonPath('ingredients.0.pivot.quantity_required', 1);
+        ->assertJsonPath('ingredients.0.pivot.quantity_required', '1.000');
 
     $this->get("/items/{$item->id}/recipe")
         ->assertSuccessful()

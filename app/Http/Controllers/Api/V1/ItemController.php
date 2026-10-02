@@ -54,7 +54,7 @@ class ItemController extends Controller
             'entry_mode' => $item->entry_mode,
             'image_url' => $item->image_url,
             'available_stock' => $this->availableStock($item),
-            'modifiers' => $item->modifiers->map(fn (Modifier $modifier): array => [
+            'modifiers' => $item->sellableModifiers->map(fn (Modifier $modifier): array => [
                 'id' => $modifier->id,
                 'name' => $modifier->name,
                 'price_modifier' => $modifier->pivot->price_modifier,

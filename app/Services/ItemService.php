@@ -153,13 +153,8 @@ class ItemService
             ->whereHas('category', fn ($query) => $query->where('is_visible_to_pos', true))
             ->with([
                 'category:id,name,type',
-                // Only modifiers that are active both globally and for this item, in the
-                // order the back office arranged them.
-                'modifiers' => fn ($query) => $query
-                    ->where('modifiers.status', 'active')
-                    ->wherePivot('status', 'active')
-                    ->orderBy('item_modifier.display_order'),
-                'modifiers.group:id,name,is_required',
+                'sellableModifiers' => fn ($query) => $query->orderByPivot('display_order'),
+                'sellableModifiers.group:id,name,is_required',
             ]);
     }
 }
