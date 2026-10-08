@@ -7,6 +7,7 @@ use App\Models\TicketItem;
 use App\Services\PaymentService;
 use App\Services\ReceiptService;
 use App\Services\TicketService;
+use Illuminate\Support\Carbon;
 use Laravel\Sanctum\Sanctum;
 
 test('paying issues one receipt per charge, numbered in sequence, with each charge\'s slice of the bill', function () {
@@ -265,4 +266,21 @@ test('an unknown receipt is a clean 404', function () {
     Sanctum::actingAs(posUser(), ['*']);
 
     $this->getJson('/api/v1/receipts/999999')->assertNotFound()->assertJsonPath('success', false);
+});
+
+test('receipts are numbered by the Philippine calendar day, not UTC', function () {
+    expect(config('app.timezone'))->toBe('Asia/Manila');
+
+    // 00:30 in Manila is still 16:30 the previous day in UTC.
+    $this->travelTo(Carbon::parse('2026-10-08 00:30:00', 'Asia/Manila'));
+
+    $cashier = posUser();
+    $ticket = posTicket(posOpenShift($cashier), $cashier, 'john');
+    posAddItem($ticket, posItem('Burger', 100));
+    $paid = posPay($ticket->fresh(), $cashier, [['payment_method' => 'cash', 'amount' => 100, 'tendered_amount' => 100]]);
+
+    $receipt = $paid->receipts()->firstOrFail();
+
+    expect($receipt->receipt_number)->toBe('REC-2026-10-08-001')
+        ->and($receipt->receipt_date)->toStartWith('2026-10-08');
 });

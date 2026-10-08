@@ -6,7 +6,7 @@ use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
 
 // KDS completion is operational state, not audit history (see ClearKdsCompletionState) - swept
-// nightly, off-peak. If a shift ever runs past this hour, in-progress ticks on a still-open
+// nightly, off-peak. 03:00 in the app timezone (Asia/Manila, config/app.php). If a shift ever runs past this hour, in-progress ticks on a still-open
 // ticket get cleared mid-service; confirm this time against real operating hours.
 Schedule::command('kds:clear-completed')->dailyAt('03:00');
 
