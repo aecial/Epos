@@ -4,7 +4,7 @@ import { NavUser } from '@/components/nav-user';
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar';
 import { type NavItem } from '@/types';
 import { Link } from '@inertiajs/react';
-import { BookOpen, Clock, Computer, Folder, LayoutGrid, Users } from 'lucide-react';
+import { BookOpen, Clock, Computer, Folder, LayoutGrid, ReceiptText, Users } from 'lucide-react';
 import AppLogo from './app-logo';
 
 const mainNavItems: NavItem[] = [
@@ -27,6 +27,11 @@ const mainNavItems: NavItem[] = [
         title: 'Shifts',
         url: '/shifts',
         icon: Clock,
+    },
+    {
+        title: 'Tickets',
+        url: '/tickets',
+        icon: ReceiptText,
     },
 ];
 

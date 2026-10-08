@@ -1,7 +1,7 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
-import { Head } from '@inertiajs/react';
+import { Head, Link } from '@inertiajs/react';
 import { Banknote, Clock, Printer, ReceiptText, Undo2 } from 'lucide-react';
 import { type ReactNode } from 'react';
 
@@ -176,10 +176,14 @@ export default function ShiftDetailPage({
                         </div>
                         <div className="grid grid-cols-4 border-t text-center">
                             {(['paid', 'open', 'cancelled', 'merged'] as const).map((status) => (
-                                <div key={status} className="px-2 py-3">
+                                <Link
+                                    key={status}
+                                    href={route('tickets.index', { shift_id: shift.id, status })}
+                                    className="hover:bg-muted px-2 py-3 print:pointer-events-none"
+                                >
                                     <div className="text-lg font-semibold">{ticketCounts[status]}</div>
                                     <div className="text-muted-foreground text-xs capitalize">{status}</div>
-                                </div>
+                                </Link>
                             ))}
                         </div>
                     </div>
