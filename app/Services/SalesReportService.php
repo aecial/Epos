@@ -2,10 +2,13 @@
 
 namespace App\Services;
 
+use App\Models\Ingredient;
+use App\Models\Item;
 use App\Models\RefundItem;
 use App\Models\ShiftTransaction;
 use App\Models\Ticket;
 use App\Models\TicketItem;
+use App\Models\TicketItemIngredient;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Collection;
 
@@ -75,6 +78,115 @@ class SalesReportService
                 'net_profit' => $this->toPesos($grossProfitCents - $expensesCents),
             ],
         ];
+    }
+
+    /**
+     * The same period by raw material: how much of each ingredient the paid recipe lines took
+     * (ticket_item_ingredients, recorded at payment), less what approved refunds put back, and
+     * which dishes used it. Raw materials carry quantity and cost only - a dish's sales and profit
+     * are shown under every ingredient it uses, for context, and never summed per ingredient
+     * (a dish made of pork and egg can't fairly split its profit between them).
+     *
+     * @param  array<int, array<string, mixed>>  $itemRows  the ItemsSold() rows for the same period
+     * @return array{rawMaterials: array<int, array<string, mixed>>, directItems: array<int, array{name: string, quantity: int}>}
+     */
+    public function RawMaterialUsage(CarbonInterface $from, CarbonInterface $to, array $itemRows): array
+    {
+        $rowsByItem = collect($itemRows)->where('line_type', 'item')->keyBy('item_id');
+        $materials = [];
+
+        $used = TicketItemIngredient::query()
+            ->join('ticket_items', 'ticket_items.id', '=', 'ticket_item_ingredients.ticket_item_id')
+            ->join('tickets', 'tickets.id', '=', 'ticket_items.ticket_id')
+            ->where('tickets.status', 'paid')
+            ->whereBetween('tickets.closed_at', [$from, $to])
+            ->whereNull('ticket_items.voided_at')
+            ->get([
+                'ticket_item_ingredients.ingredient_id', 'ticket_item_ingredients.quantity_used',
+                'ticket_item_ingredients.cost_per_unit', 'ticket_items.item_id', 'ticket_items.quantity as servings',
+            ]);
+
+        foreach ($used as $usage) {
+            $dish = &$this->dishFor($materials, $usage->ingredient_id, $usage->item_id);
+            $dish['servings'] += (int) $usage->servings;
+            $dish['used'] += (float) $usage->quantity_used;
+            $dish['cost_cents'] += $this->toCents((float) $usage->quantity_used * (float) $usage->cost_per_unit);
+            unset($dish);
+        }
+
+        // Approved refunds put back their share of what the line took (see RefundService).
+        foreach ($this->approvedRefundItems($from, $to)->load('ticketItem.ingredientUsage') as $refundItem) {
+            $line = $refundItem->ticketItem;
+
+            foreach ($line->ingredientUsage as $usage) {
+                $returned = (float) $usage->quantity_used * (int) $refundItem->quantity / (int) $line->quantity;
+                $dish = &$this->dishFor($materials, $usage->ingredient_id, $line->item_id);
+                $dish['returned'] += $returned;
+                $dish['cost_cents'] -= $this->toCents($returned * (float) $usage->cost_per_unit);
+                unset($dish);
+            }
+        }
+
+        $ingredients = Ingredient::query()
+            ->with('ingredientGroup:id,name')
+            ->whereKey(array_keys($materials))
+            ->get()
+            ->keyBy('id');
+        $itemNames = Item::query()
+            ->whereKey(collect($materials)->flatMap(fn (array $dishes): array => array_keys($dishes))->unique())
+            ->pluck('name', 'id');
+
+        $rawMaterials = collect($materials)->map(function (array $dishes, int $ingredientId) use ($ingredients, $itemNames, $rowsByItem): array {
+            $ingredient = $ingredients[$ingredientId];
+            $dishRows = collect($dishes)->map(fn (array $dish, int $itemId): array => [
+                'item_id' => $itemId,
+                'name' => $rowsByItem[$itemId]['name'] ?? $itemNames[$itemId] ?? 'Unknown item',
+                'servings' => $dish['servings'],
+                'used' => round($dish['used'], 3),
+                'returned' => round($dish['returned'], 3),
+                'net_used' => round($dish['used'] - $dish['returned'], 3),
+                'cost' => $this->toPesos($dish['cost_cents']),
+                'net_sales' => $rowsByItem[$itemId]['net_sales'] ?? null,
+                'profit' => $rowsByItem[$itemId]['profit'] ?? null,
+            ])->sortByDesc('net_used')->values();
+
+            return [
+                'ingredient_id' => $ingredientId,
+                'name' => $ingredient->name,
+                'group' => $ingredient->ingredientGroup?->name,
+                'unit' => $ingredient->unit,
+                'used' => round($dishRows->sum('used'), 3),
+                'returned' => round($dishRows->sum('returned'), 3),
+                'net_used' => round($dishRows->sum('net_used'), 3),
+                'cost' => $this->toPesos((int) collect($dishes)->sum('cost_cents')),
+                'stock' => round((float) $ingredient->quantity, 3),
+                'available' => round((float) $ingredient->quantity - (float) $ingredient->reserved_quantity, 3),
+                'dishes' => $dishRows->all(),
+            ];
+        })->sortBy([['group', 'asc'], ['name', 'asc']])->values();
+
+        // What sold without touching raw materials (direct-stock and untracked menu items).
+        $recipeItemIds = Item::query()->whereKey($rowsByItem->keys())->where('inventory_type', 'recipe')->pluck('id')->all();
+        $directItems = $rowsByItem
+            ->reject(fn (array $row): bool => in_array($row['item_id'], $recipeItemIds, true) || $row['quantity'] === 0)
+            ->map(fn (array $row): array => ['name' => $row['name'], 'quantity' => $row['quantity']])
+            ->sortBy('name')
+            ->values();
+
+        return ['rawMaterials' => $rawMaterials->all(), 'directItems' => $directItems->all()];
+    }
+
+    /**
+     * The per-dish accumulator under an ingredient, created on first use.
+     *
+     * @param  array<int, array<int, array<string, mixed>>>  $materials
+     * @return array<string, mixed>
+     */
+    private function &dishFor(array &$materials, int $ingredientId, int $itemId): array
+    {
+        $materials[$ingredientId][$itemId] ??= ['servings' => 0, 'used' => 0.0, 'returned' => 0.0, 'cost_cents' => 0];
+
+        return $materials[$ingredientId][$itemId];
     }
 
     /**

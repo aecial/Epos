@@ -23,13 +23,19 @@ class SalesReportController extends Controller
         $dateFrom = $request->validated('date_from') ?? $request->validated('date_to') ?? $today;
         $dateTo = $request->validated('date_to') ?? $dateFrom;
 
-        $report = $this->salesReportService->ItemsSold(
-            Carbon::parse($dateFrom)->startOfDay(),
-            Carbon::parse($dateTo)->endOfDay(),
-        );
+        $view = $request->validated('view') ?? 'items';
+        $from = Carbon::parse($dateFrom)->startOfDay();
+        $to = Carbon::parse($dateTo)->endOfDay();
+
+        $report = $this->salesReportService->ItemsSold($from, $to);
+        $rawMaterialUsage = $view === 'raw-materials'
+            ? $this->salesReportService->RawMaterialUsage($from, $to, $report['rows'])
+            : ['rawMaterials' => [], 'directItems' => []];
 
         return Inertia::render('SalesReportPage', [
             ...$report,
+            ...$rawMaterialUsage,
+            'view' => $view,
             'period' => ['date_from' => $dateFrom, 'date_to' => $dateTo, 'today' => $today],
             // Only meaningful while the period reaches today: orders taken but not yet paid.
             'openTickets' => $dateFrom <= $today && $today <= $dateTo ? $this->salesReportService->OpenTickets() : null,

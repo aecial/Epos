@@ -2,7 +2,8 @@ import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, Table
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
-import { ChevronLeft, ChevronRight, Printer, ShoppingBag, TriangleAlert } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, Printer, ShoppingBag, TriangleAlert } from 'lucide-react';
+import { Fragment, useState } from 'react';
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Back Office', href: route('back-office') },
@@ -43,6 +44,36 @@ type Period = { date_from: string; date_to: string; today: string };
 
 type OpenTickets = { count: number; total: number } | null;
 
+type ReportView = 'items' | 'raw-materials';
+
+type RawMaterialDish = {
+    item_id: number;
+    name: string;
+    servings: number;
+    used: number;
+    returned: number;
+    net_used: number;
+    cost: number;
+    net_sales: number | null;
+    profit: number | null;
+};
+
+type RawMaterial = {
+    ingredient_id: number;
+    name: string;
+    group: string | null;
+    unit: 'piece' | 'kg' | 'gram' | 'liter' | 'ml';
+    used: number;
+    returned: number;
+    net_used: number;
+    cost: number;
+    stock: number;
+    available: number;
+    dishes: RawMaterialDish[];
+};
+
+type DirectItem = { name: string; quantity: number };
+
 function peso(value: number): string {
     return `${value < 0 ? '−' : ''}₱${Math.abs(value).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
@@ -80,22 +111,152 @@ function SummaryCard({ label, value, hint, valueClass = '' }: { label: string; v
     );
 }
 
+const unitLabel: Record<RawMaterial['unit'], string> = { piece: 'pcs', kg: 'kg', gram: 'g', liter: 'L', ml: 'ml' };
+
+function amount(value: number, unit: RawMaterial['unit']): string {
+    return `${value.toLocaleString('en-PH', { maximumFractionDigits: 3 })} ${unitLabel[unit]}`;
+}
+
+function RawMaterialsPanel({
+    rawMaterials,
+    directItems,
+    isSingleDay,
+}: {
+    rawMaterials: RawMaterial[];
+    directItems: DirectItem[];
+    isSingleDay: boolean;
+}) {
+    const [collapsed, setCollapsed] = useState<number[]>([]);
+
+    function toggle(ingredientId: number) {
+        setCollapsed((current) => (current.includes(ingredientId) ? current.filter((id) => id !== ingredientId) : [...current, ingredientId]));
+    }
+
+    return (
+        <div className={`${panelClass} overflow-auto`}>
+            <Table>
+                <TableHeader>
+                    <TableRow>
+                        <TableHead>Raw material / dish</TableHead>
+                        <TableHead className="text-right">Servings</TableHead>
+                        <TableHead className="text-right">Used</TableHead>
+                        <TableHead className="text-right">Returned</TableHead>
+                        <TableHead className="text-right">Net used</TableHead>
+                        <TableHead className="text-right">Cost</TableHead>
+                        <TableHead className="text-right">Dish sales</TableHead>
+                        <TableHead className="text-right">Dish profit</TableHead>
+                        <TableHead className="text-right">Stock left</TableHead>
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
+                    {rawMaterials.length === 0 && (
+                        <TableRow>
+                            <TableCell colSpan={9} className="text-muted-foreground py-8 text-center text-sm">
+                                {isSingleDay ? 'No raw materials used on this day.' : 'No raw materials used in this period.'}
+                            </TableCell>
+                        </TableRow>
+                    )}
+                    {rawMaterials.map((material, index) => {
+                        const isCollapsed = collapsed.includes(material.ingredient_id);
+                        const showGroup = index === 0 || material.group !== rawMaterials[index - 1].group;
+
+                        return (
+                            <Fragment key={material.ingredient_id}>
+                                {showGroup && (
+                                    <TableRow className="bg-muted/50 hover:bg-muted/50">
+                                        <TableCell colSpan={9} className="text-muted-foreground py-1.5 text-xs font-semibold tracking-wide uppercase">
+                                            {material.group ?? 'No group'}
+                                        </TableCell>
+                                    </TableRow>
+                                )}
+                                <TableRow className="cursor-pointer font-semibold" onClick={() => toggle(material.ingredient_id)}>
+                                    <TableCell>
+                                        <span className="inline-flex items-center gap-1">
+                                            <ChevronDown className={`size-4 transition-transform print:hidden ${isCollapsed ? '-rotate-90' : ''}`} />
+                                            {material.name}
+                                        </span>
+                                    </TableCell>
+                                    <TableCell />
+                                    <TableCell className="text-right">{amount(material.used, material.unit)}</TableCell>
+                                    <TableCell className="text-right">
+                                        {material.returned > 0 ? amount(material.returned, material.unit) : '—'}
+                                    </TableCell>
+                                    <TableCell className="text-right">{amount(material.net_used, material.unit)}</TableCell>
+                                    <TableCell className="text-right">{peso(material.cost)}</TableCell>
+                                    <TableCell />
+                                    <TableCell />
+                                    <TableCell className="text-right font-normal">
+                                        {amount(material.stock, material.unit)}
+                                        {material.available !== material.stock && (
+                                            <div className="text-muted-foreground text-xs">{amount(material.available, material.unit)} available</div>
+                                        )}
+                                    </TableCell>
+                                </TableRow>
+                                {!isCollapsed &&
+                                    material.dishes.map((dish) => (
+                                        <TableRow key={`${material.ingredient_id}-${dish.item_id}`} className="text-sm">
+                                            <TableCell className="text-muted-foreground pl-10">{dish.name}</TableCell>
+                                            <TableCell className="text-right">{dish.servings}</TableCell>
+                                            <TableCell className="text-right">{amount(dish.used, material.unit)}</TableCell>
+                                            <TableCell className="text-right">
+                                                {dish.returned > 0 ? amount(dish.returned, material.unit) : '—'}
+                                            </TableCell>
+                                            <TableCell className="text-right">{amount(dish.net_used, material.unit)}</TableCell>
+                                            <TableCell className="text-right">{peso(dish.cost)}</TableCell>
+                                            <TableCell className="text-muted-foreground text-right">
+                                                {dish.net_sales === null ? '—' : peso(dish.net_sales)}
+                                            </TableCell>
+                                            <TableCell className={`text-right ${dish.profit === null ? '' : profitClass(dish.profit)}`}>
+                                                {dish.profit === null ? '—' : peso(dish.profit)}
+                                            </TableCell>
+                                            <TableCell />
+                                        </TableRow>
+                                    ))}
+                            </Fragment>
+                        );
+                    })}
+                </TableBody>
+            </Table>
+            <p className="text-muted-foreground border-t px-5 py-3 text-xs">
+                Dish sales and profit are the dish's totals for the period, shown under every raw material it uses — they aren't added up per raw
+                material.
+            </p>
+            {directItems.length > 0 && (
+                <p className="border-t px-5 py-3 text-sm">
+                    <span className="text-muted-foreground">Not made from raw materials: </span>
+                    {directItems.map((item) => `${item.name} × ${item.quantity}`).join(', ')}
+                </p>
+            )}
+        </div>
+    );
+}
+
 export default function SalesReportPage({
     rows,
     summary,
     period,
     openTickets,
+    view,
+    rawMaterials,
+    directItems,
 }: {
     rows: SoldRow[];
     summary: Summary;
     period: Period;
     openTickets: OpenTickets;
+    view: ReportView;
+    rawMaterials: RawMaterial[];
+    directItems: DirectItem[];
 }) {
     const isSingleDay = period.date_from === period.date_to;
     const yesterday = addDays(period.today, -1);
 
-    function showPeriod(dateFrom: string, dateTo: string = dateFrom) {
-        router.get(route('sales.index'), { date_from: dateFrom, date_to: dateTo }, { preserveScroll: true });
+    function showPeriod(dateFrom: string, dateTo: string = dateFrom, nextView: ReportView = view) {
+        router.get(route('sales.index'), { date_from: dateFrom, date_to: dateTo, view: nextView }, { preserveScroll: true });
+    }
+
+    function showView(nextView: ReportView) {
+        showPeriod(period.date_from, period.date_to, nextView);
     }
 
     const title = isSingleDay
@@ -209,82 +370,99 @@ export default function SalesReportPage({
                     />
                 </div>
 
-                <div className={`${panelClass} overflow-auto`}>
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Item</TableHead>
-                                <TableHead className="text-right">Qty</TableHead>
-                                <TableHead className="text-right">Gross</TableHead>
-                                <TableHead className="text-right">Discount</TableHead>
-                                <TableHead className="text-right">Net sales</TableHead>
-                                <TableHead className="text-right">Refunded</TableHead>
-                                <TableHead className="text-right">Cost</TableHead>
-                                <TableHead className="text-right">Profit</TableHead>
-                                <TableHead className="text-right">Margin</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {rows.length === 0 && (
-                                <TableRow>
-                                    <TableCell colSpan={9} className="text-muted-foreground py-8 text-center text-sm">
-                                        {isSingleDay ? 'Nothing sold on this day.' : 'Nothing sold in this period.'}
-                                    </TableCell>
-                                </TableRow>
-                            )}
-                            {rows.map((row) => (
-                                <TableRow key={row.key}>
-                                    <TableCell>
-                                        <div className="flex flex-wrap items-center gap-2">
-                                            <span className="font-medium">{row.name}</span>
-                                            {row.line_type !== 'item' && (
-                                                <span className="rounded-full border px-2 py-0.5 text-xs capitalize">{row.line_type}</span>
-                                            )}
-                                            {row.missing_cost && (
-                                                <span
-                                                    className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-xs text-amber-700 dark:text-amber-400"
-                                                    title="Sold with no cost recorded, so its profit is overstated. Set its cost or recipe on the item."
-                                                >
-                                                    <TriangleAlert className="size-3" />
-                                                    No cost set
-                                                </span>
-                                            )}
-                                        </div>
-                                    </TableCell>
-                                    <TableCell className="text-right">{row.quantity}</TableCell>
-                                    <TableCell className="text-right">{peso(row.gross_sales)}</TableCell>
-                                    <TableCell className="text-right">{row.discount > 0 ? `−${peso(row.discount)}` : '—'}</TableCell>
-                                    <TableCell className="text-right font-medium">{peso(row.net_sales)}</TableCell>
-                                    <TableCell className="text-right">
-                                        {row.refunded > 0
-                                            ? `−${peso(row.refunded)}${row.refunded_quantity > 0 ? ` (${row.refunded_quantity})` : ''}`
-                                            : '—'}
-                                    </TableCell>
-                                    <TableCell className="text-right">{peso(row.cost)}</TableCell>
-                                    <TableCell className={`text-right font-medium ${profitClass(row.profit)}`}>{peso(row.profit)}</TableCell>
-                                    <TableCell className="text-right">{row.margin === null ? '—' : `${row.margin}%`}</TableCell>
-                                </TableRow>
-                            ))}
-                        </TableBody>
-                        {rows.length > 0 && (
-                            <TableFooter>
-                                <TableRow>
-                                    <TableCell className="font-semibold">Total</TableCell>
-                                    <TableCell className="text-right font-semibold">{summary.items_sold}</TableCell>
-                                    <TableCell className="text-right">{peso(summary.gross_sales)}</TableCell>
-                                    <TableCell className="text-right">{summary.discounts > 0 ? `−${peso(summary.discounts)}` : '—'}</TableCell>
-                                    <TableCell className="text-right font-semibold">{peso(summary.net_sales)}</TableCell>
-                                    <TableCell className="text-right">{summary.refunds > 0 ? `−${peso(summary.refunds)}` : '—'}</TableCell>
-                                    <TableCell className="text-right">{peso(summary.cost)}</TableCell>
-                                    <TableCell className={`text-right font-semibold ${profitClass(summary.gross_profit)}`}>
-                                        {peso(summary.gross_profit)}
-                                    </TableCell>
-                                    <TableCell />
-                                </TableRow>
-                            </TableFooter>
-                        )}
-                    </Table>
+                <div className="flex gap-1 self-start rounded-lg border p-1 print:hidden">
+                    {(['items', 'raw-materials'] as const).map((tab) => (
+                        <button
+                            key={tab}
+                            type="button"
+                            onClick={() => showView(tab)}
+                            className={`rounded-md px-3 py-1.5 text-sm font-medium ${view === tab ? 'bg-muted' : 'text-muted-foreground hover:text-foreground'}`}
+                        >
+                            {tab === 'items' ? 'By item' : 'By raw material'}
+                        </button>
+                    ))}
                 </div>
+
+                {view === 'items' ? (
+                    <div className={`${panelClass} overflow-auto`}>
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Item</TableHead>
+                                    <TableHead className="text-right">Qty</TableHead>
+                                    <TableHead className="text-right">Gross</TableHead>
+                                    <TableHead className="text-right">Discount</TableHead>
+                                    <TableHead className="text-right">Net sales</TableHead>
+                                    <TableHead className="text-right">Refunded</TableHead>
+                                    <TableHead className="text-right">Cost</TableHead>
+                                    <TableHead className="text-right">Profit</TableHead>
+                                    <TableHead className="text-right">Margin</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {rows.length === 0 && (
+                                    <TableRow>
+                                        <TableCell colSpan={9} className="text-muted-foreground py-8 text-center text-sm">
+                                            {isSingleDay ? 'Nothing sold on this day.' : 'Nothing sold in this period.'}
+                                        </TableCell>
+                                    </TableRow>
+                                )}
+                                {rows.map((row) => (
+                                    <TableRow key={row.key}>
+                                        <TableCell>
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                <span className="font-medium">{row.name}</span>
+                                                {row.line_type !== 'item' && (
+                                                    <span className="rounded-full border px-2 py-0.5 text-xs capitalize">{row.line_type}</span>
+                                                )}
+                                                {row.missing_cost && (
+                                                    <span
+                                                        className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-xs text-amber-700 dark:text-amber-400"
+                                                        title="Sold with no cost recorded, so its profit is overstated. Set its cost or recipe on the item."
+                                                    >
+                                                        <TriangleAlert className="size-3" />
+                                                        No cost set
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </TableCell>
+                                        <TableCell className="text-right">{row.quantity}</TableCell>
+                                        <TableCell className="text-right">{peso(row.gross_sales)}</TableCell>
+                                        <TableCell className="text-right">{row.discount > 0 ? `−${peso(row.discount)}` : '—'}</TableCell>
+                                        <TableCell className="text-right font-medium">{peso(row.net_sales)}</TableCell>
+                                        <TableCell className="text-right">
+                                            {row.refunded > 0
+                                                ? `−${peso(row.refunded)}${row.refunded_quantity > 0 ? ` (${row.refunded_quantity})` : ''}`
+                                                : '—'}
+                                        </TableCell>
+                                        <TableCell className="text-right">{peso(row.cost)}</TableCell>
+                                        <TableCell className={`text-right font-medium ${profitClass(row.profit)}`}>{peso(row.profit)}</TableCell>
+                                        <TableCell className="text-right">{row.margin === null ? '—' : `${row.margin}%`}</TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                            {rows.length > 0 && (
+                                <TableFooter>
+                                    <TableRow>
+                                        <TableCell className="font-semibold">Total</TableCell>
+                                        <TableCell className="text-right font-semibold">{summary.items_sold}</TableCell>
+                                        <TableCell className="text-right">{peso(summary.gross_sales)}</TableCell>
+                                        <TableCell className="text-right">{summary.discounts > 0 ? `−${peso(summary.discounts)}` : '—'}</TableCell>
+                                        <TableCell className="text-right font-semibold">{peso(summary.net_sales)}</TableCell>
+                                        <TableCell className="text-right">{summary.refunds > 0 ? `−${peso(summary.refunds)}` : '—'}</TableCell>
+                                        <TableCell className="text-right">{peso(summary.cost)}</TableCell>
+                                        <TableCell className={`text-right font-semibold ${profitClass(summary.gross_profit)}`}>
+                                            {peso(summary.gross_profit)}
+                                        </TableCell>
+                                        <TableCell />
+                                    </TableRow>
+                                </TableFooter>
+                            )}
+                        </Table>
+                    </div>
+                ) : (
+                    <RawMaterialsPanel rawMaterials={rawMaterials} directItems={directItems} isSingleDay={isSingleDay} />
+                )}
             </div>
         </AppLayout>
     );

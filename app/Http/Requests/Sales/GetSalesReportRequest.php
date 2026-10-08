@@ -20,6 +20,7 @@ class GetSalesReportRequest extends FormRequest
         return [
             'date_from' => ['nullable', 'date_format:Y-m-d'],
             'date_to' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:date_from'],
+            'view' => ['nullable', 'in:items,raw-materials'],
         ];
     }
 }

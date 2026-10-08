@@ -227,3 +227,111 @@ test('a cashier is forbidden; a guest is sent to login', function () {
     auth()->logout();
     $this->get('/sales')->assertRedirect('/login');
 });
+
+/**
+ * A recipe item built from $recipe (ingredient name => quantity per serving). Ingredients:
+ * Itik ₱180/piece and Pork ₱350/kg (Meats), Egg ₱10/piece (Dairy & Eggs).
+ */
+function rawRecipeItem(string $name, float $price, array $recipe): Item
+{
+    $catalog = [
+        'Itik' => ['Meats', 'piece', 180],
+        'Pork' => ['Meats', 'kg', 350],
+        'Egg' => ['Dairy & Eggs', 'piece', 10],
+    ];
+    $category = Category::firstOrCreate(['name' => 'Mains'], ['status' => 'active', 'is_visible_to_pos' => true]);
+    $item = Item::create(['category_id' => $category->id, 'name' => $name, 'base_price' => $price, 'cost_price' => 0, 'inventory_type' => 'recipe', 'status' => 'available']);
+
+    foreach ($recipe as $ingredientName => $quantity) {
+        [$groupName, $unit, $cost] = $catalog[$ingredientName];
+        $group = IngredientGroup::firstOrCreate(['name' => $groupName]);
+        $ingredient = Ingredient::firstOrCreate(['name' => $ingredientName], ['ingredient_group_id' => $group->id, 'unit' => $unit, 'quantity' => 100, 'cost_per_unit' => $cost]);
+        $item->ingredients()->attach($ingredient->id, ['quantity_required' => $quantity, 'unit' => $unit]);
+    }
+
+    return $item;
+}
+
+test('by raw material: usage per ingredient with a dish breakdown, refunds returned, direct items listed apart', function () {
+    $manager = posUser('manager');
+    $manager->update(['passcode' => '2468']);
+    $cashier = posUser();
+    $shift = posOpenShift($cashier);
+
+    $friedItik = rawRecipeItem('Fried Itik', 295, ['Itik' => 1]);
+    $sisig = rawRecipeItem('Sisig', 180, ['Pork' => 0.2, 'Egg' => 1]);
+    $itikSisig = rawRecipeItem('Itik Sisig', 249, ['Itik' => 0.5, 'Egg' => 1]);
+
+    $ticket = posTicket($shift, $cashier, 'john');
+    posAddItem($ticket, $friedItik, 2);
+    $sisigLine = posAddItem($ticket, $sisig, 3);
+    posAddItem($ticket, $itikSisig, 2);
+    posAddItem($ticket, salesRice());
+    $paid = salesPayCash($ticket, $cashier);
+
+    // An open ticket's ingredients are only reserved, not used.
+    posAddItem(posTicket($shift, $cashier, 'mary'), $friedItik, 5);
+
+    $refund = app(RefundService::class)->RequestRefund($paid, $paid->charges()->firstOrFail(), $cashier, [
+        ['ticket_item_id' => $sisigLine->id, 'quantity' => 1, 'amount' => 180],
+    ]);
+    app(RefundService::class)->ApproveRefund($refund, $cashier, '2468');
+
+    $report = salesReport($manager, '?view=raw-materials');
+    $materials = collect($report['rawMaterials']);
+
+    expect($report['view'])->toBe('raw-materials')
+        // Sorted by group, then name: Dairy & Eggs (Egg), then Meats (Itik, Pork).
+        ->and($materials->pluck('name')->all())->toBe(['Egg', 'Itik', 'Pork'])
+        ->and($materials[1])->toMatchArray([
+            'group' => 'Meats',
+            'unit' => 'piece',
+            'used' => 3.0,
+            'returned' => 0.0,
+            'net_used' => 3.0,
+            'cost' => 540,
+            'stock' => 97.0,
+            'available' => 92.0,
+        ])
+        ->and(collect($materials[1]['dishes'])->map(fn (array $dish) => [$dish['name'], $dish['servings'], $dish['used']])->all())
+        ->toBe([['Fried Itik', 2, 2.0], ['Itik Sisig', 2, 1.0]])
+        // The dish's own figures, from the By item rows: 2 × ₱249, cost 2 × (0.5 × ₱180 + ₱10).
+        ->and($materials[1]['dishes'][1])->toMatchArray(['net_sales' => 498, 'profit' => 298])
+        // Pork: 3 Sisig took 0.6 kg; the approved refund of 1 put 0.2 kg back.
+        ->and($materials[2])->toMatchArray(['used' => 0.6, 'returned' => 0.2, 'net_used' => 0.4, 'cost' => 140])
+        // Egg is used by two dishes: 3 + 2, less 1 returned.
+        ->and($materials[0])->toMatchArray(['used' => 5.0, 'returned' => 1.0, 'net_used' => 4.0, 'cost' => 40])
+        ->and($report['directItems'])->toBe([['name' => 'Rice', 'quantity' => 1]]);
+
+    // The By item tab doesn't compute raw materials.
+    expect(salesReport($manager)['rawMaterials'])->toBe([]);
+});
+
+test('by raw material only counts usage from tickets paid in the period', function () {
+    $manager = posUser('manager');
+    $cashier = posUser();
+    $shift = posOpenShift($cashier);
+    $friedItik = rawRecipeItem('Fried Itik', 295, ['Itik' => 1]);
+
+    $this->travelTo(Carbon::parse('2026-10-07 20:00:00', 'Asia/Manila'));
+    $yesterday = posTicket($shift, $cashier, 'john');
+    posAddItem($yesterday, $friedItik, 4);
+    salesPayCash($yesterday, $cashier);
+
+    $this->travelTo(Carbon::parse('2026-10-08 12:00:00', 'Asia/Manila'));
+    $today = posTicket($shift, $cashier, 'mary');
+    posAddItem($today, $friedItik, 1);
+    salesPayCash($today, $cashier);
+
+    expect(salesReport($manager, '?view=raw-materials')['rawMaterials'][0]['net_used'])->toBe(1.0)
+        ->and(salesReport($manager, '?view=raw-materials&date_from=2026-10-07')['rawMaterials'][0]['net_used'])->toBe(4.0)
+        ->and(salesReport($manager, '?view=raw-materials&date_from=2026-10-09')['rawMaterials'])->toBe([]);
+});
+
+test('an unknown report view is rejected', function () {
+    $this->actingAs(posUser('manager'))
+        ->from('/sales')
+        ->get('/sales?view=ingredients')
+        ->assertRedirect('/sales')
+        ->assertSessionHasErrors('view');
+});
