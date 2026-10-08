@@ -63,6 +63,7 @@ test('a cashier is forbidden from every management index page, a manager is not'
         '/modifier-management',
         '/ingredient-management',
         '/employee-management',
+        '/shifts',
     ];
 
     foreach ($pages as $page) {

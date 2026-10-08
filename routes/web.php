@@ -7,6 +7,7 @@ use App\Http\Controllers\ItemController;
 use App\Http\Controllers\ItemRecipeController;
 use App\Http\Controllers\ModifierController;
 use App\Http\Controllers\ModifierGroupController;
+use App\Http\Controllers\ShiftController;
 use App\Http\Controllers\UserController;
 use App\Models\Category;
 use App\Models\Ingredient;
@@ -14,6 +15,7 @@ use App\Models\IngredientGroup;
 use App\Models\Item;
 use App\Models\Modifier;
 use App\Models\ModifierGroup;
+use App\Models\Shift;
 use App\Models\User;
 use App\Services\InventoryService;
 use Illuminate\Support\Facades\Route;
@@ -72,6 +74,8 @@ Route::middleware(['auth'])->group(function () {
             'modifiers' => Modifier::with('group')->orderBy('name')->get(),
         ]);
     })->middleware('can:viewAny,'.ModifierGroup::class)->name('modifier-management');
+    Route::get('shifts', [ShiftController::class, 'getShifts'])->middleware('can:viewAny,'.Shift::class)->name('shifts.index');
+    Route::get('shifts/{shift}', [ShiftController::class, 'getShift'])->middleware('can:view,shift')->name('shifts.show');
     Route::get('employee-management', [UserController::class, 'getUsers'])->middleware('can:viewAny,'.User::class)->name('employee-management');
     Route::get('users/create', [UserController::class, 'getCreateUser'])->middleware('can:create,'.User::class)->name('users.create');
     Route::post('users', [UserController::class, 'createUser'])->middleware('can:create,'.User::class)->name('users.store');

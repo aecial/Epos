@@ -221,3 +221,11 @@
     --radius-3xl: calc(var(--radius) * 2.2);
     --radius-4xl: calc(var(--radius) * 2.6);
 }
+
+/* Printing a back-office page (e.g. the shift close report) shows only the page content. */
+@media print {
+    [data-slot='sidebar'],
+    [data-slot='sidebar-gap'] {
+        display: none !important;
+    }
+}
