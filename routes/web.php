@@ -9,6 +9,7 @@ use App\Http\Controllers\KitchenOrderController;
 use App\Http\Controllers\ModifierController;
 use App\Http\Controllers\ModifierGroupController;
 use App\Http\Controllers\ReceiptController;
+use App\Http\Controllers\SalesReportController;
 use App\Http\Controllers\ShiftController;
 use App\Http\Controllers\TicketController;
 use App\Http\Controllers\UserController;
@@ -82,6 +83,7 @@ Route::middleware(['auth'])->group(function () {
     Route::get('shifts/{shift}', [ShiftController::class, 'getShift'])->middleware('can:view,shift')->name('shifts.show');
     Route::get('tickets', [TicketController::class, 'getTickets'])->middleware('can:viewAny,'.Ticket::class)->name('tickets.index');
     Route::get('tickets/{ticket}', [TicketController::class, 'getTicket'])->middleware('can:view,ticket')->name('tickets.show');
+    Route::get('sales', [SalesReportController::class, 'getItemsSold'])->middleware('can:viewAny,'.Ticket::class)->name('sales.index');
     Route::get('receipts/{receipt}', [ReceiptController::class, 'getReceipt'])->middleware('can:view,receipt')->name('receipts.show');
     Route::post('receipts/{receipt}/reprint', [ReceiptController::class, 'reprintReceipt'])->middleware('can:view,receipt')->name('receipts.reprint');
     Route::get('kitchen-orders', [KitchenOrderController::class, 'getOrders'])->middleware('can:viewAny,'.Ticket::class)->name('kitchen-orders.index');
