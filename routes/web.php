@@ -5,6 +5,7 @@ use App\Http\Controllers\IngredientController;
 use App\Http\Controllers\IngredientGroupController;
 use App\Http\Controllers\ItemController;
 use App\Http\Controllers\ItemRecipeController;
+use App\Http\Controllers\KitchenOrderController;
 use App\Http\Controllers\ModifierController;
 use App\Http\Controllers\ModifierGroupController;
 use App\Http\Controllers\ShiftController;
@@ -80,6 +81,9 @@ Route::middleware(['auth'])->group(function () {
     Route::get('shifts/{shift}', [ShiftController::class, 'getShift'])->middleware('can:view,shift')->name('shifts.show');
     Route::get('tickets', [TicketController::class, 'getTickets'])->middleware('can:viewAny,'.Ticket::class)->name('tickets.index');
     Route::get('tickets/{ticket}', [TicketController::class, 'getTicket'])->middleware('can:view,ticket')->name('tickets.show');
+    Route::get('kitchen-orders', [KitchenOrderController::class, 'getOrders'])->middleware('can:viewAny,'.Ticket::class)->name('kitchen-orders.index');
+    Route::patch('kitchen-orders/items/{ticketItem}/complete', [KitchenOrderController::class, 'completeItem'])->middleware('can:bumpKitchenOrders,'.Ticket::class)->name('kitchen-orders.items.complete');
+    Route::patch('kitchen-orders/{ticket}/complete', [KitchenOrderController::class, 'completeTicket'])->middleware('can:bumpKitchenOrders,'.Ticket::class)->name('kitchen-orders.complete');
     Route::get('employee-management', [UserController::class, 'getUsers'])->middleware('can:viewAny,'.User::class)->name('employee-management');
     Route::get('users/create', [UserController::class, 'getCreateUser'])->middleware('can:create,'.User::class)->name('users.create');
     Route::post('users', [UserController::class, 'createUser'])->middleware('can:create,'.User::class)->name('users.store');
