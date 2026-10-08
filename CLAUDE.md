@@ -113,7 +113,7 @@ docs/
     - Deleting a category/item/modifier/modifier group/ingredient/ingredient group that's referenced by sales history or a recipe is blocked at the database level (`restrictOnDelete()`); the back office catches the resulting `RecordInUseException` (`App\Services\Concerns\DeletesSafely`) and flashes a readable error instead of a raw `500`
 3. Back-office reporting pages — **Shifts** done (`/shifts` history + `/shifts/{id}` close report; view only, admin/manager; an open shift shows live totals, a closed one its closing snapshot). **Tickets** done (`/tickets` filtered history + `/tickets/{id}` detail with lines, payments, refunds and merges; view only, admin/manager). Refund history and dashboard pages still planned. Refund approval/rejection stays on the POS (manager/admin passcode) — the back office never approves refunds
 4. React Native POS app (planned)
-5. KDS app — API, completion persistence and realtime channel done (above); the tablet display itself is planned
+5. KDS app — API, completion persistence and realtime channel done (above); the tablet display itself is planned. The back office has a **Kitchen Orders** page (`/kitchen-orders`, admin/manager): the same cards as the KDS feed, polled every 5 seconds, with bumping (one line or the whole order) through the same `TicketService` methods and broadcasts
 6. Real-time — done for the KDS channel (Laravel Reverb); general POS/back-office sync (`shift.{shift_id}`, `inventory.updated`, `refund.*`) still planned
 
 See `docs/UNIFIED_API_ENDPOINTS.md` §13 and `docs/ENHANCED_SPEC.md` §11 for the detailed status.
