@@ -122,6 +122,29 @@ function TicketLinks({ tickets }: { tickets: TicketLink[] }) {
     );
 }
 
+/** One payment's details in reading order: cash shows tendered/change, GCash its reference. */
+function paymentDetails(charge: Charge): string[] {
+    const details: string[] = [];
+
+    if (charge.payment_method === 'cash' && charge.tendered_amount !== null) {
+        details.push(`tendered ${peso(charge.tendered_amount)}, change ${peso(charge.change_due ?? 0)}`);
+    }
+    if (charge.payment_reference) {
+        details.push(`ref ${charge.payment_reference}`);
+    }
+    if (charge.receipt_number) {
+        details.push(charge.receipt_number);
+    }
+    if (charge.created_by) {
+        details.push(`by ${charge.created_by}`);
+    }
+    if (charge.paid_at) {
+        details.push(new Date(charge.paid_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }));
+    }
+
+    return details;
+}
+
 function endedLine(ticket: Ticket): string {
     switch (ticket.status) {
         case 'open':
@@ -296,96 +319,68 @@ export default function TicketDetailPage({
                     )}
                 </div>
 
-                <div className={panelClass}>
-                    <PanelTitle icon={<CreditCard className="text-muted-foreground size-4" />}>Payments</PanelTitle>
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Paid</TableHead>
-                                <TableHead>Method</TableHead>
-                                <TableHead>Receipt</TableHead>
-                                <TableHead>Reference</TableHead>
-                                <TableHead>Cashier</TableHead>
-                                <TableHead className="text-right">Tendered</TableHead>
-                                <TableHead className="text-right">Change</TableHead>
-                                <TableHead className="text-right">Amount</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {charges.length === 0 && (
-                                <TableRow>
-                                    <TableCell colSpan={8} className="text-muted-foreground py-6 text-center text-sm">
-                                        No payments on this ticket.
-                                    </TableCell>
-                                </TableRow>
-                            )}
+                {charges.length > 0 && (
+                    <div className={panelClass}>
+                        <PanelTitle icon={<CreditCard className="text-muted-foreground size-4" />}>Payments</PanelTitle>
+                        <ul className="divide-y">
                             {charges.map((charge) => (
-                                <TableRow key={charge.id}>
-                                    <TableCell>{formatDate(charge.paid_at)}</TableCell>
-                                    <TableCell>
-                                        {paymentLabel[charge.payment_method]}
-                                        {charge.status !== 'paid' && (
-                                            <span className="text-muted-foreground ml-1 text-xs capitalize">({charge.status})</span>
-                                        )}
-                                    </TableCell>
-                                    <TableCell>{charge.receipt_number ?? '—'}</TableCell>
-                                    <TableCell>{charge.payment_reference ?? '—'}</TableCell>
-                                    <TableCell>{charge.created_by ?? '—'}</TableCell>
-                                    <TableCell className="text-right">{peso(charge.tendered_amount)}</TableCell>
-                                    <TableCell className="text-right">{peso(charge.change_due)}</TableCell>
-                                    <TableCell className="text-right">{peso(charge.amount)}</TableCell>
-                                </TableRow>
+                                <li key={charge.id} className="flex flex-wrap items-baseline gap-x-2 gap-y-1 px-5 py-3 text-sm">
+                                    <span className="font-semibold">
+                                        {paymentLabel[charge.payment_method]} {peso(charge.amount)}
+                                    </span>
+                                    {charge.status !== 'paid' && <span className="text-muted-foreground text-xs capitalize">({charge.status})</span>}
+                                    <span className="text-muted-foreground">
+                                        {paymentDetails(charge)
+                                            .map((detail) => ` · ${detail}`)
+                                            .join('')}
+                                    </span>
+                                </li>
                             ))}
-                        </TableBody>
-                    </Table>
-                </div>
+                        </ul>
+                    </div>
+                )}
 
-                <div className={panelClass}>
-                    <PanelTitle icon={<Undo2 className="text-muted-foreground size-4" />}>Refunds</PanelTitle>
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Requested</TableHead>
-                                <TableHead>Status</TableHead>
-                                <TableHead>Method</TableHead>
-                                <TableHead>Items</TableHead>
-                                <TableHead>Reason</TableHead>
-                                <TableHead>Requested by</TableHead>
-                                <TableHead>Decided by</TableHead>
-                                <TableHead className="text-right">Amount</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {refunds.length === 0 && (
+                {refunds.length > 0 && (
+                    <div className={panelClass}>
+                        <PanelTitle icon={<Undo2 className="text-muted-foreground size-4" />}>Refunds</PanelTitle>
+                        <Table>
+                            <TableHeader>
                                 <TableRow>
-                                    <TableCell colSpan={8} className="text-muted-foreground py-6 text-center text-sm">
-                                        No refunds on this ticket.
-                                    </TableCell>
+                                    <TableHead>Requested</TableHead>
+                                    <TableHead>Status</TableHead>
+                                    <TableHead>Method</TableHead>
+                                    <TableHead>Items</TableHead>
+                                    <TableHead>Reason</TableHead>
+                                    <TableHead>Requested by</TableHead>
+                                    <TableHead>Decided by</TableHead>
+                                    <TableHead className="text-right">Amount</TableHead>
                                 </TableRow>
-                            )}
-                            {refunds.map((refund) => (
-                                <TableRow key={refund.id}>
-                                    <TableCell>{formatDate(refund.requested_at)}</TableCell>
-                                    <TableCell>
-                                        <span
-                                            className={`rounded-full px-3 py-1 text-xs font-medium text-white capitalize ${refundStatusClass[refund.status]}`}
-                                        >
-                                            {refund.status}
-                                        </span>
-                                    </TableCell>
-                                    <TableCell>{refund.payment_method ? paymentLabel[refund.payment_method] : '—'}</TableCell>
-                                    <TableCell className="text-xs">
-                                        {refund.items.map((item) => `${item.quantity}× ${item.item_name ?? '—'}`).join(', ') || '—'}
-                                    </TableCell>
-                                    <TableCell>{refund.reason ?? '—'}</TableCell>
-                                    <TableCell>{refund.requested_by ?? '—'}</TableCell>
-                                    <TableCell>{refund.approved_by ?? '—'}</TableCell>
-                                    <TableCell className="text-right">{peso(refund.amount)}</TableCell>
-                                </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
-                </div>
+                            </TableHeader>
+                            <TableBody>
+                                {refunds.map((refund) => (
+                                    <TableRow key={refund.id}>
+                                        <TableCell>{formatDate(refund.requested_at)}</TableCell>
+                                        <TableCell>
+                                            <span
+                                                className={`rounded-full px-3 py-1 text-xs font-medium text-white capitalize ${refundStatusClass[refund.status]}`}
+                                            >
+                                                {refund.status}
+                                            </span>
+                                        </TableCell>
+                                        <TableCell>{refund.payment_method ? paymentLabel[refund.payment_method] : '—'}</TableCell>
+                                        <TableCell className="text-xs">
+                                            {refund.items.map((item) => `${item.quantity}× ${item.item_name ?? '—'}`).join(', ') || '—'}
+                                        </TableCell>
+                                        <TableCell>{refund.reason ?? '—'}</TableCell>
+                                        <TableCell>{refund.requested_by ?? '—'}</TableCell>
+                                        <TableCell>{refund.approved_by ?? '—'}</TableCell>
+                                        <TableCell className="text-right">{peso(refund.amount)}</TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </div>
+                )}
             </div>
         </AppLayout>
     );
