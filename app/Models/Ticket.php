@@ -81,6 +81,11 @@ class Ticket extends Model
         return $this->hasMany(Charge::class);
     }
 
+    public function receipts(): HasMany
+    {
+        return $this->hasMany(Receipt::class);
+    }
+
     public function refunds(): HasMany
     {
         return $this->hasMany(Refund::class);

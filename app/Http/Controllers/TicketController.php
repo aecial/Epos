@@ -38,7 +38,8 @@ class TicketController extends Controller
                 $filters['search'] ?? null,
                 fn ($query, string $search) => $query->where(fn ($inner) => $inner
                     ->where('order_number', 'like', "%{$search}%")
-                    ->orWhere('customer_name', 'like', "%{$search}%"))
+                    ->orWhere('customer_name', 'like', "%{$search}%")
+                    ->orWhereHas('receipts', fn ($receipts) => $receipts->where('receipt_number', 'like', "%{$search}%")))
             )
             ->latest()
             ->latest('id')
@@ -124,6 +125,7 @@ class TicketController extends Controller
                 'payment_reference' => $charge->payment_reference,
                 'paid_at' => $charge->paid_at,
                 'created_by' => $charge->createdBy?->name,
+                'receipt_id' => $charge->receipt?->id,
                 'receipt_number' => $charge->receipt?->receipt_number,
             ])->values(),
             'refunds' => $ticket->refunds->map(fn (Refund $refund): array => [

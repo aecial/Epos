@@ -23,7 +23,7 @@ class GetBackOfficeTicketsRequest extends FormRequest
             'payment_method' => ['nullable', 'in:cash,gcash'],
             'date_from' => ['nullable', 'date'],
             'date_to' => ['nullable', 'date', 'after_or_equal:date_from'],
-            // Matches order number or customer name.
+            // Matches order number, customer name or receipt number.
             'search' => ['nullable', 'string', 'max:100'],
             'page' => ['nullable', 'integer', 'min:1'],
         ];

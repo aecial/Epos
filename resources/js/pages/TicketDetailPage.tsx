@@ -2,7 +2,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/react';
-import { CreditCard, GitMerge, ReceiptText, Undo2, UtensilsCrossed } from 'lucide-react';
+import { CreditCard, GitMerge, ReceiptText, ScrollText, Undo2, UtensilsCrossed } from 'lucide-react';
 import { type ReactNode } from 'react';
 
 type TicketStatus = 'open' | 'paid' | 'cancelled' | 'merged';
@@ -57,6 +57,7 @@ type Charge = {
     payment_reference: string | null;
     paid_at: string | null;
     created_by: string | null;
+    receipt_id: number | null;
     receipt_number: string | null;
 };
 
@@ -334,6 +335,15 @@ export default function TicketDetailPage({
                                             .map((detail) => ` · ${detail}`)
                                             .join('')}
                                     </span>
+                                    {charge.receipt_id && (
+                                        <Link
+                                            href={route('receipts.show', charge.receipt_id)}
+                                            className="hover:bg-muted ml-auto inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-medium"
+                                        >
+                                            <ScrollText className="size-3.5" />
+                                            View receipt
+                                        </Link>
+                                    )}
                                 </li>
                             ))}
                         </ul>

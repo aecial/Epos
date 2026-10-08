@@ -94,7 +94,7 @@ export default function TicketManagementPage({ tickets, filters, pagination }: {
                                 type="search"
                                 value={search}
                                 onChange={(event) => setSearch(event.target.value)}
-                                placeholder="Order number or customer name, then Enter"
+                                placeholder="Order number, customer or receipt number, then Enter"
                                 className="field pl-9"
                             />
                         </div>

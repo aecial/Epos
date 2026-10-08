@@ -80,7 +80,7 @@ test('the list paginates 20 per page', function () {
         );
 });
 
-test('the list filters by status, shift, payment method, opened date and search', function () {
+test('the list filters by status, shift, payment method, opened date and search (order number, customer or receipt number)', function () {
     $manager = posUser('manager');
     $cashier = posUser();
 
@@ -107,6 +107,7 @@ test('the list filters by status, shift, payment method, opened date and search'
         ->and(collect($idsFor('?date_from=2026-10-02'))->pluck('id')->all())->toEqualCanonicalizing([$cashPaid->id, $open->id])
         ->and(collect($idsFor('?date_to=2026-10-01'))->pluck('id')->all())->toBe([$oldPaid->id])
         ->and(collect($idsFor('?search=pedr'))->pluck('id')->all())->toBe([$open->id])
+        ->and(collect($idsFor('?search='.$cashPaid->receipts()->value('receipt_number')))->pluck('id')->all())->toBe([$cashPaid->id])
         ->and(collect($idsFor('?search='.urlencode($cashPaid->order_number).'&shift_id='.$shift->id))->pluck('id')->all())->toBe([$cashPaid->id])
         ->and(collect($idsFor('?status=open&payment_method=cash'))->all())->toBe([]);
 
@@ -176,6 +177,7 @@ test('a manager sees a paid ticket\'s lines, split payments with receipt numbers
             ->where('charges.0.change_due', 50)
             ->where('charges.0.created_by', $cashier->name)
             ->where('charges.0.receipt_number', fn (string $number) => str_starts_with($number, 'REC-'))
+            ->where('charges.0.receipt_id', $paid->receipts()->where('payment_method', 'cash')->value('id'))
             ->where('charges.1.payment_method', 'gcash')
             ->where('charges.1.payment_reference', 'GC-77')
             ->has('refunds', 1)
