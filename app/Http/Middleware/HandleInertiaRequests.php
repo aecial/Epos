@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\Refund;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -45,6 +46,11 @@ class HandleInertiaRequests extends Middleware
             'auth' => [
                 'user' => $request->user(),
             ],
+            // Refunds waiting for a manager/admin passcode on the POS, for the sidebar badge.
+            // Only managers/admins see the Refunds page, so only they get the count.
+            'pendingRefunds' => fn (): ?int => $request->user()?->isAdminOrManager()
+                ? Refund::query()->where('status', 'pending')->count()
+                : null,
             'flash' => [
                 'error' => fn () => $request->session()->get('error'),
                 'success' => fn () => $request->session()->get('success'),

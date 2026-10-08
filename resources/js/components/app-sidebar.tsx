@@ -2,9 +2,9 @@ import { NavFooter } from '@/components/nav-footer';
 import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar';
-import { type NavItem } from '@/types';
-import { Link } from '@inertiajs/react';
-import { BookOpen, ChefHat, Clock, Computer, Folder, LayoutGrid, ReceiptText, ShoppingBag, Users } from 'lucide-react';
+import { type NavItem, type SharedData } from '@/types';
+import { Link, usePage } from '@inertiajs/react';
+import { BookOpen, ChefHat, Clock, Computer, Folder, LayoutGrid, ReceiptText, ShoppingBag, Undo2, Users } from 'lucide-react';
 import AppLogo from './app-logo';
 
 const mainNavItems: NavItem[] = [
@@ -39,6 +39,11 @@ const mainNavItems: NavItem[] = [
         icon: ShoppingBag,
     },
     {
+        title: 'Refunds',
+        url: '/refunds',
+        icon: Undo2,
+    },
+    {
         title: 'Kitchen Orders',
         url: '/kitchen-orders',
         icon: ChefHat,
@@ -59,6 +64,9 @@ const footerNavItems: NavItem[] = [
 ];
 
 export function AppSidebar() {
+    const { pendingRefunds } = usePage<SharedData>().props;
+    const items = mainNavItems.map((item) => (item.url === '/refunds' ? { ...item, badge: pendingRefunds } : item));
+
     return (
         <Sidebar collapsible="icon" variant="inset">
             <SidebarHeader>
@@ -74,7 +82,7 @@ export function AppSidebar() {
             </SidebarHeader>
 
             <SidebarContent>
-                <NavMain items={mainNavItems} />
+                <NavMain items={items} />
             </SidebarContent>
 
             <SidebarFooter>

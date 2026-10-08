@@ -19,6 +19,8 @@ export interface NavItem {
     url: string;
     icon?: LucideIcon | null;
     isActive?: boolean;
+    /** A count shown at the end of the item, e.g. pending refunds; hidden when empty or zero. */
+    badge?: number | null;
 }
 
 export interface SharedData {
@@ -26,6 +28,8 @@ export interface SharedData {
     quote: { message: string; author: string };
     auth: Auth;
     flash: { error?: string | null; success?: string | null };
+    /** Refunds waiting for a passcode on the POS - set for managers/admins only. */
+    pendingRefunds?: number | null;
     [key: string]: unknown;
 }
 
