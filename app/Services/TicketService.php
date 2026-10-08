@@ -9,6 +9,7 @@ use App\Events\Kds\TicketCreated;
 use App\Events\Kds\TicketMerged;
 use App\Events\Kds\TicketUpdated;
 use App\Exceptions\NoActiveShiftException;
+use App\Models\Ingredient;
 use App\Models\Item;
 use App\Models\Modifier;
 use App\Models\Shift;
@@ -114,7 +115,7 @@ class TicketService
                 // Custom items are named by the cashier; the typed name is the snapshot that
                 // reaches receipts, refunds and the KDS.
                 'item_name' => $customName ?? $item->name,
-                'item_cost_price' => $item->cost_price,
+                'item_cost_price' => $this->unitCostFor($item),
                 'line_type' => $this->lineTypeFor($item, $entryMode),
                 'quantity' => $quantity,
                 'unit_price' => $unitPrice,
@@ -457,6 +458,23 @@ class TicketService
         $this->broadcastSafely(fn () => broadcast(new TicketUpdated($merged)));
 
         return $merged;
+    }
+
+    /**
+     * The per-unit cost snapshotted onto a new line. A recipe item's cost is its ingredients
+     * (cost_per_unit x quantity_required, same unit by recipe validation) - its own cost_price
+     * isn't maintained. Everything else uses cost_price (0 for special items). Modifiers carry
+     * no cost (CLAUDE.md locked decision).
+     */
+    private function unitCostFor(Item $item): float
+    {
+        if ($item->inventory_type !== 'recipe') {
+            return (float) $item->cost_price;
+        }
+
+        return round((float) $item->ingredients()->get()->sum(
+            fn (Ingredient $ingredient): float => (float) $ingredient->cost_per_unit * (float) $ingredient->pivot->quantity_required
+        ), 2);
     }
 
     /**
