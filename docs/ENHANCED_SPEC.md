@@ -471,7 +471,8 @@ The back office is a set of Inertia pages served by session-authenticated Larave
 | `/modifier-management`, `/create-modifier-group`, `/create-modifier`, `/modifier-groups/{id}/edit`, `/modifiers/{id}/edit` | Modifier groups & modifiers | Reusable groups (with `is_required`) and modifiers; the price is set per item when a modifier is attached |
 | `/ingredient-management`, `/create-ingredient-group`, `/create-ingredient`, `/ingredient-groups/{id}/edit`, `/ingredients/{id}/edit` | Ingredient groups & ingredients | CRUD; ingredients carry a unit (`piece`, `kg`, `gram`, `liter`, `ml`), decimal quantity and `cost_per_unit` |
 | `/employee-management`, `/users/create`, `/users/{id}/edit` | Employees | CRUD. Creates `manager` and `cashier` accounts (admins are seeded). A 4-digit passcode can only be set on a manager and must not already belong to another active manager/admin (the POS identifies the approver from the passcode alone). Status active/inactive |
-| `/shifts`, `/shifts/{id}` | Shifts | View only, admin/manager. The list shows every shift newest first (20 per page): opened/closed time, opened by, starting cash, revenue, cash, GCash, expected cash, counted cash and discrepancy. The detail page is the shift close report (prints without the sidebar): the cash-drawer breakdown (starting cash + cash sales + additions − expenses − cash refunds = expected cash, then counted cash and the discrepancy), revenue/GCash/all refunds, ticket counts by status, and the expenses/additions and refunds lists. An open shift shows live totals; a closed shift shows its closing snapshot. Opening/closing a shift and cash movements stay on the POS |
+| `/shifts`, `/shifts/{id}` | Shifts | View only, admin/manager. The list shows every shift newest first (20 per page): opened/closed time, opened by, starting cash, revenue, cash, GCash, expected cash, counted cash and discrepancy. The detail page is the shift close report (prints without the sidebar): the cash-drawer breakdown (starting cash + cash sales + additions − expenses − cash refunds = expected cash, then counted cash and the discrepancy), revenue/GCash/all refunds, ticket counts by status, and the expenses/additions and refunds lists. An open shift shows live totals; a closed shift shows its closing snapshot. Opening/closing a shift and cash movements stay on the POS. The ticket counts link to the matching filtered Tickets list |
+| `/tickets`, `/tickets/{id}` | Tickets | View only, admin/manager. Every ticket from every terminal and cashier (not account-bound like the POS), newest first, 20 per page: order number, customer, order type, item count, status, opened/closed time, cashier, terminal, payment method(s) and total. Filters: status, shift, payment method, opened date range, and search by order number or customer name. The detail page shows the lines (modifiers, kitchen notes, Fee/Custom labels, lines merged in from another ticket, voided lines with who approved/requested the void), subtotal/discount/total, payments (method, tendered, change, reference, cashier, receipt number), refunds (status, lines, reason, requested/decided by) and merge links (merged into / merged from). Cost price is not shown. Creating, changing, paying, cancelling and refunding tickets stay on the POS |
 | `/users/{id}/sessions` | Employees → Devices | POS tokens never expire on their own, so this is the only way to end one: lists every device signed in as that user (`device_name`, signed-in/last-used time) with a per-device "Sign out" and a "Sign out everywhere" button. Not available for admin accounts, same protection as editing/deleting one |
 | `/settings/*` | Profile, password, appearance | Starter-kit account settings |
 
@@ -484,18 +485,10 @@ Notes:
 
 ### Planned (data and API exist; no Inertia pages yet)
 
-#### `/orders` (Sales/Receipts)
-
-- All orders (not terminal-filtered, unlike POS)
-- Filter by date, payment method, shift (the receipt-history endpoint already supports these)
-- Click order to see receipt details
-- Search by order number or customer name
-
 #### `/refunds`
 
-- Pending refunds list (awaiting approval)
-- Approve/reject (passcode-gated, as on the POS)
-- History of approved/rejected refunds
+- View only: pending refunds and the history of approved/rejected ones
+- **No approve/reject here.** Refunds are approved or rejected on the POS terminals with a manager/admin passcode (`PUT /api/v1/refunds/{id}/approve` or `/reject`); the back office only shows them
 
 #### `/dashboard` stats
 
@@ -715,7 +708,8 @@ Legend: `[x]` implemented and tested · `[~]` implemented on the server/API, cli
 - [ ] React Native POS app, including auto-print to the thermal printer
 - [ ] KDS app (tablet client UI) — the API and realtime channel it will call are implemented; the display itself is not
 - [x] Back-office Shifts pages: history list + close report, view only — `ShiftPagesTest`
-- [ ] Back-office pages: orders/receipts, refunds, dashboard stats
+- [x] Back-office Tickets pages: filtered history + ticket detail (lines, payments, refunds, merges), view only — `TicketPagesTest`
+- [ ] Back-office pages: refund history (view only; approval stays on the POS), dashboard stats
 
 ### Nice-to-Have (v1)
 

@@ -871,4 +871,4 @@ Ticket access (another cashier gets `404` on every per-ticket route and the tick
 | **KDS tablet client (the actual display app)** | `GET /kds/orders`, the completion toggle and the realtime channel it will use are implemented (§8.5). The React Native display itself is not built. |
 | **Employee / category / item admin over the API** | These live in the session-authenticated back office only, not in `/api/v1`. |
 | **Per-item charge assignment (`charge_items`)** | Dropped by design; charges are amounts-only with prorated receipts. |
-| **Back-office pages for orders/receipts, refunds, dashboard stats, reports** | Data and API exist; no Inertia pages yet. (The Shifts pages exist — `ENHANCED_SPEC.md` §7.) |
+| **Back-office pages for refund history, dashboard stats, reports** | Data and API exist; no Inertia pages yet. (The Shifts and Tickets pages exist — `ENHANCED_SPEC.md` §7. Refund approval stays on the POS.) |
