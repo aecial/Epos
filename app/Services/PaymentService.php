@@ -7,6 +7,7 @@ use App\Exceptions\ChargeAmountMismatchException;
 use App\Models\Charge;
 use App\Models\Ticket;
 use App\Models\TicketItem;
+use App\Models\TicketItemIngredient;
 use App\Models\User;
 use App\Services\Concerns\BroadcastsSafely;
 use Illuminate\Support\Facades\DB;
@@ -103,7 +104,19 @@ class PaymentService
             }
 
             foreach ($items as $ticketItem) {
-                $this->inventoryService->DeductItem($ticketItem->item, $ticketItem->quantity);
+                $deducted = $this->inventoryService->DeductItem($ticketItem->item, $ticketItem->quantity);
+
+                // Record what a recipe line actually took, so usage reports and refunds don't
+                // depend on the recipe staying the same.
+                foreach ($deducted as $usage) {
+                    TicketItemIngredient::create([
+                        'ticket_item_id' => $ticketItem->id,
+                        'ingredient_id' => $usage['ingredient']->id,
+                        'quantity_used' => $usage['quantity'],
+                        'unit' => $usage['ingredient']->unit,
+                        'cost_per_unit' => $usage['ingredient']->cost_per_unit,
+                    ]);
+                }
             }
 
             $lockedTicket->update([

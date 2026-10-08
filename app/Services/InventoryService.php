@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Exceptions\InsufficientInventoryException;
 use App\Models\Ingredient;
 use App\Models\Item;
+use App\Models\TicketItem;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
@@ -42,19 +43,66 @@ class InventoryService
         });
     }
 
-    public function DeductItem(Item $item, int $quantity): void
+    /**
+     * Takes sold stock out. For a recipe item, returns what each ingredient gave up (the total
+     * for $quantity servings) so the caller can record it; direct and untracked items return [].
+     *
+     * @return array<int, array{ingredient: Ingredient, quantity: float}>
+     */
+    public function DeductItem(Item $item, int $quantity): array
     {
         $this->assertPositiveQuantity($quantity);
 
-        DB::transaction(function () use ($item, $quantity): void {
+        return DB::transaction(function () use ($item, $quantity): array {
             $lockedItem = $this->lockItem($item);
+
+            if ($lockedItem->inventory_type === 'recipe') {
+                return $this->deductRecipeItem($lockedItem, $quantity);
+            }
 
             match ($lockedItem->inventory_type) {
                 'direct' => $this->deductDirectItem($lockedItem, $quantity),
-                'recipe' => $this->deductRecipeItem($lockedItem, $quantity),
                 'none' => null,
                 default => throw new InvalidArgumentException('Unsupported inventory type.'),
             };
+
+            return [];
+        });
+    }
+
+    /**
+     * Puts back $quantity servings of a paid recipe line using what the line actually took at
+     * payment (ticket_item_ingredients), so a recipe edited since then can't change the amount
+     * returned. Returns false when the line has no recorded usage (paid before usage was
+     * recorded) - the caller falls back to RestoreItem.
+     */
+    public function RestoreRecordedUsage(TicketItem $line, int $quantity): bool
+    {
+        $this->assertPositiveQuantity($quantity);
+
+        return DB::transaction(function () use ($line, $quantity): bool {
+            $usage = $line->ingredientUsage()->orderBy('ingredient_id')->get();
+
+            if ($usage->isEmpty()) {
+                return false;
+            }
+
+            // Ascending ingredient id, same lock order as lockedRequirements().
+            $ingredients = Ingredient::query()
+                ->whereKey($usage->pluck('ingredient_id'))
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get()
+                ->keyBy('id');
+
+            foreach ($usage as $used) {
+                $ingredient = $ingredients[$used->ingredient_id];
+                $returned = (float) $used->quantity_used * $quantity / (int) $line->quantity;
+                $ingredient->quantity = $this->roundQuantity((float) $ingredient->quantity + $returned);
+                $ingredient->save();
+            }
+
+            return true;
         });
     }
 
@@ -171,10 +219,14 @@ class InventoryService
         }
     }
 
-    private function deductRecipeItem(Item $item, int $quantity): void
+    /**
+     * @return array<int, array{ingredient: Ingredient, quantity: float}>
+     */
+    private function deductRecipeItem(Item $item, int $quantity): array
     {
         $requirements = $this->lockedRequirements($item);
         $this->assertRecipeAvailability($requirements, $quantity);
+        $deducted = [];
 
         foreach ($requirements as $requirement) {
             $ingredient = $requirement['ingredient'];
@@ -187,7 +239,11 @@ class InventoryService
             $ingredient->quantity = $this->roundQuantity((float) $ingredient->quantity - $required);
             $ingredient->reserved_quantity = $this->roundQuantity((float) $ingredient->reserved_quantity - $required);
             $ingredient->save();
+
+            $deducted[] = ['ingredient' => $ingredient, 'quantity' => $this->roundQuantity($required)];
         }
+
+        return $deducted;
     }
 
     private function restoreRecipeItem(Item $item, int $quantity): void

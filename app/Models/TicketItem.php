@@ -66,6 +66,14 @@ class TicketItem extends Model
         return $this->hasMany(TicketItemModifier::class);
     }
 
+    /**
+     * What this line took from ingredient stock when it was paid (recipe items only).
+     */
+    public function ingredientUsage(): HasMany
+    {
+        return $this->hasMany(TicketItemIngredient::class);
+    }
+
     public function isVoided(): bool
     {
         return $this->voided_at !== null;

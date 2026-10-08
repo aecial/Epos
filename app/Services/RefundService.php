@@ -137,7 +137,11 @@ class RefundService
                 ->get();
 
             foreach ($items as $refundItem) {
-                $this->inventoryService->RestoreItem($refundItem->ticketItem->item, $refundItem->quantity);
+                // Return what the sale actually took; lines paid before usage was recorded
+                // fall back to the item's current recipe.
+                if (! $this->inventoryService->RestoreRecordedUsage($refundItem->ticketItem, $refundItem->quantity)) {
+                    $this->inventoryService->RestoreItem($refundItem->ticketItem->item, $refundItem->quantity);
+                }
             }
 
             $lockedRefund->update([
