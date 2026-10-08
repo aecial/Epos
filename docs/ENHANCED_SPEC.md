@@ -471,6 +471,7 @@ The back office is a set of Inertia pages served by session-authenticated Larave
 | `/modifier-management`, `/create-modifier-group`, `/create-modifier`, `/modifier-groups/{id}/edit`, `/modifiers/{id}/edit` | Modifier groups & modifiers | Reusable groups (with `is_required`) and modifiers; the price is set per item when a modifier is attached |
 | `/ingredient-management`, `/create-ingredient-group`, `/create-ingredient`, `/ingredient-groups/{id}/edit`, `/ingredients/{id}/edit` | Ingredient groups & ingredients | CRUD; ingredients carry a unit (`piece`, `kg`, `gram`, `liter`, `ml`), decimal quantity and `cost_per_unit` |
 | `/employee-management`, `/users/create`, `/users/{id}/edit` | Employees | CRUD. Creates `manager` and `cashier` accounts (admins are seeded). A 4-digit passcode can only be set on a manager and must not already belong to another active manager/admin (the POS identifies the approver from the passcode alone). Status active/inactive |
+| `/shifts`, `/shifts/{id}` | Shifts | View only, admin/manager. The list shows every shift newest first (20 per page): opened/closed time, opened by, starting cash, revenue, cash, GCash, expected cash, counted cash and discrepancy. The detail page is the shift close report (prints without the sidebar): the cash-drawer breakdown (starting cash + cash sales + additions − expenses − cash refunds = expected cash, then counted cash and the discrepancy), revenue/GCash/all refunds, ticket counts by status, and the expenses/additions and refunds lists. An open shift shows live totals; a closed shift shows its closing snapshot. Opening/closing a shift and cash movements stay on the POS |
 | `/users/{id}/sessions` | Employees → Devices | POS tokens never expire on their own, so this is the only way to end one: lists every device signed in as that user (`device_name`, signed-in/last-used time) with a per-device "Sign out" and a "Sign out everywhere" button. Not available for admin accounts, same protection as editing/deleting one |
 | `/settings/*` | Profile, password, appearance | Starter-kit account settings |
 
@@ -482,12 +483,6 @@ Notes:
 - The back-office item list has a client-side search (name or category) but no category/status filter; the POS `GET /api/v1/items` supports a `category_id` filter.
 
 ### Planned (data and API exist; no Inertia pages yet)
-
-#### `/shifts`
-
-- Historical shift list (with totals)
-- Click to view details: opening time, closing time, total revenue, cash/gcash breakdown, additions, expenses, refunds, expected vs. counted cash, discrepancy
-- Shift close report
 
 #### `/orders` (Sales/Receipts)
 
@@ -719,7 +714,8 @@ Legend: `[x]` implemented and tested · `[~]` implemented on the server/API, cli
 - [~] Real-time WebSocket updates — KDS channel implemented; general POS/back-office sync (`shift.{shift_id}`, `inventory.updated`, `refund.*`) is not
 - [ ] React Native POS app, including auto-print to the thermal printer
 - [ ] KDS app (tablet client UI) — the API and realtime channel it will call are implemented; the display itself is not
-- [ ] Back-office pages: shifts, orders/receipts, refunds, dashboard stats
+- [x] Back-office Shifts pages: history list + close report, view only — `ShiftPagesTest`
+- [ ] Back-office pages: orders/receipts, refunds, dashboard stats
 
 ### Nice-to-Have (v1)
 

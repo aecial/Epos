@@ -111,7 +111,7 @@ docs/
 2. **POS API** (`/api/v1`, Sanctum) — done: auth, menu, shifts, shift transactions, tickets (create/add/void/discount/merge/cancel), payments, receipts, refunds, KDS feed + completion
     - Known issues: none outstanding. `DELETE /shifts/{shift}/transactions/{transaction}` intentionally has no manager/admin gate (create/update do) — any authenticated staff may remove a mistaken cash addition or expense entry
     - Deleting a category/item/modifier/modifier group/ingredient/ingredient group that's referenced by sales history or a recipe is blocked at the database level (`restrictOnDelete()`); the back office catches the resulting `RecordInUseException` (`App\Services\Concerns\DeletesSafely`) and flashes a readable error instead of a raw `500`
-3. Back-office shift, orders/receipts, refunds and dashboard pages (planned)
+3. Back-office reporting pages — **Shifts** done (`/shifts` history + `/shifts/{id}` close report; view only, admin/manager; an open shift shows live totals, a closed one its closing snapshot). Orders/receipts, refunds and dashboard pages still planned
 4. React Native POS app (planned)
 5. KDS app — API, completion persistence and realtime channel done (above); the tablet display itself is planned
 6. Real-time — done for the KDS channel (Laravel Reverb); general POS/back-office sync (`shift.{shift_id}`, `inventory.updated`, `refund.*`) still planned
