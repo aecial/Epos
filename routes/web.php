@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\CategoryController;
+use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\IngredientController;
 use App\Http\Controllers\IngredientGroupController;
 use App\Http\Controllers\ItemController;
@@ -36,9 +37,7 @@ Route::middleware(['auth'])->group(function () {
     // The back office is for active managers/admins: LoginRequest refuses everyone else and the
     // EnsureBackOfficeUser web middleware signs out any session that slips through (cashiers use
     // the POS). Each resource below is still gated by its own Policy as a second layer.
-    Route::get('dashboard', function () {
-        return Inertia::render('dashboard');
-    })->name('dashboard');
+    Route::get('dashboard', [DashboardController::class, 'getDashboard'])->name('dashboard');
 
     Route::get('back-office', function () {
         return Inertia::render('backOffice');
