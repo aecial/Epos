@@ -318,7 +318,7 @@ Body: `amount`, `reason` (type cannot change). Records `updated_by`. `404` if th
 
 ### DELETE `/shifts/{shift}/transactions/{transaction}`
 
-Soft delete (`deleted_at`, `deleted_by`); excluded from totals afterwards. `409` if the shift is closed. **Note:** unlike create/update, this action has no role check in code — any authenticated staff member can call it (see §13).
+Soft delete (`deleted_at`, `deleted_by`); excluded from totals afterwards. `409` if the shift is closed. **Note:** unlike create/update, this action deliberately has no role check — any authenticated staff member can remove a mistaken entry. `404` if the transaction belongs to a different shift.
 
 ---
 
@@ -393,14 +393,14 @@ Add a line and **reserve stock**. Any staff. Ticket must be `open`.
 ```
 
 - `quantity`: integer `>= 1`
-- `modifier_ids`: optional; ids must exist and be attached to the item (others are ignored)
+- `modifier_ids`: optional, distinct; each must be attached to the item and active, otherwise `422` on `modifier_ids` (`One or more modifiers are not available for this item.`)
 - `notes`: optional, max 500. **KDS/back-office only — never printed on a receipt.**
 - `unit_price`: numeric, `> 0`, at most 2 decimals, max 999999.99 — **required** for `entry_mode` `price` and `name_price`, **forbidden** for every other item (a terminal can never override a menu price)
 - `custom_name`: 1–100 characters, single line — **required** for `name_price`, **forbidden** otherwise
 
 Line price = `(unit_price or base_price + Σ modifier price_modifier) × quantity`. The item name (the typed `custom_name` for a Custom item), cost price, unit price, `line_type` and modifier names/prices are **snapshotted** onto the line so later menu edits don't change history. A line picked with a stockless variant is saved with `is_stockless: true` (and the modifier with `is_stockless_variant: true`): it never reserves, deducts or restocks (quantity change, void, cancel, payment and refund all skip it), its cost is ₱0, the variant's price is ₱0, and the variant is omitted from the receipt payload's `items[].modifiers`.
 
-**Special items** (items in a `special` category) never touch inventory, so adding, voiding, paying and refunding them never moves stock. The ticket discount applies to them like any other line. `line_type` on the ticket line is `item` (regular), `fee` (Fee item or any fixed fee in a special category) or `custom` (Custom item). The future KDS feed shows `item` and `custom` lines and hides `fee` lines.
+**Special items** (items in a `special` category) never touch inventory, so adding, voiding, paying and refunding them never moves stock. The ticket discount applies to them like any other line. `line_type` on the ticket line is `item` (regular), `fee` (Fee item or any fixed fee in a special category) or `custom` (Custom item). The KDS feed shows `item` and `custom` lines and hides `fee` lines.
 
 **Response `201`:** the refreshed ticket with `items.modifiers`; `meta.ticket_item_id` is the new line's id.
 
@@ -600,7 +600,7 @@ A receipt is an **immutable snapshot** written when payment commits (one per cha
 
 `line_type` is `item`, `fee` or `custom`, so the POS can print fees under their own heading; receipts issued before Special items existed have no `line_type` (treat as `item`). For a Custom item `name` is the name the cashier typed.
 
-Here `subtotal − discount = total` describes **this charge's slice** of the bill. The restaurant name/address header and footer text are not in the payload; the POS app supplies them.
+Here `subtotal − discount = total` describes **this charge's slice** of the bill. There is no restaurant name, address or contact on the receipt (the owner's choice), so the payload has none; a footer line, if any, is up to the POS app.
 
 ### GET `/receipts`
 
@@ -860,7 +860,7 @@ KDS (feed ordering/filtering/field omissions, completion toggle persistence and 
 
 Ticket access (another cashier gets `404` on every per-ticket route and the ticket is untouched, a manager/admin can view/add to/pay any ticket, a cashier lists only their own tickets in any status while a manager/admin lists all, merges can't pull in another cashier's ticket in the request or the service, a manager/admin can merge across cashiers, KDS and receipts still see everything) is covered by `TicketOwnershipTest`.
 
-**Not yet covered by dedicated tests:** API login, shifts open/close and totals, shift transactions, refund listing, and ticket create/discount/cancel.
+API login (named device tokens, bad/inactive logins, the 6/min throttle, logout revoking only its own token, the `401` envelope) is covered by `ApiAuthTest`. Shifts (one open at a time, live totals, the close snapshot and discrepancy across cash/GCash/split payments, additions, expenses, deleted entries and cash refunds, blocked while a ticket is open, no double close) by `ShiftApiTest`; shift transactions (manager/admin create and edit, any staff deletes, soft delete, wrong-shift `404`, frozen once closed) by `ShiftTransactionApiTest`. Ticket create (per-shift order numbers, john → john2 → john3 across terminals and cashiers, names freed once a ticket closes), discount (fixed, percent precedence, floor at ₱0, follows line changes, locked once paid) and cancel (reservations released, voided lines not released twice, open only) by `TicketApiTest`; the refund list and its filters by `RefundApiTest`.
 
 ---
 
@@ -872,4 +872,5 @@ Ticket access (another cashier gets `404` on every per-ticket route and the tick
 | **KDS tablet client (the actual display app)** | `GET /kds/orders`, the completion toggle and the realtime channel it will use are implemented (§8.5). The React Native display itself is not built. |
 | **Employee / category / item admin over the API** | These live in the session-authenticated back office only, not in `/api/v1`. |
 | **Per-item charge assignment (`charge_items`)** | Dropped by design; charges are amounts-only with prorated receipts. |
-| **Back-office reports** | Data and API exist; no Inertia pages yet. (The Dashboard, Shifts, Tickets, Kitchen Orders, Items Sold and Refunds pages exist — `ENHANCED_SPEC.md` §7. Refund approval stays on the POS.) |
+| **Item image upload** | `GET /items` returns `image_url` as typed in the back office; there is no file upload yet. |
+| **Store header on receipts** | Deliberately left out: the receipt `payload` carries no restaurant name, address or contact, and none is planned. |

@@ -1,8 +1,8 @@
 # Restaurant POS & Back Office System — ENHANCED SPECIFICATION (v1.2)
 
 **Project Name:** Restaurant POS + Back Office Admin Panel + KDS  
-**Status:** Back-office menu/inventory/recipe/user management and the POS REST API (shifts, tickets, payments, receipts, refunds) are implemented. The React Native POS, KDS, WebSocket real-time layer and back-office reporting pages are still planned.
-**Last Updated:** September 2026
+**Status:** The back office (menu, inventory, recipes, users, and the Dashboard, Shifts, Tickets, Kitchen Orders, Items Sold and Refunds pages) and the POS REST API (shifts, tickets, payments, receipts, refunds, the KDS feed and its realtime `kds.orders` channel) are implemented. The React Native POS app, the KDS tablet app and realtime sync for anything other than the KDS are still planned.
+**Last Updated:** October 2026
 
 > This document is the product specification. The implemented interfaces are: (1) Laravel 12 + Inertia React session-authenticated back-office pages (`routes/web.php`), and (2) the Sanctum-token REST API for POS clients (`routes/api_v1.php`, documented in `UNIFIED_API_ENDPOINTS.md`). Laravel migrations and application code are authoritative when this document differs from the repository. Sections marked **(planned)** are not built yet.
 
@@ -15,10 +15,10 @@ A complete point-of-sale (POS), kitchen display system (KDS), and restaurant man
 ### System Components
 
 1. **Laravel web application** — Authenticated back-office pages and the services shared with the API ✅
-2. **Laravel REST API** (`/api/v1`, Sanctum) — Backend for POS/KDS clients ✅ (KDS feed and real-time not yet)
-3. **Inertia React Back Office** — Admin panel for managing menu, categories, modifiers, employees, ingredients, and recipes ✅
+2. **Laravel REST API** (`/api/v1`, Sanctum) — Backend for POS/KDS clients ✅ (including the KDS feed and its realtime channel)
+3. **Inertia React Back Office** — Admin panel for managing menu, categories, modifiers, employees, ingredients, and recipes, plus the dashboard and view-only reports (shifts, tickets, kitchen orders, items sold, refunds) ✅
 4. **React Native POS** — Tablet-based point-of-sale for taking orders (multiple terminals) _(planned)_
-5. **KDS Screen** — Kitchen Display System showing live orders with timers _(planned)_
+5. **KDS Screen** — Kitchen Display System showing live orders with timers _(tablet app planned; its API and realtime channel are implemented, and the back office has a Kitchen Orders page)_
 6. **Receipt Printer** — Thermal printer (Goojrpt PT-210). The API issues printable receipt payloads and a reprint log; the actual printing is done by the POS app _(planned)_
 
 ### Core Business Logic
@@ -26,7 +26,7 @@ A complete point-of-sale (POS), kitchen display system (KDS), and restaurant man
 - **Single active shift** at a time (any staff opens it → tickets are created → any staff closes it once no ticket is open)
 - **Real-time inventory** tracking with a reserve → deduct → restore system (direct, recipe, or untracked items)
 - **Account-bound** POS screens (a cashier sees only the tickets they opened; a manager/admin logged into a POS sees every ticket)
-- **Unified KDS** (all terminals' orders visible to kitchen) _(planned)_
+- **Unified KDS** (all terminals' orders visible to kitchen) ✅ — `GET /kds/orders` and the `kds.orders` channel; the tablet app is planned
 - **Split charges** (cash + GCash on the same ticket; one receipt per payment method; amounts-only, no per-item assignment)
 - **Ticket merging** (fold 2+ open tickets in the same shift into one bill; the receipt lists every order number)
 - **Auto-print receipts** after payment completion (API returns the printable payload in the payment response)
@@ -322,7 +322,7 @@ Only **cash** refunds reduce expected cash; GCash refunds never touched the draw
 | **HTTP Client**              | Axios                                               | API requests with interceptors _(planned)_ |
 | **Thermal Printer**          | Goojrpt PT-210                                      | Receipt printing via Bluetooth/USB _(planned)_ |
 | **Receipt Printing Library** | react-native-thermal-receipt-printer or Goojrpt SDK | Print integration _(planned)_      |
-| **Real-time Updates**        | Laravel WebSockets + Pusher JS (Laravel Reverb is a first-party alternative) | Live order broadcast _(planned; nothing installed yet)_ |
+| **Real-time Updates**        | Laravel Reverb (Pusher protocol; Pusher JS / Laravel Echo on clients) | Live KDS broadcast ✅; general POS sync _(planned)_ |
 | **Deployment**               | Intel NUC (Docker)                                  | Local network hosting (after development) |
 | **Network**                  | WiFi Mesh (TP-Link Deco M5)                         | POS tablet connectivity            |
 
@@ -489,13 +489,13 @@ Notes:
 - Restocking a direct item is done by editing its quantity on the item form; ingredient stock is adjusted on the ingredient form. There is no separate bulk-adjust screen.
 - The back-office item list has a client-side search (name or category) but no category/status filter; the POS `GET /api/v1/items` supports a `category_id` filter.
 
-### Planned (data and API exist; no Inertia pages yet)
+### Not built
 
-#### `/reports` (Optional v1)
+There is no separate `/reports` page; what it was meant to hold lives on the pages above:
 
-- Daily sales and item popularity - covered by `/sales` (Items Sold) above
-- Payment method breakdown
-- Employee performance (if tracking)
+- Daily sales and item popularity - `/sales` (Items Sold) and the Dashboard's top items
+- Payment method breakdown - the Dashboard's payment mix and each shift's close report
+- Employee performance - not tracked; the Refunds page totals refunds by who requested/decided them
 
 ---
 
@@ -552,13 +552,9 @@ Notes:
 
 ### Receipt Format (Per Charge)
 
-The server supplies the receipt data (see the payload in `UNIFIED_API_ENDPOINTS.md` §7). The restaurant name/address/phone header and the thank-you footer are **not** stored in the payload — the POS app renders them. Notes are never included.
+The server supplies the receipt data (see the payload in `UNIFIED_API_ENDPOINTS.md` §7). There is **no** restaurant name, address or contact on the receipt, by the owner's choice: the payload doesn't carry them and the POS app doesn't add them. A thank-you footer, if any, is up to the POS app. Notes are never included.
 
 ```
-═══════════════════════════════════════
-        RESTAURANT NAME
-        123 Main Street
-        +63 912 345 6789
 ═══════════════════════════════════════
 RECEIPT REC-2026-09-25-001 (CASH)
 Order #001 - john (Dine-in)
@@ -715,8 +711,8 @@ Legend: `[x]` implemented and tested · `[~]` implemented on the server/API, cli
 - [x] Receipt reprint with watermark (API flag; the POS renders the watermark)
 - [x] Receipt history filters (API)
 - [x] Cost price → margin calculation (frontend, item management page)
-- [ ] Order status color-coding (age-based)
-- [ ] Receipt history filters in the back office UI
+- [~] Order status color-coding (age-based) — the back-office Kitchen Orders page turns a card amber at 10 min and red at 20; the KDS tablet app still to build
+- [x] Receipt history filters in the back office UI — by design there's no receipts list: `/tickets` searches by receipt number and filters by payment method/date, and each payment links to its receipt
 - [ ] Image uploads for items (only an `image_url` string today)
 
 ### Defer to v1.1+
@@ -728,7 +724,7 @@ Legend: `[x]` implemented and tested · `[~]` implemented on the server/API, cli
 - [ ] Multi-location support
 - [ ] Delivery integration (GrabFood, Foodpanda)
 - [ ] Kitchen staff performance metrics
-- [ ] Inventory alerts/reordering
+- [~] Inventory alerts/reordering — reorder levels with "Low" warnings on the stock lists, the back-office hub and the dashboard are done (`ReorderLevelTest`); automatic reordering is not
 
 ---
 
@@ -836,11 +832,11 @@ WiFi Mesh (TP-Link Deco M5)
     - Fallback to digital receipt if printer offline
     - The server returns the printable payload and logs reprints; it does not talk to the printer
 
-6. **KDS Item Completion**
+6. **KDS Item Completion** ✅
 
-    - Store in UI state only (no DB timestamp in v1)
-    - When item marked done: remove from kitchen view
-    - On page refresh: re-fetch orders and re-calculate completion UI
+    - Persisted as `ticket_items.completed_at` (supersedes the original "UI state only" plan), toggled through the KDS API and broadcast on `kds.orders`
+    - A completed line drops off the feed; a refresh re-fetches `GET /kds/orders`, which already leaves it out
+    - Cleared nightly by `kds:clear-completed` - kitchen workflow state, not history
 
 7. **Database Transactions** ✅
 
@@ -862,18 +858,18 @@ WiFi Mesh (TP-Link Deco M5)
 
 Automated (Pest) coverage today is marked ✅; the rest is manual or still to write. Run the suite with `php artisan test`.
 
-- [ ] User login (API) & role-based access — _no dedicated API login test yet_
-- [ ] Open shift, sync menu — _menu ✅ (`ItemApiTest`); shift open/close untested_
-- [ ] Create ticket with auto-duplicate names (john → john2) — _no ticket create test yet_
+- [x] User login (API) & role-based access — named device tokens, bad/inactive logins refused, 6/min throttle, logout revokes only that token, 401 without one (`ApiAuthTest`); KDS-scoped tokens (`KdsTokenScopeTest`); back office managers/admins only (`BackOfficeAccessTest`)
+- [x] Open shift, sync menu — one open shift at a time, live totals (`ShiftApiTest`); menu (`ItemApiTest`)
+- [x] Create ticket with auto-duplicate names (john → john2 → john3, across terminals and cashiers; a name frees up once its ticket is no longer open), per-shift order numbers (`TicketApiTest`)
 - [x] Add items (reserves inventory) — direct and recipe modes
 - [x] Edit item quantity — raise/lower without a passcode, insufficient stock, zero rejected, voided/closed ticket rejected (`TicketItemQuantityTest`)
-- [ ] Apply discount — _ticket discount untested; discount proration ✅ (`ReceiptTest`)_
+- [x] Apply discount — fixed, percent (wins over fixed), never below ₱0, follows later line changes, locked once paid (`TicketApiTest`); receipt proration (`ReceiptTest`)
 - [x] Split payment (cash + gcash)
 - [x] Charge sum must equal total exactly
 - [x] Process payment (issues one receipt per charge; rollback if receipt fails)
 - [x] Verify inventory deducted; a paid ticket can't be charged twice
 - [x] Merge tickets (rules, chained merges, single receipt with all order numbers)
-- [ ] Cancel ticket (unreserve inventory) — _untested_
+- [x] Cancel ticket (unreserve inventory; a voided line isn't released twice; open tickets only) — `TicketApiTest`
 - [x] Void item with passcode (approver identified from the passcode alone; `PasscodeApprovalTest`)
 - [x] A cashier sees only their own orders; another cashier can't see, act on or merge them; a manager/admin sees and acts on all — `TicketOwnershipTest`
 - [x] KDS sees all terminals, strictly `created_at` ASC, no prices/terminal info — `KdsOrdersFeedTest`
@@ -881,7 +877,9 @@ Automated (Pest) coverage today is marked ✅; the rest is manual or still to wr
 - [x] Request refund, manager approves (restore inventory; cash refund reduces expected cash) — `RefundValidationTest`, `PasscodeApprovalTest`
 - [x] View receipt history (all terminals visible), filters, search, reprint log
 - [x] WebSocket broadcasts on ticket/item changes (KDS channel) — `KdsBroadcastTest`; general POS broadcasts (`shift.{shift_id}`) still unbuilt
-- [ ] Close shift, verify totals (incl. blocked while tickets are open) — _partly covered by the merge test; otherwise untested_
+- [x] Close shift, verify totals (cash, GCash, split, additions, expenses, deleted entries, cash refunds, discrepancy; blocked while tickets are open; can't close twice) — `ShiftApiTest`
+- [x] Shift expenses & cash additions (manager/admin records and edits, any staff removes, soft delete, frozen once the shift closes) — `ShiftTransactionApiTest`
+- [x] Refund list for the POS (status/shift filters, newest first, with lines) — `RefundApiTest`
 - [ ] Printer offline, fallback to digital receipt — _POS app_
 - [x] Token expiry & re-login flow — tokens never expire on their own; a manager/admin can revoke one from Employee Management → Devices, and the revoked token is immediately rejected by the API (`UserSessionsTest`). The POS app's re-login-on-401 UI is still to build
 
