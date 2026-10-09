@@ -1,8 +1,10 @@
+import { type ChartConfig, ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, usePoll } from '@inertiajs/react';
 import { ArrowDown, ArrowUp, ChefHat, CircleCheck, Clock, LayoutGrid, PackageMinus, TriangleAlert, Undo2 } from 'lucide-react';
-import { type ReactNode, useState } from 'react';
+import { type ReactNode } from 'react';
+import { Bar, BarChart, CartesianGrid, Pie, PieChart, ReferenceLine, XAxis, YAxis } from 'recharts';
 
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'Dashboard', href: '/dashboard' }];
 
@@ -51,8 +53,10 @@ type DashboardProps = {
 };
 
 /** Series colors - categorical slots 1 and 2, validated for light and dark surfaces. */
-const seriesOne = 'bg-[#2a78d6] dark:bg-[#3987e5]';
-const seriesTwo = 'bg-[#eb6834] dark:bg-[#d95926]';
+const seriesOne = { light: '#2a78d6', dark: '#3987e5' };
+const seriesTwo = { light: '#eb6834', dark: '#d95926' };
+const seriesOneSwatch = 'bg-[#2a78d6] dark:bg-[#3987e5]';
+const seriesTwoSwatch = 'bg-[#eb6834] dark:bg-[#d95926]';
 
 const panelClass = 'border-sidebar-border/70 dark:border-sidebar-border rounded-xl border';
 
@@ -157,54 +161,66 @@ function Kpi({ label, value, change, valueClass = '' }: { label: string; value: 
     );
 }
 
-function HourlyChart({ hourly }: { hourly: HourBucket[] }) {
-    const [hovered, setHovered] = useState<HourBucket | null>(null);
-    const max = Math.max(1, ...hourly.flatMap((bucket) => [bucket.today, bucket.yesterday]));
+/** Tooltip row: the series' color dot and name, then the amount in pesos. */
+function pesoTooltipRow(value: unknown, name: unknown, item: { color?: string }, config: ChartConfig) {
+    const label = config[String(name)]?.label ?? String(name);
 
+    return (
+        <>
+            <div className="size-2.5 shrink-0 rounded-[2px]" style={{ backgroundColor: item.color }} />
+            <div className="flex flex-1 items-center justify-between gap-4 leading-none">
+                <span className="text-muted-foreground">{label}</span>
+                <span className="text-foreground font-mono font-medium tabular-nums">{peso(Number(value))}</span>
+            </div>
+        </>
+    );
+}
+
+const hourlyConfig = {
+    today: { label: 'Today', theme: seriesOne },
+    yesterday: { label: 'Yesterday', theme: seriesTwo },
+} satisfies ChartConfig;
+
+function HourlyChart({ hourly }: { hourly: HourBucket[] }) {
     if (hourly.length === 0) {
         return <p className="text-muted-foreground px-5 py-10 text-center text-sm">No sales yet today or yesterday.</p>;
     }
 
+    const data = hourly.map((bucket) => ({ ...bucket, label: hourLabel(bucket.hour) }));
+
     return (
-        <div className="px-5 py-4">
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-xs">
-                <div className="flex items-center gap-3">
-                    <span className="inline-flex items-center gap-1.5">
-                        <Swatch className={seriesOne} /> Today
-                    </span>
-                    <span className="inline-flex items-center gap-1.5">
-                        <Swatch className={seriesTwo} /> Yesterday
-                    </span>
-                </div>
-                <span className="text-muted-foreground min-h-4">
-                    {hovered
-                        ? `${hourLabel(hovered.hour)}–${hourLabel((hovered.hour + 1) % 24)}: today ${peso(hovered.today)} · yesterday ${peso(hovered.yesterday)}`
-                        : 'Hover a bar for the amounts'}
-                </span>
-            </div>
-            <div className="flex h-40 items-end gap-1 border-b" role="img" aria-label="Net sales by hour, today and yesterday">
-                {hourly.map((bucket) => (
-                    <div
-                        key={bucket.hour}
-                        className={`flex h-full flex-1 items-end justify-center gap-0.5 rounded-sm ${hovered?.hour === bucket.hour ? 'bg-muted' : ''}`}
-                        onMouseEnter={() => setHovered(bucket)}
-                        onMouseLeave={() => setHovered(null)}
-                    >
-                        <div className={`w-full max-w-4 rounded-t ${seriesOne}`} style={{ height: `${(bucket.today / max) * 100}%` }} />
-                        <div className={`w-full max-w-4 rounded-t ${seriesTwo}`} style={{ height: `${(bucket.yesterday / max) * 100}%` }} />
-                    </div>
-                ))}
-            </div>
-            <div className="mt-1 flex gap-1">
-                {hourly.map((bucket) => (
-                    <div key={bucket.hour} className="text-muted-foreground flex-1 text-center text-[10px]">
-                        {hourLabel(bucket.hour)}
-                    </div>
-                ))}
-            </div>
+        <div className="px-3 pt-4 pb-2">
+            <ChartContainer config={hourlyConfig} className="aspect-auto h-60 w-full" aria-label="Net sales by hour, today and yesterday">
+                <BarChart data={data} barGap={2} barCategoryGap="24%" accessibilityLayer>
+                    <CartesianGrid vertical={false} />
+                    <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} />
+                    <YAxis tickLine={false} axisLine={false} width={52} tickFormatter={(value: number) => shortPeso(value)} />
+                    <ChartTooltip
+                        cursor={{ fill: 'var(--muted)' }}
+                        content={
+                            <ChartTooltipContent
+                                labelFormatter={(_, payload) => {
+                                    const hour = payload?.[0]?.payload?.hour as number | undefined;
+
+                                    return hour === undefined ? '' : `${hourLabel(hour)}–${hourLabel((hour + 1) % 24)}`;
+                                }}
+                                formatter={(value, name, item) => pesoTooltipRow(value, name, item, hourlyConfig)}
+                            />
+                        }
+                    />
+                    <ChartLegend content={<ChartLegendContent />} />
+                    <Bar dataKey="today" fill="var(--color-today)" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="yesterday" fill="var(--color-yesterday)" radius={[4, 4, 0, 0]} />
+                </BarChart>
+            </ChartContainer>
         </div>
     );
 }
+
+const paymentConfig = {
+    cash: { label: 'Cash', theme: seriesOne },
+    gcash: { label: 'GCash', theme: seriesTwo },
+} satisfies ChartConfig;
 
 function PaymentMix({ cash, gcash }: { cash: number; gcash: number }) {
     const total = cash + gcash;
@@ -213,93 +229,77 @@ function PaymentMix({ cash, gcash }: { cash: number; gcash: number }) {
         return <p className="text-muted-foreground px-5 py-6 text-center text-sm">No payments yet today.</p>;
     }
 
-    const cashShare = (cash / total) * 100;
+    const share = (value: number) => Math.round((value / total) * 100);
+    const data = [
+        { method: 'cash', amount: cash, fill: 'var(--color-cash)' },
+        { method: 'gcash', amount: gcash, fill: 'var(--color-gcash)' },
+    ].filter((slice) => slice.amount > 0);
 
     return (
-        <div className="space-y-3 px-5 py-4">
-            <div className="flex h-3 gap-0.5" role="img" aria-label={`Cash ${Math.round(cashShare)}%, GCash ${Math.round(100 - cashShare)}%`}>
-                {cash > 0 && <div className={`rounded-l ${gcash === 0 ? 'rounded-r' : ''} ${seriesOne}`} style={{ width: `${cashShare}%` }} />}
-                {gcash > 0 && <div className={`rounded-r ${cash === 0 ? 'rounded-l' : ''} ${seriesTwo}`} style={{ width: `${100 - cashShare}%` }} />}
-            </div>
-            <div className="flex justify-between text-sm">
-                <span className="inline-flex items-center gap-1.5">
-                    <Swatch className={seriesOne} /> Cash <span className="font-medium">{peso(cash)}</span>
-                    <span className="text-muted-foreground">{Math.round(cashShare)}%</span>
-                </span>
-                <span className="inline-flex items-center gap-1.5">
-                    <Swatch className={seriesTwo} /> GCash <span className="font-medium">{peso(gcash)}</span>
-                    <span className="text-muted-foreground">{Math.round(100 - cashShare)}%</span>
-                </span>
+        <div className="flex items-center gap-4 px-5 py-4">
+            <ChartContainer
+                config={paymentConfig}
+                className="aspect-square h-36 shrink-0"
+                aria-label={`Cash ${share(cash)}%, GCash ${share(gcash)}%`}
+            >
+                <PieChart accessibilityLayer>
+                    <ChartTooltip
+                        content={
+                            <ChartTooltipContent
+                                hideLabel
+                                nameKey="method"
+                                formatter={(value, name, item) => pesoTooltipRow(value, name, { color: item.payload?.fill }, paymentConfig)}
+                            />
+                        }
+                    />
+                    {/* A 2px surface-colored stroke separates the two slices. */}
+                    <Pie data={data} dataKey="amount" nameKey="method" innerRadius="58%" strokeWidth={2} stroke="var(--background)" />
+                </PieChart>
+            </ChartContainer>
+            <div className="grid flex-1 gap-2 text-sm">
+                {(['cash', 'gcash'] as const).map((method) => (
+                    <div key={method} className="flex items-center gap-2">
+                        <Swatch className={method === 'cash' ? seriesOneSwatch : seriesTwoSwatch} />
+                        <span className="flex-1">{paymentConfig[method].label}</span>
+                        <span className="font-medium">{peso(method === 'cash' ? cash : gcash)}</span>
+                        <span className="text-muted-foreground w-10 text-right">{share(method === 'cash' ? cash : gcash)}%</span>
+                    </div>
+                ))}
             </div>
         </div>
     );
 }
 
-function SevenDayChart({ days }: { days: Day[] }) {
-    const [hovered, setHovered] = useState<Day | null>(null);
-    const values = days.flatMap((day) => [day.net_sales, day.net_profit]);
-    const top = Math.max(1, ...values);
-    const bottom = Math.min(0, ...values);
-    const span = top - bottom;
-    const zero = (top / span) * 100;
+const sevenDayConfig = {
+    net_sales: { label: 'Net sales', theme: seriesOne },
+    net_profit: { label: 'Net profit', theme: seriesTwo },
+} satisfies ChartConfig;
 
+function SevenDayChart({ days }: { days: Day[] }) {
     if (days.every((day) => day.net_sales === 0 && day.net_profit === 0)) {
         return <p className="text-muted-foreground px-5 py-10 text-center text-sm">No sales in the last 7 days.</p>;
     }
 
-    const bar = (value: number, color: string) => (
-        <div className="relative h-full w-full max-w-5">
-            <div
-                className={`absolute right-0 left-0 ${value >= 0 ? 'rounded-t' : 'rounded-b'} ${color}`}
-                style={
-                    value >= 0
-                        ? { bottom: `${100 - zero}%`, height: `${(value / span) * 100}%` }
-                        : { top: `${zero}%`, height: `${(-value / span) * 100}%` }
-                }
-            />
-        </div>
-    );
+    const data = days.map((day) => ({ ...day, label: dayLabel(day.date) }));
 
     return (
-        <div className="px-5 py-4">
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-xs">
-                <div className="flex items-center gap-3">
-                    <span className="inline-flex items-center gap-1.5">
-                        <Swatch className={seriesOne} /> Net sales
-                    </span>
-                    <span className="inline-flex items-center gap-1.5">
-                        <Swatch className={seriesTwo} /> Net profit
-                    </span>
-                </div>
-                <span className="text-muted-foreground min-h-4">
-                    {hovered
-                        ? `${dayLabel(hovered.date)}: sales ${peso(hovered.net_sales)} · profit ${peso(hovered.net_profit)}`
-                        : 'Hover a day for the amounts'}
-                </span>
-            </div>
-            <div className="relative h-40" role="img" aria-label="Net sales and net profit for the last 7 days">
-                <div className="border-muted-foreground/40 absolute right-0 left-0 border-t" style={{ top: `${zero}%` }} />
-                <div className="flex h-full gap-2">
-                    {days.map((day) => (
-                        <div
-                            key={day.date}
-                            className={`flex h-full flex-1 justify-center gap-0.5 rounded-sm ${hovered?.date === day.date ? 'bg-muted' : ''}`}
-                            onMouseEnter={() => setHovered(day)}
-                            onMouseLeave={() => setHovered(null)}
-                        >
-                            {bar(day.net_sales, seriesOne)}
-                            {bar(day.net_profit, seriesTwo)}
-                        </div>
-                    ))}
-                </div>
-            </div>
-            <div className="mt-1 flex gap-2">
-                {days.map((day) => (
-                    <div key={day.date} className="text-muted-foreground flex-1 text-center text-[10px]">
-                        {dayLabel(day.date)}
-                    </div>
-                ))}
-            </div>
+        <div className="px-3 pt-4 pb-2">
+            <ChartContainer config={sevenDayConfig} className="aspect-auto h-60 w-full" aria-label="Net sales and net profit for the last 7 days">
+                <BarChart data={data} barGap={2} barCategoryGap="24%" accessibilityLayer>
+                    <CartesianGrid vertical={false} />
+                    <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} />
+                    <YAxis tickLine={false} axisLine={false} width={52} tickFormatter={(value: number) => shortPeso(value)} />
+                    {/* A loss day's profit bar drops below this line. */}
+                    <ReferenceLine y={0} stroke="var(--border)" />
+                    <ChartTooltip
+                        cursor={{ fill: 'var(--muted)' }}
+                        content={<ChartTooltipContent formatter={(value, name, item) => pesoTooltipRow(value, name, item, sevenDayConfig)} />}
+                    />
+                    <ChartLegend content={<ChartLegendContent />} />
+                    <Bar dataKey="net_sales" fill="var(--color-net_sales)" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="net_profit" fill="var(--color-net_profit)" radius={[4, 4, 0, 0]} />
+                </BarChart>
+            </ChartContainer>
         </div>
     );
 }
