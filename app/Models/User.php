@@ -20,6 +20,19 @@ class User extends Authenticatable
     }
 
     /**
+     * Why this account may not use the back office, or null if it may. The back office is for
+     * active managers/admins only; cashiers sign in on the POS.
+     */
+    public function backOfficeRefusal(): ?string
+    {
+        if ($this->status !== 'active') {
+            return 'This account is inactive.';
+        }
+
+        return $this->isAdminOrManager() ? null : 'Cashier accounts sign in on the POS only.';
+    }
+
+    /**
      * The attributes that are mass assignable.
      *
      * @var list<string>

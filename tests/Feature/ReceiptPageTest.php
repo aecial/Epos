@@ -73,8 +73,8 @@ test('a cashier can neither view nor print a receipt here; a guest is sent to lo
     $cashier = posUser();
     $receipt = splitPaidTicket()->receipts()->firstOrFail();
 
-    $this->actingAs($cashier)->get("/receipts/{$receipt->id}")->assertForbidden();
-    $this->actingAs($cashier)->post("/receipts/{$receipt->id}/reprint")->assertForbidden();
+    $this->actingAs($cashier)->get("/receipts/{$receipt->id}")->assertRedirect('/login');
+    $this->actingAs($cashier)->post("/receipts/{$receipt->id}/reprint")->assertRedirect('/login');
     expect(ReceiptPrint::where('receipt_id', $receipt->id)->where('is_reprint', true)->count())->toBe(0);
 
     auth()->logout();

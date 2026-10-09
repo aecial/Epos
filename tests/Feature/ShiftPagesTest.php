@@ -171,12 +171,12 @@ test('an open shift\'s detail shows live totals', function () {
         );
 });
 
-test('cashiers cannot open the shift pages and guests are sent to login', function () {
+test('cashiers are signed out of the shift pages and guests are sent to login', function () {
     $cashier = posUser();
     $shift = posOpenShift($cashier);
 
-    $this->actingAs($cashier)->get('/shifts')->assertForbidden();
-    $this->actingAs($cashier)->get("/shifts/{$shift->id}")->assertForbidden();
+    $this->actingAs($cashier)->get('/shifts')->assertRedirect('/login');
+    $this->actingAs($cashier)->get("/shifts/{$shift->id}")->assertRedirect('/login');
 
     auth()->logout();
     $this->get('/shifts')->assertRedirect(route('login'));

@@ -33,9 +33,9 @@ Route::get('/', function () {
 })->name('home');
 
 Route::middleware(['auth'])->group(function () {
-    // Every role may log in to the back office (CLAUDE.md role matrix), so dashboard and the
-    // hub stay open to all; each management resource below is gated by its own Policy
-    // (admin/manager only today — see App\Policies\Concerns\AuthorizesBackOffice).
+    // The back office is for active managers/admins: LoginRequest refuses everyone else and the
+    // EnsureBackOfficeUser web middleware signs out any session that slips through (cashiers use
+    // the POS). Each resource below is still gated by its own Policy as a second layer.
     Route::get('dashboard', function () {
         return Inertia::render('dashboard');
     })->name('dashboard');

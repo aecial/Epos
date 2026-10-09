@@ -148,9 +148,9 @@ test('a cashier can neither see nor bump from the page; a guest is sent to login
     $ticket = posTicket(posOpenShift($cashier), $cashier, 'john');
     $line = posAddItem($ticket, posItem('Rice', 20));
 
-    $this->actingAs($cashier)->get('/kitchen-orders')->assertForbidden();
-    $this->actingAs($cashier)->patch("/kitchen-orders/items/{$line->id}/complete")->assertForbidden();
-    $this->actingAs($cashier)->patch("/kitchen-orders/{$ticket->id}/complete")->assertForbidden();
+    $this->actingAs($cashier)->get('/kitchen-orders')->assertRedirect('/login');
+    $this->actingAs($cashier)->patch("/kitchen-orders/items/{$line->id}/complete")->assertRedirect('/login');
+    $this->actingAs($cashier)->patch("/kitchen-orders/{$ticket->id}/complete")->assertRedirect('/login');
     expect($line->fresh()->completed_at)->toBeNull();
 
     auth()->logout();

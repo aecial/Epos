@@ -46,14 +46,19 @@ function boIngredient(IngredientGroup $group): Ingredient
     return Ingredient::create(['ingredient_group_id' => $group->id, 'name' => 'Lettuce', 'unit' => 'kg', 'quantity' => 10, 'cost_per_unit' => 5]);
 }
 
-test('dashboard and the back-office hub stay open to a cashier', function () {
+test('a cashier is signed out of the dashboard and the back-office hub; a manager is not', function () {
     $cashier = User::factory()->create(['role' => 'cashier']);
+    $manager = User::factory()->manager()->create();
 
-    $this->actingAs($cashier)->get('/dashboard')->assertOk();
-    $this->actingAs($cashier)->get('/back-office')->assertOk();
+    $this->actingAs($cashier)->get('/dashboard')->assertRedirect('/login')->assertSessionHasErrors('username');
+    $this->assertGuest();
+    $this->actingAs($cashier)->get('/back-office')->assertRedirect('/login');
+
+    $this->actingAs($manager)->get('/dashboard')->assertOk();
+    $this->actingAs($manager)->get('/back-office')->assertOk();
 });
 
-test('a cashier is forbidden from every management index page, a manager is not', function () {
+test('a cashier is signed out of every management index page, a manager is not', function () {
     $cashier = User::factory()->create(['role' => 'cashier']);
     $manager = User::factory()->create(['role' => 'manager']);
 
@@ -71,12 +76,12 @@ test('a cashier is forbidden from every management index page, a manager is not'
     ];
 
     foreach ($pages as $page) {
-        $this->actingAs($cashier)->get($page)->assertForbidden();
+        $this->actingAs($cashier)->get($page)->assertRedirect('/login');
         $this->actingAs($manager)->get($page)->assertOk();
     }
 });
 
-test('a cashier is forbidden from every "create" page, a manager is not', function () {
+test('a cashier is signed out of every "create" page, a manager is not', function () {
     $cashier = User::factory()->create(['role' => 'cashier']);
     $manager = User::factory()->create(['role' => 'manager']);
 
@@ -91,12 +96,12 @@ test('a cashier is forbidden from every "create" page, a manager is not', functi
     ];
 
     foreach ($pages as $page) {
-        $this->actingAs($cashier)->get($page)->assertForbidden();
+        $this->actingAs($cashier)->get($page)->assertRedirect('/login');
         $this->actingAs($manager)->get($page)->assertOk();
     }
 });
 
-test('a cashier is forbidden from every "edit" page, a manager is not', function () {
+test('a cashier is signed out of every "edit" page, a manager is not', function () {
     $cashier = User::factory()->create(['role' => 'cashier']);
     $manager = User::factory()->create(['role' => 'manager']);
     $category = boCategory();
@@ -116,7 +121,7 @@ test('a cashier is forbidden from every "edit" page, a manager is not', function
     ];
 
     foreach ($pages as $page) {
-        $this->actingAs($cashier)->get($page)->assertForbidden();
+        $this->actingAs($cashier)->get($page)->assertRedirect('/login');
         $this->actingAs($manager)->get($page)->assertOk();
     }
 });
@@ -125,23 +130,23 @@ test('a cashier cannot delete any management resource, a manager can', function 
     $cashier = User::factory()->create(['role' => 'cashier']);
 
     $category = boCategory();
-    $this->actingAs($cashier)->delete("/categories/{$category->id}")->assertForbidden();
+    $this->actingAs($cashier)->delete("/categories/{$category->id}")->assertRedirect('/login');
 
     $item = boItem($category);
-    $this->actingAs($cashier)->delete("/items/{$item->id}")->assertForbidden();
+    $this->actingAs($cashier)->delete("/items/{$item->id}")->assertRedirect('/login');
 
     $modifierGroup = boModifierGroup();
     $modifier = boModifier($modifierGroup);
-    $this->actingAs($cashier)->delete("/modifiers/{$modifier->id}")->assertForbidden();
-    $this->actingAs($cashier)->delete("/modifier-groups/{$modifierGroup->id}")->assertForbidden();
+    $this->actingAs($cashier)->delete("/modifiers/{$modifier->id}")->assertRedirect('/login');
+    $this->actingAs($cashier)->delete("/modifier-groups/{$modifierGroup->id}")->assertRedirect('/login');
 
     $ingredientGroup = boIngredientGroup();
     $ingredient = boIngredient($ingredientGroup);
-    $this->actingAs($cashier)->delete("/ingredients/{$ingredient->id}")->assertForbidden();
-    $this->actingAs($cashier)->delete("/ingredient-groups/{$ingredientGroup->id}")->assertForbidden();
+    $this->actingAs($cashier)->delete("/ingredients/{$ingredient->id}")->assertRedirect('/login');
+    $this->actingAs($cashier)->delete("/ingredient-groups/{$ingredientGroup->id}")->assertRedirect('/login');
 
     $target = User::factory()->create(['role' => 'cashier']);
-    $this->actingAs($cashier)->delete("/users/{$target->id}")->assertForbidden();
+    $this->actingAs($cashier)->delete("/users/{$target->id}")->assertRedirect('/login');
 
     // None of the above were actually deleted.
     expect(Category::find($category->id))->not->toBeNull()

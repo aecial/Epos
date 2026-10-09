@@ -134,11 +134,11 @@ test('the history filters by status, method, requested date and search; the card
         ->and(collect($filtered['pending'])->pluck('id')->all())->toBe([$pending->id]);
 });
 
-test('the pending count is shared with managers for the sidebar badge, not with cashiers', function () {
-    ['manager' => $manager, 'anna' => $anna] = refundPageScenario();
+test('the pending count is shared with every back-office page for the sidebar badge', function () {
+    ['manager' => $manager] = refundPageScenario();
 
     $this->actingAs($manager)->get('/dashboard')->assertInertia(fn ($page) => $page->where('pendingRefunds', 1));
-    $this->actingAs($anna)->get('/dashboard')->assertInertia(fn ($page) => $page->where('pendingRefunds', null));
+    $this->actingAs($manager)->get('/shifts')->assertInertia(fn ($page) => $page->where('pendingRefunds', 1));
 });
 
 test('an invalid filter is rejected', function () {
@@ -149,8 +149,8 @@ test('an invalid filter is rejected', function () {
         ->assertSessionHasErrors('status');
 });
 
-test('a cashier is forbidden; a guest is sent to login', function () {
-    $this->actingAs(posUser())->get('/refunds')->assertForbidden();
+test('a cashier is signed out; a guest is sent to login', function () {
+    $this->actingAs(posUser())->get('/refunds')->assertRedirect('/login');
 
     auth()->logout();
     $this->get('/refunds')->assertRedirect('/login');

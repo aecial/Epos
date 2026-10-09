@@ -8,6 +8,7 @@ use App\Exceptions\NoActiveShiftException;
 use App\Exceptions\OpenTicketsExistException;
 use App\Exceptions\RecordInUseException;
 use App\Exceptions\TooManyPasscodeAttemptsException;
+use App\Http\Middleware\EnsureBackOfficeUser;
 use App\Http\Middleware\HandleInertiaRequests;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -38,6 +39,8 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->web(append: [
+            // Before Inertia shares props, so a signed-out session never shares its user.
+            EnsureBackOfficeUser::class,
             HandleInertiaRequests::class,
             AddLinkHeadersForPreloadedAssets::class,
         ]);

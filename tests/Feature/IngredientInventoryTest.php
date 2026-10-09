@@ -2,6 +2,7 @@
 
 use App\Models\Category;
 use App\Models\Ingredient;
+use App\Models\IngredientGroup;
 use App\Models\Item;
 use App\Models\User;
 
@@ -60,14 +61,18 @@ test('manager can create raw materials and assign them to a recipe item', functi
 });
 
 test('cashier cannot manage raw materials or recipes', function () {
-    $this->actingAs(User::factory()->create(['role' => 'cashier']));
+    $cashier = User::factory()->create(['role' => 'cashier']);
 
-    $this->post('/ingredient-groups', ['name' => 'Raw Materials'])
-        ->assertForbidden();
+    // A cashier is signed out of the back office before any policy runs.
+    $this->actingAs($cashier)->post('/ingredient-groups', ['name' => 'Raw Materials'])
+        ->assertRedirect('/login');
 
-    $this->post('/ingredients', [
+    $this->actingAs($cashier)->post('/ingredients', [
         'ingredient_group_id' => 1,
         'name' => 'Itik',
         'unit' => 'piece',
-    ])->assertForbidden();
+    ])->assertRedirect('/login');
+
+    expect(IngredientGroup::count())->toBe(0)
+        ->and(Ingredient::count())->toBe(0);
 });

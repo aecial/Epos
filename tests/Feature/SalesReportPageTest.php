@@ -221,8 +221,8 @@ test('an invalid period is rejected', function () {
         ->assertSessionHasErrors('date_to');
 });
 
-test('a cashier is forbidden; a guest is sent to login', function () {
-    $this->actingAs(posUser())->get('/sales')->assertForbidden();
+test('a cashier is signed out; a guest is sent to login', function () {
+    $this->actingAs(posUser())->get('/sales')->assertRedirect('/login');
 
     auth()->logout();
     $this->get('/sales')->assertRedirect('/login');

@@ -237,12 +237,12 @@ test('a cancelled ticket shows who cancelled it and when', function () {
         );
 });
 
-test('a cashier is forbidden from both pages, even for a ticket they opened; a guest is sent to login', function () {
+test('a cashier is signed out of both pages, even for a ticket they opened; a guest is sent to login', function () {
     $cashier = posUser();
     $ticket = burgerTicket(posOpenShift($cashier), $cashier, 'john');
 
-    $this->actingAs($cashier)->get('/tickets')->assertForbidden();
-    $this->actingAs($cashier)->get("/tickets/{$ticket->id}")->assertForbidden();
+    $this->actingAs($cashier)->get('/tickets')->assertRedirect('/login');
+    $this->actingAs($cashier)->get("/tickets/{$ticket->id}")->assertRedirect('/login');
 
     auth()->logout();
     $this->get('/tickets')->assertRedirect('/login');

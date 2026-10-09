@@ -23,7 +23,7 @@ test('a cashier cannot view another user\'s devices', function () {
     $other = User::factory()->create(['role' => 'cashier']);
     $other->createToken('POS-01');
 
-    $this->actingAs($cashier)->get("/users/{$other->id}/sessions")->assertForbidden();
+    $this->actingAs($cashier)->get("/users/{$other->id}/sessions")->assertRedirect('/login');
 });
 
 test('revoking one device deletes only that token and the token stops authenticating', function () {
@@ -84,8 +84,8 @@ test('a cashier cannot revoke anyone\'s device', function () {
     $other = User::factory()->create(['role' => 'cashier']);
     $token = $other->createToken('POS-01');
 
-    $this->actingAs($cashier)->delete("/users/{$other->id}/sessions/{$token->accessToken->id}")->assertForbidden();
-    $this->actingAs($cashier)->delete("/users/{$other->id}/sessions")->assertForbidden();
+    $this->actingAs($cashier)->delete("/users/{$other->id}/sessions/{$token->accessToken->id}")->assertRedirect('/login');
+    $this->actingAs($cashier)->delete("/users/{$other->id}/sessions")->assertRedirect('/login');
 
     expect($other->tokens()->count())->toBe(1);
 });
