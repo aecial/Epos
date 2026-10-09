@@ -20,6 +20,7 @@ type Item = {
     calculated_cost_price: number | string | null;
     quantity: number;
     reserved_quantity: number;
+    reorder_level: number | null;
     inventory_type: InventoryType;
     available_stock: number | null;
     status: ItemStatus;
@@ -154,6 +155,17 @@ export default function ItemManagementPage({ items }: { items: Item[] }) {
                                         <TableCell className="text-right">{margin === null ? '—' : `${margin.toFixed(2)}%`}</TableCell>
                                         <TableCell className="capitalize">{item.inventory_type}</TableCell>
                                         <TableCell className="text-right">
+                                            {item.inventory_type === 'direct' &&
+                                                item.reorder_level !== null &&
+                                                item.available_stock !== null &&
+                                                item.available_stock <= item.reorder_level && (
+                                                    <span
+                                                        className="mr-2 rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-400"
+                                                        title={`At or below its reorder level of ${item.reorder_level}`}
+                                                    >
+                                                        Low
+                                                    </span>
+                                                )}
                                             {item.inventory_type === 'none' ? 'Unlimited' : (item.available_stock ?? 'No recipe')}
                                         </TableCell>
                                         <TableCell>

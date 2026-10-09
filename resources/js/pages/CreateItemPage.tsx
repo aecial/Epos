@@ -47,6 +47,7 @@ export default function CreateItemPage({
         base_price: '',
         cost_price: '0',
         quantity: '0',
+        reorder_level: '',
         inventory_type: 'direct' as InventoryType,
         entry_mode: (categories[0]?.type === 'special' ? 'price' : 'fixed') as EntryMode,
         image_url: '',
@@ -234,6 +235,22 @@ export default function CreateItemPage({
                                     onChange={(event) => form.setData('quantity', event.target.value)}
                                     className="field"
                                 />
+                            </Field>
+                        )}
+                        {!isSpecial && form.data.inventory_type === 'direct' && (
+                            <Field label="Reorder level" error={form.errors.reorder_level}>
+                                <input
+                                    type="number"
+                                    step="1"
+                                    min="0"
+                                    value={form.data.reorder_level}
+                                    onChange={(event) => form.setData('reorder_level', event.target.value)}
+                                    placeholder="No warning"
+                                    className="field"
+                                />
+                                <span className="text-muted-foreground text-xs">
+                                    Shown as running low at or below this. Leave empty for no warning.
+                                </span>
                             </Field>
                         )}
                         <Field label="Image URL" error={form.errors.image_url}>

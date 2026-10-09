@@ -33,6 +33,7 @@ type Item = {
     base_price: number | string;
     cost_price: number | string;
     quantity: number;
+    reorder_level: number | null;
     image_url?: string;
     status: ItemStatus;
     inventory_type: InventoryType;
@@ -63,6 +64,7 @@ export default function UpdateItemPage({
         base_price: String(item.base_price),
         cost_price: String(item.cost_price),
         quantity: String(item.quantity),
+        reorder_level: item.reorder_level === null ? '' : String(item.reorder_level),
         image_url: item.image_url ?? '',
         status: item.status,
         inventory_type: item.inventory_type,
@@ -257,6 +259,22 @@ export default function UpdateItemPage({
                                     onChange={(event) => form.setData('quantity', event.target.value)}
                                     className="field"
                                 />
+                            </Field>
+                        )}
+                        {!isSpecial && form.data.inventory_type === 'direct' && (
+                            <Field label="Reorder level" error={form.errors.reorder_level}>
+                                <input
+                                    type="number"
+                                    step="1"
+                                    min="0"
+                                    value={form.data.reorder_level}
+                                    onChange={(event) => form.setData('reorder_level', event.target.value)}
+                                    placeholder="No warning"
+                                    className="field"
+                                />
+                                <span className="text-muted-foreground text-xs">
+                                    Shown as running low at or below this. Leave empty for no warning.
+                                </span>
                             </Field>
                         )}
                         <Field label="Image URL" error={form.errors.image_url}>

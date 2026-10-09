@@ -19,6 +19,7 @@ class UpdateIngredientRequest extends FormRequest
             'unit' => ['sometimes', 'in:piece,kg,gram,liter,ml'],
             'quantity' => ['sometimes', 'numeric', 'min:0'],
             'reserved_quantity' => ['sometimes', 'numeric', 'min:0'],
+            'reorder_level' => ['sometimes', 'nullable', 'numeric', 'min:0'],
             'cost_per_unit' => ['sometimes', 'decimal:0,2', 'min:0'],
             'status' => ['sometimes', 'in:active,inactive'],
         ];

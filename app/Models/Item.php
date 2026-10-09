@@ -18,11 +18,30 @@ class Item extends Model
         'cost_price',
         'quantity',
         'reserved_quantity',
+        'reorder_level',
         'inventory_type',
         'entry_mode',
         'image_url',
         'status',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'reorder_level' => 'integer',
+        ];
+    }
+
+    /**
+     * A direct-stock item at or below its reorder level, counting reserved stock as already
+     * gone. Recipe items run low through their ingredients instead.
+     */
+    public function isRunningLow(): bool
+    {
+        return $this->inventory_type === 'direct'
+            && $this->reorder_level !== null
+            && (int) $this->quantity - (int) $this->reserved_quantity <= (int) $this->reorder_level;
+    }
 
     public function category(): BelongsTo
     {

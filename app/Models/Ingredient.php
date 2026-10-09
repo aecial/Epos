@@ -17,6 +17,7 @@ class Ingredient extends Model
         'unit',
         'quantity',
         'reserved_quantity',
+        'reorder_level',
         'cost_per_unit',
         'status',
     ];
@@ -26,8 +27,18 @@ class Ingredient extends Model
         return [
             'quantity' => 'decimal:3',
             'reserved_quantity' => 'decimal:3',
+            'reorder_level' => 'decimal:3',
             'cost_per_unit' => 'decimal:2',
         ];
+    }
+
+    /**
+     * At or below its reorder level, counting reserved stock as already gone. No level, no warning.
+     */
+    public function isRunningLow(): bool
+    {
+        return $this->reorder_level !== null
+            && (float) $this->quantity - (float) $this->reserved_quantity <= (float) $this->reorder_level + 0.000001;
     }
 
     public function ingredientGroup(): BelongsTo

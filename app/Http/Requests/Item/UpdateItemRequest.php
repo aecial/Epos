@@ -42,6 +42,7 @@ class UpdateItemRequest extends FormRequest
             'cost_price' => ['sometimes', 'decimal:0,2'],
             'quantity' => ['sometimes', 'integer', 'min:0'],
             'reserved_quantity' => ['sometimes', 'integer', 'min:0'],
+            'reorder_level' => ['sometimes', 'nullable', 'integer', 'min:0'],
             'inventory_type' => ['sometimes', 'in:direct,recipe,none'],
             // fixed = normal item; price = Fee item; name_price = Custom item (special categories only).
             'entry_mode' => ['sometimes', 'in:fixed,price,name_price'],

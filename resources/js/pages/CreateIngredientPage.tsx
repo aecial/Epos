@@ -19,6 +19,7 @@ export default function CreateIngredientPage({ ingredientGroups }: { ingredientG
         unit: 'piece' as IngredientUnit,
         quantity: '0',
         cost_per_unit: '0',
+        reorder_level: '',
         status: 'active' as IngredientStatus,
     });
 
@@ -95,6 +96,18 @@ export default function CreateIngredientPage({ ingredientGroups }: { ingredientG
                                 onChange={(event) => form.setData('cost_per_unit', event.target.value)}
                                 className="field"
                             />
+                        </Field>
+                        <Field label={`Reorder level (${form.data.unit})`} error={form.errors.reorder_level}>
+                            <input
+                                type="number"
+                                min="0"
+                                step="0.001"
+                                value={form.data.reorder_level}
+                                onChange={(event) => form.setData('reorder_level', event.target.value)}
+                                placeholder="No warning"
+                                className="field"
+                            />
+                            <span className="text-muted-foreground text-xs">Shown as running low at or below this. Leave empty for no warning.</span>
                         </Field>
                         <Field label="Status" error={form.errors.status}>
                             <select

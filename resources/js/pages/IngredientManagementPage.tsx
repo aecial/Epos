@@ -33,6 +33,7 @@ type Ingredient = {
     unit: IngredientUnit;
     quantity: number | string;
     reserved_quantity: number | string;
+    reorder_level: number | string | null;
     cost_per_unit: number | string;
     status: IngredientStatus;
     ingredient_group?: { id: number; name: string };
@@ -244,6 +245,14 @@ export default function IngredientManagementPage({
                                             <TableCell className="font-medium uppercase">{ingredient.name}</TableCell>
                                             <TableCell className="uppercase">{ingredient.ingredient_group?.name ?? 'Unassigned'}</TableCell>
                                             <TableCell className="text-right">
+                                                {ingredient.reorder_level !== null && available <= Number(ingredient.reorder_level) && (
+                                                    <span
+                                                        className="mr-2 rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-400"
+                                                        title={`At or below its reorder level of ${Number(ingredient.reorder_level)} ${ingredient.unit}`}
+                                                    >
+                                                        Low
+                                                    </span>
+                                                )}
                                                 {available.toFixed(3)} {ingredient.unit}
                                             </TableCell>
                                             <TableCell className="text-right">₱{Number(ingredient.cost_per_unit).toFixed(2)}</TableCell>

@@ -14,6 +14,7 @@ type Ingredient = {
     quantity: number | string;
     reserved_quantity: number | string;
     cost_per_unit: number | string;
+    reorder_level: number | string | null;
     status: IngredientStatus;
     ingredientGroup?: { id: number; name: string };
 };
@@ -30,6 +31,7 @@ export default function UpdateIngredientPage({ ingredient, ingredientGroups }: {
         unit: ingredient.unit,
         quantity: String(ingredient.quantity),
         cost_per_unit: String(ingredient.cost_per_unit),
+        reorder_level: ingredient.reorder_level === null ? '' : String(Number(ingredient.reorder_level)),
         status: ingredient.status,
     });
 
@@ -105,6 +107,18 @@ export default function UpdateIngredientPage({ ingredient, ingredientGroups }: {
                                 onChange={(event) => form.setData('cost_per_unit', event.target.value)}
                                 className="field"
                             />
+                        </Field>
+                        <Field label={`Reorder level (${form.data.unit})`} error={form.errors.reorder_level}>
+                            <input
+                                type="number"
+                                min="0"
+                                step="0.001"
+                                value={form.data.reorder_level}
+                                onChange={(event) => form.setData('reorder_level', event.target.value)}
+                                placeholder="No warning"
+                                className="field"
+                            />
+                            <span className="text-muted-foreground text-xs">Shown as running low at or below this. Leave empty for no warning.</span>
                         </Field>
                         <Field label="Status" error={form.errors.status}>
                             <select

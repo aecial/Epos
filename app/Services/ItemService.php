@@ -68,16 +68,22 @@ class ItemService
      */
     public function NormalizeForCategory(array $itemData, Category $category): array
     {
-        if (! $category->isSpecial()) {
-            return $itemData;
+        if ($category->isSpecial()) {
+            $itemData = array_merge($itemData, [
+                'inventory_type' => 'none',
+                'quantity' => 0,
+                'reserved_quantity' => 0,
+                'cost_price' => 0,
+            ]);
         }
 
-        return array_merge($itemData, [
-            'inventory_type' => 'none',
-            'quantity' => 0,
-            'reserved_quantity' => 0,
-            'cost_price' => 0,
-        ]);
+        // A reorder level only means something for direct stock; recipe items run low through
+        // their ingredients' own levels.
+        if (isset($itemData['inventory_type']) && $itemData['inventory_type'] !== 'direct') {
+            $itemData['reorder_level'] = null;
+        }
+
+        return $itemData;
     }
 
     /**
