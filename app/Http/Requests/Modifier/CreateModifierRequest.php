@@ -26,6 +26,7 @@ class CreateModifierRequest extends FormRequest
             'modifier_group_id' => ['nullable', 'exists:modifier_groups,id'],
             'name' => ['required', 'string', 'max:255'],
             'status' => ['sometimes', 'in:active,inactive'],
+            'is_stockless_variant' => ['sometimes', 'boolean'],
         ];
     }
 }

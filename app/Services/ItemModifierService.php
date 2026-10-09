@@ -34,6 +34,14 @@ class ItemModifierService
             throw new InvalidArgumentException('One or more modifiers do not exist.');
         }
 
+        // A stockless variant (e.g. "Lagi") is always ₱0: it never shows on the receipt, so it
+        // must never change what the customer pays.
+        $stocklessIds = Modifier::query()->whereIn('id', $modifierIds)->where('is_stockless_variant', true)->pluck('id');
+
+        foreach ($stocklessIds as $stocklessId) {
+            $pivot[$stocklessId]['price_modifier'] = 0;
+        }
+
         $item->modifiers()->sync($pivot);
 
         return $item->load('modifiers.group');

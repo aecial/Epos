@@ -33,6 +33,12 @@ class ModifierService
     {
         $modifier->update($modifierData);
 
+        // Turning a modifier into a stockless variant makes it ₱0 on every dish it's attached to,
+        // so the item forms show what the sale will actually charge.
+        if ($modifier->is_stockless_variant) {
+            $modifier->items()->newPivotStatement()->where('modifier_id', $modifier->id)->update(['price_modifier' => 0]);
+        }
+
         return $modifier;
     }
 

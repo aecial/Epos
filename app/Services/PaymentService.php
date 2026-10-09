@@ -104,6 +104,11 @@ class PaymentService
             }
 
             foreach ($items as $ticketItem) {
+                // A stockless variant line (e.g. "Lagi") never reserved stock and takes none.
+                if ($ticketItem->is_stockless) {
+                    continue;
+                }
+
                 $deducted = $this->inventoryService->DeductItem($ticketItem->item, $ticketItem->quantity);
 
                 // Record what a recipe line actually took, so usage reports and refunds don't

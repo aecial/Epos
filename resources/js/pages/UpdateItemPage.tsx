@@ -19,7 +19,7 @@ type ItemRecipeRow = {
     quantity_required: string;
     unit: RecipeIngredient['unit'];
 };
-type ModifierOption = { id: number; name: string };
+type ModifierOption = { id: number; name: string; is_stockless_variant?: boolean };
 type ModifierGroupOption = { id: number; name: string; is_required: boolean; modifiers: ModifierOption[] };
 type ItemModifierRow = {
     modifier_id: number;
@@ -390,16 +390,24 @@ export default function UpdateItemPage({
                                                                 />
                                                                 {modifier.name}
                                                             </label>
-                                                            {row && (
-                                                                <input
-                                                                    type="number"
-                                                                    step="0.01"
-                                                                    value={row.price_modifier}
-                                                                    onChange={(event) => updateModifierPrice(modifier.id, event.target.value)}
-                                                                    placeholder="+0.00"
-                                                                    className="field w-28"
-                                                                />
-                                                            )}
+                                                            {row &&
+                                                                (modifier.is_stockless_variant ? (
+                                                                    <span
+                                                                        className="text-muted-foreground w-28 text-right text-xs"
+                                                                        title="Stockless variants are always ₱0"
+                                                                    >
+                                                                        ₱0 · stockless
+                                                                    </span>
+                                                                ) : (
+                                                                    <input
+                                                                        type="number"
+                                                                        step="0.01"
+                                                                        value={row.price_modifier}
+                                                                        onChange={(event) => updateModifierPrice(modifier.id, event.target.value)}
+                                                                        placeholder="+0.00"
+                                                                        className="field w-28"
+                                                                    />
+                                                                ))}
                                                         </div>
                                                     );
                                                 })}

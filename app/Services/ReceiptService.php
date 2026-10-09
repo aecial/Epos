@@ -45,7 +45,10 @@ class ReceiptService
             'line_type' => $line->line_type,
             'quantity' => (int) $line->quantity,
             'unit_price' => (float) $line->unit_price,
+            // A stockless variant (e.g. "Lagi") is kitchen-only: never on the customer receipt.
+            // It's always ₱0, so leaving it out never leaves the line price unexplained.
             'modifiers' => $line->modifiers
+                ->reject(fn ($modifier): bool => $modifier->is_stockless_variant)
                 ->map(fn ($modifier): array => ['name' => $modifier->name, 'price' => (float) $modifier->price])
                 ->values()
                 ->all(),

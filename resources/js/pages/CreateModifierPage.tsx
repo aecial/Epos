@@ -12,7 +12,12 @@ export default function CreateModifierPage({ modifierGroups }: { modifierGroups:
         { title: 'Modifier Management', href: route('modifier-management') },
         { title: 'Create Modifier', href: route('create-modifier') },
     ];
-    const form = useForm({ modifier_group_id: modifierGroups[0]?.id ?? '', name: '', status: 'active' as ModifierStatus });
+    const form = useForm({
+        modifier_group_id: modifierGroups[0]?.id ?? '',
+        name: '',
+        status: 'active' as ModifierStatus,
+        is_stockless_variant: false as boolean,
+    });
 
     const submit = (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
@@ -24,11 +29,60 @@ export default function CreateModifierPage({ modifierGroups }: { modifierGroups:
             <Head title="Create Modifier" />
             <div className="flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
                 <div className="bg-card mx-auto w-full max-w-2xl rounded-xl border p-6 shadow-sm">
-                    <div className="mb-6"><h1 className="text-xl font-semibold">Create modifier</h1><p className="text-muted-foreground mt-1 text-sm">Add a choice to a reusable modifier group.</p></div>
+                    <div className="mb-6">
+                        <h1 className="text-xl font-semibold">Create modifier</h1>
+                        <p className="text-muted-foreground mt-1 text-sm">Add a choice to a reusable modifier group.</p>
+                    </div>
                     <form onSubmit={submit} className="space-y-5">
-                        <Field label="Name" error={form.errors.name}><input value={form.data.name} onChange={(event) => form.setData('name', event.target.value)} required autoComplete="off" className="field" placeholder="e.g. Large" /></Field>
-                        <Field label="Modifier group" error={form.errors.modifier_group_id}><select value={form.data.modifier_group_id} onChange={(event) => form.setData('modifier_group_id', event.target.value ? Number(event.target.value) : '')} className="field"><option value="">Unassigned</option>{modifierGroups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}</select></Field>
-                        <Field label="Status" error={form.errors.status}><select value={form.data.status} onChange={(event) => form.setData('status', event.target.value as ModifierStatus)} className="field"><option value="active">Active</option><option value="inactive">Inactive</option></select></Field>
+                        <Field label="Name" error={form.errors.name}>
+                            <input
+                                value={form.data.name}
+                                onChange={(event) => form.setData('name', event.target.value)}
+                                required
+                                autoComplete="off"
+                                className="field"
+                                placeholder="e.g. Large"
+                            />
+                        </Field>
+                        <Field label="Modifier group" error={form.errors.modifier_group_id}>
+                            <select
+                                value={form.data.modifier_group_id}
+                                onChange={(event) => form.setData('modifier_group_id', event.target.value ? Number(event.target.value) : '')}
+                                className="field"
+                            >
+                                <option value="">Unassigned</option>
+                                {modifierGroups.map((group) => (
+                                    <option key={group.id} value={group.id}>
+                                        {group.name}
+                                    </option>
+                                ))}
+                            </select>
+                        </Field>
+                        <Field label="Status" error={form.errors.status}>
+                            <select
+                                value={form.data.status}
+                                onChange={(event) => form.setData('status', event.target.value as ModifierStatus)}
+                                className="field"
+                            >
+                                <option value="active">Active</option>
+                                <option value="inactive">Inactive</option>
+                            </select>
+                        </Field>
+                        <label className="flex items-start gap-3 rounded-lg border p-3">
+                            <input
+                                type="checkbox"
+                                checked={form.data.is_stockless_variant}
+                                onChange={(event) => form.setData('is_stockless_variant', event.target.checked)}
+                                className="mt-1"
+                            />
+                            <span>
+                                <span className="text-sm font-medium">Stockless variant</span>
+                                <span className="text-muted-foreground block text-xs">
+                                    Hidden on receipts, ₱0, takes no stock and costs ₱0 — e.g. Lagi. The kitchen sees it. Its price on every dish it's
+                                    attached to is set to ₱0.
+                                </span>
+                            </span>
+                        </label>
                         <Actions processing={form.processing} label="Create modifier" />
                     </form>
                 </div>
@@ -38,9 +92,28 @@ export default function CreateModifierPage({ modifierGroups }: { modifierGroups:
 }
 
 function Field({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {
-    return <div className="space-y-2"><label className="text-sm font-medium">{label}</label>{children}{error && <p className="text-destructive text-sm">{error}</p>}</div>;
+    return (
+        <div className="space-y-2">
+            <label className="text-sm font-medium">{label}</label>
+            {children}
+            {error && <p className="text-destructive text-sm">{error}</p>}
+        </div>
+    );
 }
 
 function Actions({ processing, label }: { processing: boolean; label: string }) {
-    return <div className="flex justify-end gap-3 pt-2"><button type="button" onClick={() => window.history.back()} className="hover:bg-muted rounded-md border px-4 py-2 text-sm font-medium">Cancel</button><button type="submit" disabled={processing} className="bg-primary text-primary-foreground rounded-md px-4 py-2 text-sm font-medium hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60">{processing ? 'Saving...' : label}</button></div>;
+    return (
+        <div className="flex justify-end gap-3 pt-2">
+            <button type="button" onClick={() => window.history.back()} className="hover:bg-muted rounded-md border px-4 py-2 text-sm font-medium">
+                Cancel
+            </button>
+            <button
+                type="submit"
+                disabled={processing}
+                className="bg-primary text-primary-foreground rounded-md px-4 py-2 text-sm font-medium hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+                {processing ? 'Saving...' : label}
+            </button>
+        </div>
+    );
 }

@@ -92,7 +92,8 @@ class SalesReportService
      */
     public function RawMaterialUsage(CarbonInterface $from, CarbonInterface $to, array $itemRows): array
     {
-        $rowsByItem = collect($itemRows)->where('line_type', 'item')->keyBy('item_id');
+        // The normal dish's figures only; a stockless variant row never used raw materials.
+        $rowsByItem = collect($itemRows)->where('line_type', 'item')->whereNull('variant')->keyBy('item_id');
         $materials = [];
 
         $used = TicketItemIngredient::query()
@@ -165,10 +166,12 @@ class SalesReportService
             ];
         })->sortBy([['group', 'asc'], ['name', 'asc']])->values();
 
-        // What sold without touching raw materials (direct-stock and untracked menu items).
+        // What sold without touching raw materials: direct-stock and untracked menu items, and any
+        // stockless variant ("Sisig Itik · Lagi"), which took no stock even on a recipe dish.
         $recipeItemIds = Item::query()->whereKey($rowsByItem->keys())->where('inventory_type', 'recipe')->pluck('id')->all();
-        $directItems = $rowsByItem
-            ->reject(fn (array $row): bool => in_array($row['item_id'], $recipeItemIds, true) || $row['quantity'] === 0)
+        $directItems = collect($itemRows)
+            ->where('line_type', 'item')
+            ->reject(fn (array $row): bool => $row['quantity'] === 0 || ($row['variant'] === null && in_array($row['item_id'], $recipeItemIds, true)))
             ->map(fn (array $row): array => ['name' => $row['name'], 'quantity' => $row['quantity']])
             ->sortBy('name')
             ->values();
@@ -216,9 +219,10 @@ class SalesReportService
             ->whereNull('ticket_items.voided_at')
             ->orderBy('ticket_items.ticket_id')
             ->orderBy('ticket_items.id')
+            ->with('stocklessVariants:id,ticket_item_id,modifier_id,name')
             ->get([
                 'ticket_items.id', 'ticket_items.ticket_id', 'ticket_items.item_id', 'ticket_items.item_name',
-                'ticket_items.line_type', 'ticket_items.quantity', 'ticket_items.line_total', 'ticket_items.item_cost_price',
+                'ticket_items.line_type', 'ticket_items.is_stockless', 'ticket_items.quantity', 'ticket_items.line_total', 'ticket_items.item_cost_price',
                 'tickets.subtotal as ticket_subtotal', 'tickets.total as ticket_total',
             ]);
     }
@@ -230,7 +234,7 @@ class SalesReportService
     {
         return RefundItem::query()
             ->whereHas('refund', fn ($query) => $query->where('status', 'approved')->whereBetween('approved_at', [$from, $to]))
-            ->with('ticketItem:id,item_id,item_name,line_type')
+            ->with(['ticketItem:id,item_id,item_name,line_type,is_stockless', 'ticketItem.stocklessVariants:id,ticket_item_id,modifier_id,name'])
             ->get();
     }
 
@@ -272,11 +276,22 @@ class SalesReportService
     private function &rowFor(array &$rows, TicketItem $line): array
     {
         $key = $line->line_type === 'custom' ? "custom:{$line->item_name}" : "item:{$line->item_id}";
+        $name = $line->item_name;
+        $variant = null;
+
+        // A stockless variant ("Sisig Itik · Lagi") is its own row beside the normal dish.
+        if ($line->is_stockless && $line->stocklessVariants->isNotEmpty()) {
+            $variants = $line->stocklessVariants->sortBy('modifier_id');
+            $key .= ':v'.$variants->pluck('modifier_id')->implode('-');
+            $variant = $variants->pluck('name')->implode(' · ');
+            $name = "{$line->item_name} · {$variant}";
+        }
 
         $rows[$key] ??= [
             'key' => $key,
             'item_id' => $line->item_id,
-            'name' => $line->item_name,
+            'name' => $name,
+            'variant' => $variant,
             'line_type' => $line->line_type,
             'quantity' => 0,
             'gross_cents' => 0,
@@ -311,6 +326,8 @@ class SalesReportService
             'key' => $row['key'],
             'item_id' => $row['item_id'],
             'name' => $row['name'],
+            // The stockless variant name(s) for a "Dish · Lagi" row, null for the normal dish.
+            'variant' => $row['variant'],
             'line_type' => $row['line_type'],
             'quantity' => $row['quantity'],
             'gross_sales' => $this->toPesos($row['gross_cents']),
@@ -322,7 +339,8 @@ class SalesReportService
             'profit' => $this->toPesos($profitCents),
             'margin' => $earnedCents > 0 ? round($profitCents / $earnedCents * 100, 1) : null,
             // A dish sold with no cost recorded would show as pure profit - flag it instead.
-            'missing_cost' => $row['line_type'] === 'item' && $row['quantity'] > 0 && $row['cost_cents'] === 0,
+            // A stockless variant costs ₱0 by design, so it's never flagged.
+            'missing_cost' => $row['line_type'] === 'item' && $row['variant'] === null && $row['quantity'] > 0 && $row['cost_cents'] === 0,
         ];
     }
 

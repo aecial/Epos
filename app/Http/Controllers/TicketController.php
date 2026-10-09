@@ -109,7 +109,9 @@ class TicketController extends Controller
                 'modifiers' => $line->modifiers->map(fn (TicketItemModifier $modifier): array => [
                     'name' => $modifier->name,
                     'price' => (float) $modifier->price,
+                    'is_stockless_variant' => $modifier->is_stockless_variant,
                 ])->values(),
+                'is_stockless' => $line->is_stockless,
                 'merged_from_order_number' => $line->mergedFromTicket?->order_number,
                 'voided_at' => $line->voided_at,
                 'voided_by' => $line->voidedBy?->name,

@@ -29,6 +29,7 @@ type Modifier = {
     modifier_group_id: number | null;
     name: string;
     status: 'active' | 'inactive';
+    is_stockless_variant: boolean;
     group?: { id: number; name: string } | null;
 };
 
@@ -198,7 +199,17 @@ export default function ModifierManagementPage({ modifierGroups, modifiers }: { 
                                 {filteredModifiers.map((modifier) => (
                                     <TableRow key={modifier.id}>
                                         <TableCell className="font-medium">{modifier.id}</TableCell>
-                                        <TableCell className="font-medium uppercase">{modifier.name}</TableCell>
+                                        <TableCell className="font-medium uppercase">
+                                            {modifier.name}
+                                            {modifier.is_stockless_variant && (
+                                                <span
+                                                    className="ml-2 rounded-full border px-2 py-0.5 text-xs font-medium normal-case"
+                                                    title="Hidden on receipts, ₱0, takes no stock and costs ₱0. The kitchen sees it."
+                                                >
+                                                    Stockless
+                                                </span>
+                                            )}
+                                        </TableCell>
                                         <TableCell className="uppercase">{modifier.group?.name ?? 'Unassigned'}</TableCell>
                                         <TableCell>
                                             <StatusButton

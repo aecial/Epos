@@ -40,7 +40,8 @@ type Line = {
     unit_price: number;
     line_total: number;
     notes: string | null;
-    modifiers: { name: string; price: number }[];
+    modifiers: { name: string; price: number; is_stockless_variant: boolean }[];
+    is_stockless: boolean;
     merged_from_order_number: string | null;
     voided_at: string | null;
     voided_by: string | null;
@@ -276,6 +277,14 @@ export default function TicketDetailPage({
                                                             modifier.price > 0 ? `${modifier.name} (+${peso(modifier.price)})` : modifier.name,
                                                         )
                                                         .join(', ')}
+                                                    {line.is_stockless && (
+                                                        <span
+                                                            className="ml-2 rounded-full border px-2 py-0.5"
+                                                            title="Picked with a stockless variant: took no stock, costs ₱0, and the variant isn't on the receipt"
+                                                        >
+                                                            no stock
+                                                        </span>
+                                                    )}
                                                 </div>
                                             )}
                                             {line.notes && <div className="text-muted-foreground text-xs italic">Kitchen note: {line.notes}</div>}

@@ -17,7 +17,15 @@ class TicketItemModifier extends Model
         'modifier_id',
         'name',
         'price',
+        'is_stockless_variant',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'is_stockless_variant' => 'boolean',
+        ];
+    }
 
     public function ticketItem(): BelongsTo
     {

@@ -156,6 +156,7 @@ Returns every item the POS is allowed to show, **sorted by name**:
                     "id": 5,
                     "name": "Extra crispy",
                     "price_modifier": "10.00",
+                    "is_stockless_variant": false,
                     "group": { "id": 1, "name": "Cooking", "is_required": false }
                 }
             ]
@@ -168,7 +169,7 @@ Notes:
 
 - `cost_price` and the raw `quantity` / `reserved_quantity` are deliberately **not** exposed.
 - `available_stock` is what can be sold right now: `quantity − reserved_quantity` for `direct`; the smallest complete-serving count across ingredients for `recipe`; `null` for `none` (untracked/unlimited) and for a recipe item with no ingredients configured yet.
-- `modifiers` lists only the item's **active** modifiers, in the configured display order. `group` is `null` for an ungrouped modifier. `price_modifier` is the per-item price from the `item_modifier` pivot.
+- `modifiers` lists only the item's **active** modifiers, in the configured display order. `group` is `null` for an ungrouped modifier. `price_modifier` is the per-item price from the `item_modifier` pivot. `is_stockless_variant: true` marks a **stockless variant** (e.g. "Lagi"): its `price_modifier` is always `"0.00"`; a line it's picked on takes no stock at all (the dish can be sold even when `available_stock` is `0`), costs ₱0, and the modifier is left off the customer receipt while the KDS still shows it.
 - A category filter with no matching items returns `[]`.
 - `category.type` is `menu` or `special`. A **special** category holds **Special items** (fees and custom items, see below); show it as its own "Specials" section. Special items have `inventory_type: "none"`, so `available_stock` is `null`.
 - `entry_mode` tells the app what to collect before adding the item to a ticket:
@@ -397,7 +398,7 @@ Add a line and **reserve stock**. Any staff. Ticket must be `open`.
 - `unit_price`: numeric, `> 0`, at most 2 decimals, max 999999.99 — **required** for `entry_mode` `price` and `name_price`, **forbidden** for every other item (a terminal can never override a menu price)
 - `custom_name`: 1–100 characters, single line — **required** for `name_price`, **forbidden** otherwise
 
-Line price = `(unit_price or base_price + Σ modifier price_modifier) × quantity`. The item name (the typed `custom_name` for a Custom item), cost price, unit price, `line_type` and modifier names/prices are **snapshotted** onto the line so later menu edits don't change history.
+Line price = `(unit_price or base_price + Σ modifier price_modifier) × quantity`. The item name (the typed `custom_name` for a Custom item), cost price, unit price, `line_type` and modifier names/prices are **snapshotted** onto the line so later menu edits don't change history. A line picked with a stockless variant is saved with `is_stockless: true` (and the modifier with `is_stockless_variant: true`): it never reserves, deducts or restocks (quantity change, void, cancel, payment and refund all skip it), its cost is ₱0, the variant's price is ₱0, and the variant is omitted from the receipt payload's `items[].modifiers`.
 
 **Special items** (items in a `special` category) never touch inventory, so adding, voiding, paying and refunding them never moves stock. The ticket discount applies to them like any other line. `line_type` on the ticket line is `item` (regular), `fee` (Fee item or any fixed fee in a special category) or `custom` (Custom item). The future KDS feed shows `item` and `custom` lines and hides `fee` lines.
 

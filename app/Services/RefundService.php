@@ -137,6 +137,11 @@ class RefundService
                 ->get();
 
             foreach ($items as $refundItem) {
+                // A stockless variant line took nothing, so there's nothing to put back.
+                if ($refundItem->ticketItem->is_stockless) {
+                    continue;
+                }
+
                 // Return what the sale actually took; lines paid before usage was recorded
                 // fall back to the item's current recipe.
                 if (! $this->inventoryService->RestoreRecordedUsage($refundItem->ticketItem, $refundItem->quantity)) {

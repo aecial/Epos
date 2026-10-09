@@ -15,11 +15,22 @@ class Modifier extends Model
         'modifier_group_id',
         'name',
         'status',
+        'is_stockless_variant',
     ];
 
     protected $attributes = [
         'status' => 'active',
+        'is_stockless_variant' => false,
     ];
+
+    protected function casts(): array
+    {
+        return [
+            // A variant like "Lagi": the line it's picked on takes no stock, costs ₱0, and the
+            // modifier stays off the customer receipt (the kitchen still sees it). Always ₱0.
+            'is_stockless_variant' => 'boolean',
+        ];
+    }
 
     public function group(): BelongsTo
     {

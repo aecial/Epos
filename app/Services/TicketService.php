@@ -103,10 +103,16 @@ class TicketService
                 throw new InvalidArgumentException("One or more modifiers are not available for {$item->name}.");
             }
 
-            $this->inventoryService->ReserveItem($item, $quantity);
+            // A stockless variant (e.g. "Lagi") makes the whole line take no stock and cost ₱0;
+            // every later reserve/release/deduct/restock reads is_stockless and skips it.
+            $isStockless = $itemModifiers->contains(fn (Modifier $modifier): bool => $modifier->is_stockless_variant);
+
+            if (! $isStockless) {
+                $this->inventoryService->ReserveItem($item, $quantity);
+            }
 
             $unitPrice ??= (float) $item->base_price;
-            $modifierTotal = (float) $itemModifiers->sum(fn (Modifier $modifier): float => (float) $modifier->pivot->price_modifier);
+            $modifierTotal = (float) $itemModifiers->sum(fn (Modifier $modifier): float => $this->modifierPrice($modifier));
             $lineTotal = round(($unitPrice + $modifierTotal) * $quantity, 2);
 
             $ticketItem = TicketItem::create([
@@ -115,8 +121,9 @@ class TicketService
                 // Custom items are named by the cashier; the typed name is the snapshot that
                 // reaches receipts, refunds and the KDS.
                 'item_name' => $customName ?? $item->name,
-                'item_cost_price' => $this->unitCostFor($item),
+                'item_cost_price' => $isStockless ? 0 : $this->unitCostFor($item),
                 'line_type' => $this->lineTypeFor($item, $entryMode),
+                'is_stockless' => $isStockless,
                 'quantity' => $quantity,
                 'unit_price' => $unitPrice,
                 'notes' => $notes,
@@ -128,7 +135,8 @@ class TicketService
                     'ticket_item_id' => $ticketItem->id,
                     'modifier_id' => $modifier->id,
                     'name' => $modifier->name,
-                    'price' => $modifier->pivot->price_modifier,
+                    'price' => $this->modifierPrice($modifier),
+                    'is_stockless_variant' => $modifier->is_stockless_variant,
                 ]);
             }
 
@@ -165,7 +173,9 @@ class TicketService
                 throw new InvalidArgumentException('Cannot void an item on a ticket that is not open.');
             }
 
-            $this->inventoryService->ReleaseItem($lockedItem->item, $lockedItem->quantity);
+            if (! $lockedItem->is_stockless) {
+                $this->inventoryService->ReleaseItem($lockedItem->item, $lockedItem->quantity);
+            }
 
             $lockedItem->update([
                 'voided_at' => now(),
@@ -209,7 +219,9 @@ class TicketService
 
             $delta = $newQuantity - $lockedItem->quantity;
 
-            if ($delta > 0) {
+            if ($lockedItem->is_stockless) {
+                // A stockless variant line never reserved anything, so there's nothing to adjust.
+            } elseif ($delta > 0) {
                 $this->inventoryService->ReserveItem($lockedItem->item, $delta);
             } elseif ($delta < 0) {
                 $this->inventoryService->ReleaseItem($lockedItem->item, abs($delta));
@@ -329,7 +341,9 @@ class TicketService
                 ->get();
 
             foreach ($items as $ticketItem) {
-                $this->inventoryService->ReleaseItem($ticketItem->item, $ticketItem->quantity);
+                if (! $ticketItem->is_stockless) {
+                    $this->inventoryService->ReleaseItem($ticketItem->item, $ticketItem->quantity);
+                }
             }
 
             $lockedTicket->update([
@@ -458,6 +472,15 @@ class TicketService
         $this->broadcastSafely(fn () => broadcast(new TicketUpdated($merged)));
 
         return $merged;
+    }
+
+    /**
+     * What a modifier adds to a serving: its per-item price, except a stockless variant, which is
+     * always ₱0 - it never shows on the receipt, so it must never change the line's price.
+     */
+    private function modifierPrice(Modifier $modifier): float
+    {
+        return $modifier->is_stockless_variant ? 0.0 : (float) $modifier->pivot->price_modifier;
     }
 
     /**

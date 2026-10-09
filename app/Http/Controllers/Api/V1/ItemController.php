@@ -57,7 +57,10 @@ class ItemController extends Controller
             'modifiers' => $item->sellableModifiers->map(fn (Modifier $modifier): array => [
                 'id' => $modifier->id,
                 'name' => $modifier->name,
-                'price_modifier' => $modifier->pivot->price_modifier,
+                // A stockless variant ("Lagi") is always ₱0, takes no stock and stays off the
+                // receipt; the POS may sell the dish with it even when the dish shows 0 available.
+                'price_modifier' => $modifier->is_stockless_variant ? '0.00' : $modifier->pivot->price_modifier,
+                'is_stockless_variant' => $modifier->is_stockless_variant,
                 'group' => $modifier->group === null ? null : [
                     'id' => $modifier->group->id,
                     'name' => $modifier->group->name,

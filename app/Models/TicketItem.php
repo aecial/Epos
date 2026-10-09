@@ -18,6 +18,7 @@ class TicketItem extends Model
         'item_name',
         'item_cost_price',
         'line_type',
+        'is_stockless',
         'quantity',
         'unit_price',
         'notes',
@@ -32,6 +33,8 @@ class TicketItem extends Model
     {
         return [
             'voided_at' => 'datetime',
+            // Picked with a stockless variant (e.g. "Lagi"): no reserve, release, deduct or restock.
+            'is_stockless' => 'boolean',
             'completed_at' => 'datetime',
         ];
     }
@@ -72,6 +75,14 @@ class TicketItem extends Model
     public function ingredientUsage(): HasMany
     {
         return $this->hasMany(TicketItemIngredient::class);
+    }
+
+    /**
+     * The stockless variants (e.g. "Lagi") picked on this line - kitchen-only, never on receipts.
+     */
+    public function stocklessVariants(): HasMany
+    {
+        return $this->modifiers()->where('is_stockless_variant', true);
     }
 
     public function isVoided(): bool
