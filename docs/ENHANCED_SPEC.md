@@ -336,7 +336,8 @@ This matrix reflects what the code enforces today. "Manage" means the back-offic
 
 | Action                                         | Admin | Manager | Cashier |
 | ---------------------------------------------- | ----- | ------- | ------- |
-| Login (POS API and back office)                | ✅    | ✅      | ✅      |
+| Login to the POS (API)                         | ✅    | ✅      | ✅      |
+| Login to the back office                       | ✅    | ✅      | ❌ (refused: "Cashier accounts sign in on the POS only.") |
 | Manage Users                                   | ✅    | ✅      | ❌      |
 | Manage Menu (Items/Categories/Modifiers)       | ✅    | ✅      | ❌      |
 | Manage Ingredients, Ingredient Groups, Recipes | ✅    | ✅      | ❌      |
@@ -349,7 +350,7 @@ This matrix reflects what the code enforces today. "Manage" means the back-offic
 | Request Refunds                                | ✅    | ✅      | ✅      |
 | Approve / Reject Refunds                       | passcode | passcode | ❌ (a cashier can never approve) |
 | View Receipts / Reprint                        | ✅    | ✅      | ✅      |
-| View Reports (planned)                         | ✅    | ✅      | ❌      |
+| View Reports & Dashboard                       | ✅    | ✅      | ❌      |
 
 **Passcodes:** a 4-digit PIN stored hashed on the user. For a void or refund decision a manager/admin types their passcode on the POS and the POS sends only `passcode`; the server checks it against every active admin/manager and records the one it belongs to as the approver. Cashiers and inactive users never match. A passcode that matches nobody is refused (`403`); one that matches more than one approver is also refused (`403`) until it is changed in the back office, so passcodes must be unique among active managers/admins (the Employees form enforces this). Five failed attempts in a minute by the signed-in user return `429`. The signed-in cashier is recorded as the requester, the approver as the authorizer.
 
@@ -464,13 +465,13 @@ The back office is a set of Inertia pages served by session-authenticated Larave
 
 | Route | Page | What it does |
 | ----- | ---- | ------------ |
-| `/login` | Login | Username + password (session). There is no self-registration, email verification or password reset; accounts are created and passwords reset by a manager/admin on the Employees pages |
-| `/dashboard` | Dashboard | Placeholder only — no stats yet |
+| `/login` | Login | Username + password (session). Active managers/admins only: a cashier is refused ("Cashier accounts sign in on the POS only.") and so is an inactive account; a session that later belongs to one (deactivated or demoted) is signed out on its next request (`EnsureBackOfficeUser`). There is no self-registration, email verification or password reset; accounts are created and passwords reset by a manager/admin on the Employees pages |
+| `/dashboard` | Dashboard | Landing page, refreshes every minute; sales count when paid. **Shift:** open since/by, cash the drawer should hold, open orders (or "No shift open"). **Today so far vs the same clock time yesterday:** net sales, tickets paid, average ticket, gross profit + margin, net profit, approved refunds (▲/▼ change). **Sales by hour** (today vs all of yesterday), **payment mix** (cash vs GCash), **top 5 items** today. **Needs attention:** refunds waiting for approval (oldest wait), kitchen orders waiting 20+ min, raw materials and direct-stock items at or below their **reorder level**, dishes sold today with no cost set - each links to where it's fixed. **Last 7 days:** net sales and net profit per day. No open/close-shift buttons: shifts stay on the POS |
 | `/back-office` | Hub | Links to category, item, modifier and ingredient management |
 | `/category-management`, `/create-category`, `/categories/{id}/edit` | Categories | CRUD with `name`, `type` (Menu or Special; locked once the category has items), `status` (active/inactive) and the `is_visible_to_pos` toggle; item counts |
-| `/item-management`, `/create-item`, `/items/{id}/edit` | Items | Table of name, price, cost, margin, category, stock, available stock and status. Create/edit/delete with `inventory_type` (`direct` \| `recipe` \| `none`), stock quantities, status (`available` \| `unavailable` \| `hidden`), and attached modifiers with a per-item price and display order. Recipe items get their ingredient requirements (ingredient, quantity, unit). In a **Special category** the form hides inventory, cost, quantity, recipe and modifiers and shows a **Pricing** choice — fixed amount, *Fee item* (cashier enters the amount) or *Custom item* (cashier enters the name and amount); `base_price` becomes the "Default amount" |
+| `/item-management`, `/create-item`, `/items/{id}/edit` | Items | Table of name, price, cost, margin, category, stock, available stock and status. Create/edit/delete with `inventory_type` (`direct` | `recipe` | `none`), stock quantities (plus an optional reorder level for direct stock; the list shows "Low" at or below it),| `recipe` \| `none`), stock quantities, status (`available` \| `unavailable` \| `hidden`), and attached modifiers with a per-item price and display order. Recipe items get their ingredient requirements (ingredient, quantity, unit). In a **Special category** the form hides inventory, cost, quantity, recipe and modifiers and shows a **Pricing** choice — fixed amount, *Fee item* (cashier enters the amount) or *Custom item* (cashier enters the name and amount); `base_price` becomes the "Default amount" |
 | `/modifier-management`, `/create-modifier-group`, `/create-modifier`, `/modifier-groups/{id}/edit`, `/modifiers/{id}/edit` | Modifier groups & modifiers | Reusable groups (with `is_required`) and modifiers; the price is set per item when a modifier is attached |
-| `/ingredient-management`, `/create-ingredient-group`, `/create-ingredient`, `/ingredient-groups/{id}/edit`, `/ingredients/{id}/edit` | Ingredient groups & ingredients | CRUD; ingredients carry a unit (`piece`, `kg`, `gram`, `liter`, `ml`), decimal quantity and `cost_per_unit` |
+| `/ingredient-management`, `/create-ingredient-group`, `/create-ingredient`, `/ingredient-groups/{id}/edit`, `/ingredients/{id}/edit` | Ingredient groups & ingredients | CRUD; ingredients carry a unit (`piece`, `kg`, `gram`, `liter`, `ml`), decimal quantity, `cost_per_unit` and an optional reorder level (the list shows "Low" at or below it) |
 | `/employee-management`, `/users/create`, `/users/{id}/edit` | Employees | CRUD. Creates `manager` and `cashier` accounts (admins are seeded). A 4-digit passcode can only be set on a manager and must not already belong to another active manager/admin (the POS identifies the approver from the passcode alone). Status active/inactive |
 | `/shifts`, `/shifts/{id}` | Shifts | View only, admin/manager. The list shows every shift newest first (20 per page): opened/closed time, opened by, starting cash, revenue, cash, GCash, expected cash, counted cash and discrepancy. The detail page is the shift close report (prints without the sidebar): the cash-drawer breakdown (starting cash + cash sales + additions − expenses − cash refunds = expected cash, then counted cash and the discrepancy), revenue/GCash/all refunds, ticket counts by status, and the expenses/additions and refunds lists. An open shift shows live totals; a closed shift shows its closing snapshot. Opening/closing a shift and cash movements stay on the POS. The ticket counts link to the matching filtered Tickets list |
 | `/tickets`, `/tickets/{id}` | Tickets | View only, admin/manager. Every ticket from every terminal and cashier (not account-bound like the POS), newest first, 20 per page: order number, customer, order type, item count, status, opened/closed time, cashier, terminal, payment method(s) and total. Filters: status, shift, payment method, opened date range, and search by order number, customer name or receipt number. The detail page shows the lines (modifiers, kitchen notes, Fee/Custom labels, lines merged in from another ticket, voided lines with who approved/requested the void), subtotal/discount/total, payments (method, tendered, change, reference, cashier, receipt number, and a "View receipt" link), refunds (status, lines, reason, requested/decided by) and merge links (merged into / merged from). The payments and refunds panels appear only when the ticket has any. Cost price is not shown. Creating, changing, paying, cancelling and refunding tickets stay on the POS |
@@ -489,13 +490,6 @@ Notes:
 - The back-office item list has a client-side search (name or category) but no category/status filter; the POS `GET /api/v1/items` supports a `category_id` filter.
 
 ### Planned (data and API exist; no Inertia pages yet)
-
-#### `/dashboard` stats
-
-- Active shift status
-- Today's stats: orders count, total revenue, cash/gcash breakdown
-- Quick action buttons: Open Shift, Close Shift, View Reports
-- Pending refunds widget
 
 #### `/reports` (Optional v1)
 
@@ -713,7 +707,7 @@ Legend: `[x]` implemented and tested · `[~]` implemented on the server/API, cli
 - [x] Ingredient usage recorded at payment (`ticket_item_ingredients`), refunds restock exactly that, and an Items Sold "By raw material" tab - `IngredientUsageTest`, `SalesReportPageTest`
 - [x] App timezone Asia/Manila (receipt days, "today", the nightly KDS sweep)
 - [x] Back-office Refunds page: pending refunds, filterable history, totals by status and person, sidebar pending badge, view only (approval stays on the POS) - `RefundPagesTest`
-- [ ] Back-office pages: dashboard stats
+- [x] Back-office dashboard - `DashboardPageTest`; back office limited to active managers/admins - `BackOfficeAccessTest`; reorder levels with "running low" warnings - `ReorderLevelTest`
 
 ### Nice-to-Have (v1)
 
