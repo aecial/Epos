@@ -1,12 +1,10 @@
-import BackOfficeUpperDiv from '@/components/ui/backOfficeUpperDiv';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/react';
-import { Check, Search, X } from 'lucide-react';
-import { useState } from 'react';
+import { ArrowRight, CircleCheck, Package, SlidersHorizontal, Tags, TriangleAlert, UtensilsCrossed, Wheat } from 'lucide-react';
+import { type ReactNode, useState } from 'react';
+
 const breadcrumbs: BreadcrumbItem[] = [
     {
         title: 'Back Office',
@@ -14,196 +12,213 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
-type ItemStatus = 'available' | 'unavailable' | 'hidden';
-
-type BackOfficeItem = {
-    id: number;
-    category: string;
-    name: string;
-    base_price: number;
-    cost_price: number;
-    quantity: number;
-    reserved_quantity: number;
-    status: ItemStatus;
+type Counts = {
+    categories: number;
+    items: number;
+    items_available: number;
+    items_unavailable: number;
+    items_hidden: number;
+    modifier_groups: number;
+    ingredient_groups: number;
+    ingredients: number;
 };
 
-const items: BackOfficeItem[] = [
-    {
-        id: 1,
-        category: 'Burgers',
-        name: 'Classic Burger',
-        base_price: 250,
-        cost_price: 95,
-        quantity: 40,
-        reserved_quantity: 6,
-        status: 'available',
-    },
-    {
-        id: 2,
-        category: 'Burgers',
-        name: 'Crispy Chicken Sandwich',
-        base_price: 220,
-        cost_price: 88,
-        quantity: 25,
-        reserved_quantity: 4,
-        status: 'available',
-    },
-    {
-        id: 3,
-        category: 'Beverages',
-        name: 'House Iced Tea',
-        base_price: 90,
-        cost_price: 24,
-        quantity: 0,
-        reserved_quantity: 0,
-        status: 'unavailable',
-    },
-];
+type Issue = {
+    key: string;
+    title: string;
+    help: string;
+    records: { name: string; detail: string | null; url: string }[];
+};
 
-function SearchInput({ className = '' }: { className?: string }) {
+type StockStatus = 'out' | 'low' | 'ok';
+
+type StockRow = {
+    kind: 'raw material' | 'item';
+    name: string;
+    group: string | null;
+    unit: string | null;
+    on_hand: number;
+    reserved: number;
+    available: number;
+    reorder_level: number | null;
+    status: StockStatus;
+    url: string;
+};
+
+const panelClass = 'border-sidebar-border/70 dark:border-sidebar-border rounded-xl border';
+
+const statusBadge: Record<StockStatus, { label: string; className: string }> = {
+    out: { label: 'Out', className: 'bg-red-600 text-white' },
+    low: { label: 'Low', className: 'bg-amber-500 text-white' },
+    ok: { label: 'OK', className: 'bg-muted text-muted-foreground' },
+};
+
+function amount(value: number, unit: string | null): string {
+    return `${value.toLocaleString('en-PH', { maximumFractionDigits: 3 })}${unit ? ` ${unit}` : ''}`;
+}
+
+function PanelTitle({ icon, children, action }: { icon: ReactNode; children: ReactNode; action?: ReactNode }) {
     return (
-        <div className={`relative ${className}`}>
-            <Search className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
-            <Input type="search" placeholder="Search" className="pl-9" />
+        <div className="flex items-center gap-2 border-b px-5 py-3">
+            {icon}
+            <h3 className="font-semibold">{children}</h3>
+            {action && <div className="ml-auto text-sm">{action}</div>}
         </div>
     );
 }
 
-export default function BackOffice() {
-    const [itemStatuses, setItemStatuses] = useState<Record<number, ItemStatus>>(Object.fromEntries(items.map((item) => [item.id, item.status])));
-    const [quantities, setQuantities] = useState<Record<number, number>>(Object.fromEntries(items.map((item) => [item.id, item.quantity])));
-    const [editingQuantity, setEditingQuantity] = useState<number | null>(null);
-    const [quantityDraft, setQuantityDraft] = useState('');
+/** One management area: what's in it at a glance, and the way in. The whole card is the link. */
+function ManagementCard({ href, icon, title, value, detail }: { href: string; icon: ReactNode; title: string; value: number; detail?: string }) {
+    return (
+        <Link href={href} className={`${panelClass} hover:bg-muted group flex flex-col gap-1 px-4 py-3`}>
+            <span className="text-muted-foreground flex items-center gap-2 text-sm font-medium">
+                {icon}
+                {title}
+            </span>
+            <span className="text-2xl font-semibold">{value}</span>
+            <span className="text-muted-foreground min-h-4 text-xs">{detail}</span>
+            <span className="mt-1 inline-flex items-center gap-1 text-sm font-medium">
+                Manage
+                <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
+            </span>
+        </Link>
+    );
+}
+
+export default function BackOffice({ counts, issues, stock }: { counts: Counts; issues: Issue[]; stock: StockRow[] }) {
+    const [lowOnly, setLowOnly] = useState(false);
+    const shownStock = lowOnly ? stock.filter((row) => row.status !== 'ok') : stock;
+    const needsRestock = stock.filter((row) => row.status !== 'ok').length;
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Back Office" />
             <div className="flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
-                <div className="grid auto-rows-min gap-4 md:grid-cols-4">
-                    <BackOfficeUpperDiv
-                        children={
-                            <Button asChild className="h-full w-full cursor-pointer text-xl">
-                                <Link href={route('category-management')}>Category Management</Link>
-                            </Button>
-                        }
+                <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                    <ManagementCard
+                        href={route('category-management')}
+                        icon={<Tags className="size-4" />}
+                        title="Categories"
+                        value={counts.categories}
                     />
-                    <BackOfficeUpperDiv
-                        children={
-                            <Button asChild className="h-full w-full cursor-pointer text-xl">
-                                <Link href={route('item-management')}>Item Management</Link>
-                            </Button>
-                        }
+                    <ManagementCard
+                        href={route('item-management')}
+                        icon={<UtensilsCrossed className="size-4" />}
+                        title="Items"
+                        value={counts.items}
+                        detail={`${counts.items_available} available · ${counts.items_unavailable} unavailable · ${counts.items_hidden} hidden`}
                     />
-                    <BackOfficeUpperDiv
-                        children={
-                            <Button asChild className="h-full w-full cursor-pointer text-xl">
-                                <Link href={route('modifier-management')}>Modifier Management</Link>
-                            </Button>
-                        }
+                    <ManagementCard
+                        href={route('modifier-management')}
+                        icon={<SlidersHorizontal className="size-4" />}
+                        title="Modifiers"
+                        value={counts.modifier_groups}
+                        detail={counts.modifier_groups === 1 ? 'group' : 'groups'}
                     />
-                    <BackOfficeUpperDiv
-                        children={
-                            <Button asChild className="h-full w-full cursor-pointer text-xl">
-                                <Link href={route('ingredient-management')}>Ingredient Management</Link>
-                            </Button>
-                        }
+                    <ManagementCard
+                        href={route('ingredient-management')}
+                        icon={<Wheat className="size-4" />}
+                        title="Raw materials"
+                        value={counts.ingredients}
+                        detail={`in ${counts.ingredient_groups} ${counts.ingredient_groups === 1 ? 'group' : 'groups'}`}
                     />
                 </div>
-                <div className="border-sidebar-border/70 dark:border-sidebar-border relative min-h-[100vh] flex-1 rounded-xl border md:min-h-min">
+
+                <div className={panelClass}>
+                    <PanelTitle
+                        icon={
+                            issues.length > 0 ? (
+                                <TriangleAlert className="size-4 text-amber-600" />
+                            ) : (
+                                <CircleCheck className="size-4 text-green-600" />
+                            )
+                        }
+                    >
+                        Needs fixing
+                    </PanelTitle>
+                    {issues.length === 0 ? (
+                        <p className="text-muted-foreground px-5 py-6 text-center text-sm">Everything's set up correctly.</p>
+                    ) : (
+                        <div className="divide-y">
+                            {issues.map((issue) => (
+                                <div key={issue.key} className="px-5 py-3">
+                                    <div className="text-sm font-medium">
+                                        {issue.title} <span className="text-muted-foreground font-normal">({issue.records.length})</span>
+                                    </div>
+                                    <p className="text-muted-foreground text-xs">{issue.help}</p>
+                                    <div className="mt-2 flex flex-wrap gap-2">
+                                        {issue.records.map((record) => (
+                                            <Link
+                                                key={record.url}
+                                                href={record.url}
+                                                className="hover:bg-muted inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-medium"
+                                            >
+                                                {record.name}
+                                                {record.detail && <span className="text-muted-foreground font-normal">· {record.detail}</span>}
+                                            </Link>
+                                        ))}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+
+                <div className={`${panelClass} overflow-auto`}>
+                    <PanelTitle
+                        icon={<Package className="text-muted-foreground size-4" />}
+                        action={
+                            <label className="inline-flex cursor-pointer items-center gap-2">
+                                <input type="checkbox" checked={lowOnly} onChange={(event) => setLowOnly(event.target.checked)} />
+                                Low &amp; out only
+                            </label>
+                        }
+                    >
+                        Stock {needsRestock > 0 && <span className="text-muted-foreground text-sm font-normal">· {needsRestock} to restock</span>}
+                    </PanelTitle>
                     <Table>
                         <TableHeader>
                             <TableRow>
-                                <TableHead colSpan={3} className="">
-                                    <SearchInput />
-                                </TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead className="w-[70px]">ID</TableHead>
-                                <TableHead>Category</TableHead>
+                                <TableHead>Status</TableHead>
                                 <TableHead>Name</TableHead>
-                                <TableHead className="text-right">Base Price</TableHead>
-                                <TableHead className="text-right">Cost Price</TableHead>
-                                <TableHead className="text-right">Margin %</TableHead>
-                                <TableHead className="text-right">Quantity</TableHead>
+                                <TableHead>Group / category</TableHead>
+                                <TableHead className="text-right">On hand</TableHead>
                                 <TableHead className="text-right">Reserved</TableHead>
                                 <TableHead className="text-right">Available</TableHead>
-                                <TableHead>Status</TableHead>
+                                <TableHead className="text-right">Reorder level</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {items.map((item) => (
-                                <TableRow key={item.id}>
-                                    <TableCell className="font-medium">{item.id}</TableCell>
-                                    <TableCell>{item.category}</TableCell>
-                                    <TableCell>{item.name}</TableCell>
-                                    <TableCell className="text-right">₱{item.base_price.toFixed(2)}</TableCell>
-                                    <TableCell className="text-right">₱{item.cost_price.toFixed(2)}</TableCell>
-                                    <TableCell className="text-right">
-                                        {(((item.base_price - item.cost_price) / item.base_price) * 100).toFixed(2)}%
+                            {shownStock.length === 0 && (
+                                <TableRow>
+                                    <TableCell colSpan={7} className="text-muted-foreground py-8 text-center text-sm">
+                                        {lowOnly ? 'Nothing is low or out.' : 'No raw materials or stock items yet.'}
                                     </TableCell>
-                                    <TableCell className="text-right">
-                                        {editingQuantity === item.id ? (
-                                            <div className="flex items-center justify-end gap-1">
-                                                <Input
-                                                    type="number"
-                                                    min="0"
-                                                    value={quantityDraft}
-                                                    onChange={(event) => setQuantityDraft(event.target.value)}
-                                                    className="h-7 w-16 appearance-none px-2 text-right [&::-webkit-inner-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:m-0 [&::-webkit-outer-spin-button]:appearance-none"
-                                                    autoFocus
-                                                />
-                                                <button
-                                                    type="button"
-                                                    aria-label="Save quantity"
-                                                    className="flex size-7 shrink-0 items-center justify-center text-green-600 hover:text-green-700"
-                                                    onClick={() => {
-                                                        setQuantities((current) => ({ ...current, [item.id]: Number(quantityDraft) || 0 }));
-                                                        setEditingQuantity(null);
-                                                    }}
-                                                >
-                                                    <Check className="size-3" />
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    aria-label="Cancel quantity edit"
-                                                    className="flex size-7 shrink-0 items-center justify-center text-red-600 hover:text-red-700"
-                                                    onClick={() => setEditingQuantity(null)}
-                                                >
-                                                    <X className="size-3" />
-                                                </button>
-                                            </div>
-                                        ) : (
-                                            <button
-                                                type="button"
-                                                className="cursor-pointer"
-                                                onClick={() => {
-                                                    setEditingQuantity(item.id);
-                                                    setQuantityDraft(String(quantities[item.id]));
-                                                }}
-                                            >
-                                                {quantities[item.id]}
-                                            </button>
-                                        )}
-                                    </TableCell>
-                                    <TableCell className="text-right">{item.reserved_quantity}</TableCell>
-                                    <TableCell className="text-right">{item.quantity - item.reserved_quantity}</TableCell>
+                                </TableRow>
+                            )}
+                            {shownStock.map((row) => (
+                                <TableRow key={`${row.kind}-${row.name}`}>
                                     <TableCell>
-                                        <button
-                                            type="button"
-                                            onClick={() =>
-                                                setItemStatuses((statuses) => ({
-                                                    ...statuses,
-                                                    [item.id]: statuses[item.id] === 'available' ? 'unavailable' : 'available',
-                                                }))
-                                            }
-                                            className={`rounded-full px-3 py-1 text-xs font-medium text-white capitalize ${
-                                                itemStatuses[item.id] === 'available' ? 'bg-green-600' : 'bg-red-600'
-                                            }`}
-                                        >
-                                            {itemStatuses[item.id]}
-                                        </button>
+                                        <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${statusBadge[row.status].className}`}>
+                                            {statusBadge[row.status].label}
+                                        </span>
+                                    </TableCell>
+                                    <TableCell>
+                                        <Link href={row.url} className="font-medium underline-offset-2 hover:underline">
+                                            {row.name}
+                                        </Link>
+                                        <div className="text-muted-foreground text-xs capitalize">{row.kind}</div>
+                                    </TableCell>
+                                    <TableCell>{row.group ?? '—'}</TableCell>
+                                    <TableCell className="text-right">{amount(row.on_hand, row.unit)}</TableCell>
+                                    <TableCell className="text-right">{row.reserved > 0 ? amount(row.reserved, row.unit) : '—'}</TableCell>
+                                    <TableCell className="text-right font-medium">{amount(row.available, row.unit)}</TableCell>
+                                    <TableCell className="text-right">
+                                        {row.reorder_level === null ? (
+                                            <span className="text-muted-foreground">Not set</span>
+                                        ) : (
+                                            amount(row.reorder_level, row.unit)
+                                        )}
                                     </TableCell>
                                 </TableRow>
                             ))}

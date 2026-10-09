@@ -112,6 +112,7 @@ docs/
 
 1. **Back office** (Laravel Inertia React) — done, except item image upload (only an `image_url` string) and the stats/report pages below
     - Auth (login page), users, categories, items, modifier groups/modifiers, ingredient groups/ingredients, recipes
+    - The hub (`/back-office`) shows menu & stock health below the management links: setup problems that break the POS or reports, and the full stock list worst first (`MenuHealthService`)
 2. **POS API** (`/api/v1`, Sanctum) — done: auth, menu, shifts, shift transactions, tickets (create/add/void/discount/merge/cancel), payments, receipts, refunds, KDS feed + completion
     - Known issues: none outstanding. `DELETE /shifts/{shift}/transactions/{transaction}` intentionally has no manager/admin gate (create/update do) — any authenticated staff may remove a mistaken cash addition or expense entry
     - Deleting a category/item/modifier/modifier group/ingredient/ingredient group that's referenced by sales history or a recipe is blocked at the database level (`restrictOnDelete()`); the back office catches the resulting `RecordInUseException` (`App\Services\Concerns\DeletesSafely`) and flashes a readable error instead of a raw `500`

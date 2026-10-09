@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\BackOfficeController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\IngredientController;
@@ -39,9 +40,7 @@ Route::middleware(['auth'])->group(function () {
     // the POS). Each resource below is still gated by its own Policy as a second layer.
     Route::get('dashboard', [DashboardController::class, 'getDashboard'])->name('dashboard');
 
-    Route::get('back-office', function () {
-        return Inertia::render('backOffice');
-    })->name('back-office');
+    Route::get('back-office', [BackOfficeController::class, 'getHub'])->name('back-office');
     Route::get('category-management', function () {
         return Inertia::render('CategoryManagementPage', [
             'categories' => Category::withCount('items')->get(),
