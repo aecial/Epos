@@ -9,6 +9,7 @@ use App\Models\Shift;
 use App\Models\Ticket;
 use App\Models\TicketItem;
 use App\Models\User;
+use App\Services\Sync\SyncContext;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -20,10 +21,16 @@ class ReceiptService
      * Issue one receipt per paid charge. Must be called inside the payment transaction so
      * that a receipt exists if and only if the payment committed.
      *
+     * An offline payment ($sync) was printed on the phone already: each receipt keeps the number
+     * the phone printed ($receiptNumbers, in charge order, e.g. REC-2026-10-10-P3-001) and the
+     * time it was issued, outside the server's daily sequence. A missing or already-used number
+     * falls back to the next number in the sequence.
+     *
      * @param  Collection<int, Charge>  $charges
+     * @param  array<int, string|null>  $receiptNumbers
      * @return Collection<int, Receipt>
      */
-    public function GenerateReceipts(Ticket $ticket, Collection $charges, User $issuedBy): Collection
+    public function GenerateReceipts(Ticket $ticket, Collection $charges, User $issuedBy, ?SyncContext $sync = null, array $receiptNumbers = []): Collection
     {
         // Receipt numbers are a per-day running sequence (REC-2026-09-24-001). Locking the
         // shift row serialises every payment in the shift, so "max + 1" can't be read by
@@ -80,7 +87,7 @@ class ReceiptService
         // is what keeps the intdiv() below safe (a single charge always takes the
         // $remainingDiscount branch, never the divide-by-$totalCents one).
 
-        $issuedAt = now();
+        $issuedAt = $sync !== null ? $sync->at : now();
         $date = $issuedAt->toDateString();
         $sequence = (int) Receipt::query()->where('receipt_date', $date)->max('sequence');
 
@@ -99,8 +106,19 @@ class ReceiptService
                 : intdiv($discountCents * $amountCents, $totalCents);
             $remainingDiscount -= $discountShare;
 
-            $sequence++;
-            $receiptNumber = sprintf('REC-%s-%03d', $date, $sequence);
+            $printedNumber = $receiptNumbers[$index] ?? null;
+            $keepsPrintedNumber = $sync !== null
+                && filled($printedNumber)
+                && ! Receipt::query()->where('receipt_number', $printedNumber)->exists();
+
+            if ($keepsPrintedNumber) {
+                $receiptNumber = $printedNumber;
+                $receiptSequence = null;
+            } else {
+                $sequence++;
+                $receiptSequence = $sequence;
+                $receiptNumber = sprintf('REC-%s-%03d', $date, $sequence);
+            }
 
             $payload = [
                 'receipt_number' => $receiptNumber,
@@ -109,6 +127,8 @@ class ReceiptService
                     'order_number' => $ticket->order_number,
                     'customer_name' => $ticket->customer_name,
                     'order_type' => $ticket->order_type,
+                    // The number the phone printed when the order was taken offline (e.g. P3-007).
+                    'offline_label' => $ticket->offline_label,
                     'terminal_id' => $ticket->terminal_id,
                     'merged_from' => $mergedFrom,
                 ],
@@ -133,7 +153,8 @@ class ReceiptService
                 'shift_id' => $ticket->shift_id,
                 'terminal_id' => $ticket->terminal_id,
                 'receipt_date' => $date,
-                'sequence' => $sequence,
+                'sequence' => $receiptSequence,
+                'device_code' => $keepsPrintedNumber ? $sync->device->code : null,
                 'receipt_number' => $receiptNumber,
                 'order_number' => $ticket->order_number,
                 'customer_name' => $ticket->customer_name,

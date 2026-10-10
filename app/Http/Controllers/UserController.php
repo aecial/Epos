@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\User\CreateUserRequest;
 use App\Http\Requests\User\UpdateUserRequest;
+use App\Models\PosDevice;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Inertia\Inertia;
@@ -67,19 +68,23 @@ class UserController extends Controller
     {
         abort_if($user->role === 'admin', 403);
 
+        $tokens = $user->tokens()->orderBy('created_at')->get(['id', 'name', 'last_used_at', 'created_at']);
+        $devices = PosDevice::query()->whereIn('personal_access_token_id', $tokens->modelKeys())->get()->keyBy('personal_access_token_id');
+
         return Inertia::render('UserSessionsPage', [
             'user' => $user->only(['id', 'name', 'username']),
-            'sessions' => $user->tokens()
-                ->orderBy('created_at')
-                ->get(['id', 'name', 'last_used_at', 'created_at'])
-                ->map(fn ($token) => [
-                    'id' => $token->id,
-                    // The device_name the POS sent at login (e.g. "POS-01"), or Sanctum's
-                    // "pos" default if it didn't send one.
-                    'device_name' => $token->name,
-                    'last_used_at' => $token->last_used_at,
-                    'created_at' => $token->created_at,
-                ]),
+            'sessions' => $tokens->map(fn ($token) => [
+                'id' => $token->id,
+                // The device_name the POS sent at login (e.g. "POS-01"), or Sanctum's
+                // "pos" default if it didn't send one.
+                'device_name' => $token->name,
+                'last_used_at' => $token->last_used_at,
+                'created_at' => $token->created_at,
+                // A POS phone's code and offline sync state; a kitchen display has no device.
+                'device_code' => $devices->get($token->id)?->code,
+                'last_synced_at' => $devices->get($token->id)?->last_synced_at,
+                'pending_actions' => $devices->get($token->id)?->pending_actions ?? 0,
+            ]),
         ]);
     }
 

@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\Concerns\ApiResponses;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\ApiLoginRequest;
 use App\Models\User;
+use App\Services\PosDeviceService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -14,6 +15,8 @@ use Illuminate\Validation\ValidationException;
 class AuthController extends Controller
 {
     use ApiResponses;
+
+    public function __construct(private PosDeviceService $posDeviceService) {}
 
     public function login(ApiLoginRequest $request): JsonResponse
     {
@@ -42,11 +45,18 @@ class AuthController extends Controller
             default => ['*'],
         };
 
-        $token = $user->createToken($request->validated('device_name', 'pos'), $abilities)->plainTextToken;
+        $newToken = $user->createToken($request->validated('device_name', 'pos'), $abilities);
+
+        // A POS login is a device with a short code for its offline receipt/order numbers. A
+        // kitchen display never sells, so it gets none.
+        $device = $abilities === ['*']
+            ? $this->posDeviceService->RegisterDevice($user, $newToken->accessToken)
+            : null;
 
         return $this->success([
-            'token' => $token,
+            'token' => $newToken->plainTextToken,
             'user' => $user,
+            'device' => $device?->only(['code', 'name']),
         ], 201);
     }
 

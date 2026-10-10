@@ -2,7 +2,7 @@ import { type ChartConfig, ChartContainer, ChartLegend, ChartLegendContent, Char
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, usePoll } from '@inertiajs/react';
-import { ArrowDown, ArrowUp, ChefHat, CircleCheck, Clock, LayoutGrid, PackageMinus, TriangleAlert, Undo2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChefHat, CircleCheck, Clock, CloudAlert, LayoutGrid, PackageMinus, TriangleAlert, Undo2 } from 'lucide-react';
 import { type ReactNode } from 'react';
 import { Bar, BarChart, CartesianGrid, Pie, PieChart, ReferenceLine, XAxis, YAxis } from 'recharts';
 
@@ -33,6 +33,7 @@ type LowStock = { kind: 'raw material' | 'item'; name: string; unit: string | nu
 
 type Attention = {
     pending_refunds: { count: number; oldest_requested_at: string | null };
+    sync_issues: { count: number };
     late_kitchen_orders: { count: number; oldest_created_at: string | null };
     running_low: LowStock[];
     missing_cost: string[];
@@ -319,6 +320,7 @@ export default function Dashboard({ now, shift, today, yesterday, hourly, paymen
     const updatedAt = new Date(now).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
     const hasAttention =
         attention.pending_refunds.count > 0 ||
+        attention.sync_issues.count > 0 ||
         attention.late_kitchen_orders.count > 0 ||
         attention.running_low.length > 0 ||
         attention.missing_cost.length > 0;
@@ -433,6 +435,16 @@ export default function Dashboard({ now, shift, today, yesterday, hourly, paymen
                                     </span>
                                     <span className="text-muted-foreground block text-xs">
                                         Oldest waiting {waited(attention.late_kitchen_orders.oldest_created_at, now)}
+                                    </span>
+                                </AttentionRow>
+                            )}
+                            {attention.sync_issues.count > 0 && (
+                                <AttentionRow icon={<CloudAlert className="size-4 text-amber-600" />} href={route('sync-issues.index')}>
+                                    <span className="font-medium">
+                                        {attention.sync_issues.count} offline {attention.sync_issues.count === 1 ? 'sale needs' : 'sales need'} a look
+                                    </span>
+                                    <span className="text-muted-foreground block text-xs">
+                                        Synced after an outage with something that didn't add up · Sync Review
                                     </span>
                                 </AttentionRow>
                             )}

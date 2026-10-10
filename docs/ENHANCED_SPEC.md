@@ -1,7 +1,7 @@
 # Restaurant POS & Back Office System — ENHANCED SPECIFICATION (v1.2)
 
 **Project Name:** Restaurant POS + Back Office Admin Panel + KDS  
-**Status:** The back office (menu, inventory, recipes, users, and the Dashboard, Shifts, Tickets, Kitchen Orders, Items Sold and Refunds pages) and the POS REST API (shifts, tickets, payments, receipts, refunds, the KDS feed and its realtime `kds.orders` channel) are implemented. The React Native POS app, the KDS tablet app and realtime sync for anything other than the KDS are still planned.
+**Status:** The back office (menu, inventory, recipes, users, and the Dashboard, Shifts, Tickets, Kitchen Orders, Items Sold, Refunds and Sync Review pages) and the POS REST API (shifts, tickets, payments, receipts, refunds, the KDS feed and its realtime `kds.orders` channel, and offline sync for an offline-first POS) are implemented. The React Native POS app, the KDS tablet app and realtime sync for anything other than the KDS are still planned.
 **Last Updated:** October 2026
 
 > This document is the product specification. The implemented interfaces are: (1) Laravel 12 + Inertia React session-authenticated back-office pages (`routes/web.php`), and (2) the Sanctum-token REST API for POS clients (`routes/api_v1.php`, documented in `UNIFIED_API_ENDPOINTS.md`). Laravel migrations and application code are authoritative when this document differs from the repository. Sections marked **(planned)** are not built yet.
@@ -32,6 +32,7 @@ A complete point-of-sale (POS), kitchen display system (KDS), and restaurant man
 - **Auto-print receipts** after payment completion (API returns the printable payload in the payment response)
 - **Receipt history** accessible on POS (no terminal filters) and Back Office (with filters)
 - **Passcode-gated actions**: voiding a line and approving/rejecting a refund require a manager/admin 4-digit PIN
+- **Offline-first POS** ✅ (server side): a power cut takes down the NUC, the Wi-Fi and the modem, but the phones keep selling. Each phone saves every action in its own outbox, prints receipts and kitchen slips itself, and syncs when the power returns (`POST /api/v1/sync`). The server records each sale at the time it happened, accepts what already happened (stock may go below zero, the price charged stands) and puts each disagreement on the back office's **Sync Review** list. See `UNIFIED_API_ENDPOINTS.md` §8.6
 
 ---
 
@@ -121,6 +122,7 @@ refunds (refund tracking with approval)
 - Payment is atomic: charges, inventory deduction, ticket close and receipt generation succeed or fail together
 - Ticket merge: source lines move onto the target, sources become `merged` with zeroed money, discounts combine into one fixed amount, and receipts list every order number
 - Item, modifier and price data are snapshotted onto ticket lines so later menu edits never change history
+- **Offline sync:** every synced action is logged once (`sync_actions`, by the phone's action id), so a resent batch never applies anything twice. Phone-made `client_uuid`s are unique on `shifts`, `tickets`, `ticket_items`, `charges` and `shift_transactions`. `pos_devices` gives each POS login a unique short code (`P1`, `P2`...) for offline receipt numbers (`REC-YYYY-MM-DD-P3-001`, `receipts.sequence` null) and order labels (`tickets.offline_label`). `shift_aliases` maps a phone's offline shift onto the shift it joined. `sync_issues` holds what a manager must review. Offline-only columns: `shifts.opened_offline`; `tickets.created_offline`, `pos_device_id`, `synced_at`; `ticket_items.added_offline`, `voided_offline`, `void_reason`; `shift_transactions.synced_at`
 - **Special items:** an item in a `special` category never tracks inventory, cost, a recipe or modifiers. A Fee item (`entry_mode = price`) takes its amount from the cashier; a Custom item (`name_price`) takes its name and amount. The server rejects a price/name on any other item. A category's type cannot change once it has items. The ticket discount applies to every line, fees included
 
 ---
@@ -479,7 +481,8 @@ The back office is a set of Inertia pages served by session-authenticated Larave
 | `/sales` | Items Sold | Admin/manager. What sold in a day or date range (default today, Asia/Manila; previous/next day, Today, Yesterday, Print). A line counts as sold when its ticket is paid (`closed_at`), whatever its shift, so an open shift shows live; open, cancelled and merged-source tickets and voided lines don't count, and still-open tickets are noted separately as "not yet paid". Per item (fees and custom lines get their own rows): qty, gross, its share of ticket discounts, net sales, refunds approved in the period, cost (the line's snapshotted cost × qty), profit and margin; a dish sold with no cost is flagged "No cost set". Summary: items sold, net sales, refunds, cost, gross profit (sales − refunds − cost) and net profit (gross profit − drawer expenses). **By raw material** tab (`?view=raw-materials`): per ingredient, grouped under its ingredient group - used (from the usage recorded at payment), returned by refunds approved in the period, net used, cost at the recorded cost per unit, and current stock/available; under each, the dishes that used it (servings, amount, and the dish's own sales and profit, shown for context and never summed per ingredient). Items sold without raw materials are listed separately, including stockless variant rows. A line picked with a stockless variant (e.g. "Lagi") is its own row, "Sisig Itik · Lagi", beside the normal dish, with ₱0 cost and never flagged "No cost set" |
 | `/refunds` | Refunds | View only, admin/manager. **No approve/reject here** - refunds are approved or rejected on a POS terminal with a manager/admin passcode (`PUT /api/v1/refunds/{id}/approve` or `/reject`). Refunds still pending are pinned on top with how long they've waited. Below, every refund across shifts, newest first, 20 per page: requested time, status, ticket (linked) and receipt number, refunded items, reason, payment method, requested by, decided by/at, amount. Filters: status, payment method, requested date range, and search by order number, customer name or receipt number. Cards total approved (cash/GCash), rejected and pending refunds for the filters (ignoring the status filter), with a breakdown by who requested and who decided them. The pending count is shared with managers/admins (`pendingRefunds`) as a badge on the sidebar's Refunds entry |
 | `/kitchen-orders` | Kitchen Orders | Admin/manager. The same cards as the KDS feed (`KdsService::GetOpenOrders`, identical to `GET /api/v1/kds/orders`): open tickets oldest first with only their pending, non-fee lines, no prices. Each card shows a waiting timer (amber at 10 min, red at 20) and links to the ticket. Refreshed by polling every 5 seconds (the back office has no Reverb client). **Bumping:** tap a line to bump it, or the customer name to bump the whole order (`PATCH /kitchen-orders/items/{id}/complete`, `PATCH /kitchen-orders/{ticket}/complete`), through the same `TicketService` methods and `kds.orders` broadcasts as the tablet. Bumping a ticket that was paid/cancelled meanwhile flashes an error. There is no undo here; a bumped line can be un-bumped only from the tablet API |
-| `/users/{id}/sessions` | Employees → Devices | POS tokens never expire on their own, so this is the only way to end one: lists every device signed in as that user (`device_name`, signed-in/last-used time) with a per-device "Sign out" and a "Sign out everywhere" button. Not available for admin accounts, same protection as editing/deleting one |
+| `/users/{id}/sessions` | Employees → Devices | POS tokens never expire on their own, so this is the only way to end one: lists every device signed in as that user (`device_name`, signed-in/last-used time, and for a POS phone its device code, last sync and offline actions still waiting) with a per-device "Sign out" and a "Sign out everywhere" button. Signing out a phone that still holds offline actions warns first: once signed out it can't send them. Not available for admin accounts, same protection as editing/deleting one |
+| `/sync-issues` | Sync Review | Admin/manager. What phones sold or changed offline that the server accepted although it disagreed: stock gone below zero, a price changed during the outage, a payment that didn't add up (gap booked as discount), a possible double payment, an item removed without a passcode (with the cashier's reason), a starting-cash conflict or an old shift joined, a wrong phone clock, sales that arrived after their shift closed, an offline action that couldn't be applied. Each shows what happened, the usual fix, the ticket (with the label printed offline) and the phone/cashier. Filter by needs review / reviewed / all and by kind; **Mark reviewed** records who and when - the sale itself never changes. The unreviewed count is a sidebar badge (`unreviewedSyncIssues`) and a dashboard needs-attention row. Elsewhere: tickets taken offline carry an "Offline · P3-007" badge and a "Taken: offline only" filter on `/tickets`, the detail page shows when and from which phone they synced and any item removed offline with its reason, and a closed shift's report lists sales and cash entries that synced after it closed ("Synced after close"), apart from its closing totals |
 | `/settings/*` | Profile, password, appearance | Starter-kit account settings |
 
 Notes:
@@ -549,6 +552,7 @@ There is no separate `/reports` page; what it was meant to hold lives on the pag
 4. **POS app prints each receipt automatically** (no user action needed) _(planned)_
 5. Also displays on POS screen for customer verification _(planned)_
 6. If the printer is offline the POS falls back to the on-screen digital receipt; the receipt is already stored, so it can be reprinted later
+7. **With no server** (power cut), the POS numbers and prints the receipt itself (`REC-YYYY-MM-DD-{device code}-NNN`) plus a kitchen slip, and sends the payment when it syncs. The server keeps that printed number (`UNIFIED_API_ENDPOINTS.md` §8.6) _(POS app planned)_
 
 ### Receipt Format (Per Charge)
 
@@ -694,7 +698,7 @@ Legend: `[x]` implemented and tested · `[~]` implemented on the server/API, cli
 
 - [x] Ticket access bound to the account (a cashier sees only their own tickets; managers/admins see all) — `TicketOwnershipTest`
 - [~] Real-time WebSocket updates — KDS channel implemented; general POS/back-office sync (`shift.{shift_id}`, `inventory.updated`, `refund.*`) is not
-- [ ] React Native POS app, including auto-print to the thermal printer
+- [ ] React Native POS app, offline-first (local database + outbox through `/sync`), including auto-print of receipts and offline kitchen slips to the thermal printer
 - [ ] KDS app (tablet client UI) — the API and realtime channel it will call are implemented; the display itself is not
 - [x] Back-office Shifts pages: history list + close report, view only — `ShiftPagesTest`
 - [x] Back-office Tickets pages: filtered history + ticket detail (lines, payments, refunds, merges), view only, receipt-number search and a receipt view with duplicate printing — `TicketPagesTest`, `ReceiptPageTest`
@@ -704,6 +708,7 @@ Legend: `[x]` implemented and tested · `[~]` implemented on the server/API, cli
 - [x] Stockless variant modifiers (e.g. "Lagi"): no stock, ₱0 cost and price, kitchen-only, own Items Sold row - `StocklessVariantTest`
 - [x] App timezone Asia/Manila (receipt days, "today", the nightly KDS sweep)
 - [x] Back-office Refunds page: pending refunds, filterable history, totals by status and person, sidebar pending badge, view only (approval stays on the POS) - `RefundPagesTest`
+- [x] Offline-first POS, server side: `POST /sync` (one outbox, replayed in order, resend-safe), `GET /sync/snapshot`, device codes, offline receipt numbers, accept-and-flag rules, offline shift opening and joining, close-shift guard, Sync Review page - `tests/Feature/Offline/*`
 - [x] Back-office dashboard - `DashboardPageTest`; back office limited to active managers/admins - `BackOfficeAccessTest`; reorder levels with "running low" warnings - `ReorderLevelTest`
 
 ### Nice-to-Have (v1)
@@ -717,7 +722,7 @@ Legend: `[x]` implemented and tested · `[~]` implemented on the server/API, cli
 
 ### Defer to v1.1+
 
-- [ ] Offline order queueing
+- [~] Offline order queueing — moved into v1 as the offline-first POS: the server side is done (above); the app side comes with the POS app
 - [ ] Advanced analytics/reporting
 - [ ] Leave/attendance scheduling
 - [ ] Barcode/QR code scanning
@@ -759,6 +764,16 @@ Full catalog: `UNIFIED_API_ENDPOINTS.md` §10.
 
 Local deployment happens after the application is developed. Target layout:
 
+### Power cuts
+
+Brownouts take down the NUC, the Deco mesh and the modem together. The phones run on battery and keep selling offline (§1, Offline-first POS), but offline mode is the safety net, not the everyday mode:
+
+- **UPS** (or a portable power station for long scheduled outages) behind the NUC, every Deco unit and the modem - roughly 15-30 W for the NUC and about 10 W per Deco, so a 1000-1500VA UPS gives about 1-3 hours. The PT-210 printers run on their own battery.
+- **BIOS "power on after AC loss"** so the NUC boots by itself when power returns.
+- **Every service starts on boot:** MySQL, the web server, Reverb and the scheduler (Docker: `restart: unless-stopped`).
+- **Clean shutdown** when the UPS battery runs low (UPS over USB + its shutdown software), instead of a hard power cut mid-write.
+- **Nightly database backup** to a USB drive or the cloud. Repeated hard power cuts risk disk corruption, not lost orders.
+
 ```
 WiFi Mesh (TP-Link Deco M5)
 │
@@ -787,7 +802,7 @@ WiFi Mesh (TP-Link Deco M5)
 - All devices on same LAN via WiFi mesh
 - API accessible at `http://nuc-ip:8000/api/v1`; back office at `http://nuc-ip:8000`
 - WebSockets (Laravel Reverb) at `ws://nuc-ip:8080` — implemented for the KDS channel
-- No offline queue: the POS needs a live connection to the NUC (locked decision). Remote access via Tailscale.
+- Offline-first: when the NUC or the Wi-Fi is down, each POS phone sells on its own and syncs when the connection returns (supersedes the original "no offline queue" decision). Remote access via Tailscale.
 
 ---
 
@@ -881,6 +896,8 @@ Automated (Pest) coverage today is marked ✅; the rest is manual or still to wr
 - [x] Shift expenses & cash additions (manager/admin records and edits, any staff removes, soft delete, frozen once the shift closes) — `ShiftTransactionApiTest`
 - [x] Refund list for the POS (status/shift filters, newest first, with lines) — `RefundApiTest`
 - [ ] Printer offline, fallback to digital receipt — _POS app_
+- [x] Offline sync — a whole outage day replayed at the times it happened, with printed receipt numbers, stock and drawer right and nothing on the KDS; resending changes nothing (`OfflineDayTest`); two phones on one shift, the last item sold twice, prices/payments that disagree, a ticket paid elsewhere, wrong clocks, sales after close, the close guard and `force`, online actions keeping every rule (`SyncConflictsTest`); the snapshot (`SnapshotTest`); Sync Review, badges, offline ticket marks, devices and the late-sync shift report (`SyncReviewPagesTest`)
+- [ ] A real outage with the POS app: unplug the NUC mid-service, sell, plug back in, check Sync Review — _POS app_
 - [x] Token expiry & re-login flow — tokens never expire on their own; a manager/admin can revoke one from Employee Management → Devices, and the revoked token is immediately rejected by the API (`UserSessionsTest`). The POS app's re-login-on-401 UI is still to build
 
 No known failing tests — `php artisan test` is green.

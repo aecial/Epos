@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Refund;
 use App\Models\Shift;
 use App\Models\ShiftTransaction;
+use App\Models\Ticket;
 use App\Services\ShiftService;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -77,7 +78,59 @@ class ShiftController extends Controller
                 ]),
             'ticketCounts' => collect(['open', 'paid', 'cancelled', 'merged'])
                 ->mapWithKeys(fn (string $status): array => [$status => (int) ($ticketCounts[$status] ?? 0)]),
+            'lateSync' => $this->lateSync($shift),
         ]);
+    }
+
+    /**
+     * What phones sent for this shift after it closed (taken offline during it). It belongs to the
+     * shift but the closing snapshot can't include it, so the report lists it on its own.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function lateSync(Shift $shift): ?array
+    {
+        if ($shift->isOpen()) {
+            return null;
+        }
+
+        $tickets = $shift->tickets()
+            ->where('synced_at', '>=', $shift->closed_at)
+            ->with('charges:id,ticket_id,payment_method,amount,status')
+            ->orderBy('synced_at')
+            ->get();
+
+        $transactions = $shift->transactions()
+            ->whereNull('deleted_at')
+            ->where('synced_at', '>=', $shift->closed_at)
+            ->orderBy('synced_at')
+            ->get();
+
+        $cashSales = round((float) $tickets->flatMap->charges->where('status', 'paid')->where('payment_method', 'cash')->sum('amount'), 2);
+        $additions = (float) $transactions->where('type', 'addition')->sum('amount');
+        $expenses = (float) $transactions->where('type', 'expense')->sum('amount');
+
+        return [
+            'tickets' => $tickets->map(fn (Ticket $ticket): array => [
+                'id' => $ticket->id,
+                'order_number' => $ticket->order_number,
+                'customer_name' => $ticket->customer_name,
+                'offline_label' => $ticket->offline_label,
+                'status' => $ticket->status,
+                'total' => (float) $ticket->total,
+                'synced_at' => $ticket->synced_at,
+            ])->values(),
+            'transactions' => $transactions->map(fn (ShiftTransaction $transaction): array => [
+                'id' => $transaction->id,
+                'type' => $transaction->type,
+                'amount' => (float) $transaction->amount,
+                'reason' => $transaction->reason,
+                'synced_at' => $transaction->synced_at,
+            ])->values(),
+            'cash_sales' => $cashSales,
+            // How much more the drawer should have held than the closing count expected.
+            'drawer_change' => round($cashSales + $additions - $expenses, 2),
+        ];
     }
 
     /**

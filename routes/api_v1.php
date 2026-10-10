@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\V1\ReceiptController;
 use App\Http\Controllers\Api\V1\RefundController;
 use App\Http\Controllers\Api\V1\ShiftController;
 use App\Http\Controllers\Api\V1\ShiftTransactionController;
+use App\Http\Controllers\Api\V1\SyncController;
 use App\Http\Controllers\Api\V1\TicketController;
 use Illuminate\Support\Facades\Route;
 
@@ -63,6 +64,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('refunds', [RefundController::class, 'requestRefund'])->name('api.v1.refunds.store');
         Route::put('refunds/{refund}/approve', [RefundController::class, 'approveRefund'])->name('api.v1.refunds.approve');
         Route::put('refunds/{refund}/reject', [RefundController::class, 'rejectRefund'])->name('api.v1.refunds.reject');
+
+        // Offline-first POS: the phone's outbox of actions, and what it keeps to sell offline.
+        Route::post('sync', [SyncController::class, 'sync'])->name('api.v1.sync');
+        Route::get('sync/snapshot', [SyncController::class, 'snapshot'])->name('api.v1.sync.snapshot');
     });
 
     // KDS tablet routes - a full-access token can reach these too (its '*' ability satisfies

@@ -3,23 +3,19 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Api\Concerns\ApiResponses;
+use App\Http\Controllers\Api\Concerns\PresentsMenuItems;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Item\GetPosItemsRequest;
 use App\Models\Item;
-use App\Models\Modifier;
-use App\Services\InventoryService;
 use App\Services\ItemService;
 use Illuminate\Http\JsonResponse;
-use InvalidArgumentException;
 
 class ItemController extends Controller
 {
     use ApiResponses;
+    use PresentsMenuItems;
 
-    public function __construct(
-        private ItemService $itemService,
-        private InventoryService $inventoryService,
-    ) {}
+    public function __construct(private ItemService $itemService) {}
 
     public function getItems(GetPosItemsRequest $request): JsonResponse
     {
@@ -31,61 +27,5 @@ class ItemController extends Controller
     public function getItem(Item $item): JsonResponse
     {
         return $this->success($this->presentItem($this->itemService->ReadMenuItem($item)));
-    }
-
-    /**
-     * What a POS terminal needs to draw and sell an item. Deliberately leaves out
-     * cost_price (margin data) and the raw quantity/reserved_quantity columns;
-     * available_stock is the number that matters at the till.
-     */
-    private function presentItem(Item $item): array
-    {
-        return [
-            'id' => $item->id,
-            'category_id' => $item->category_id,
-            'category' => ['id' => $item->category->id, 'name' => $item->category->name, 'type' => $item->category->type],
-            'name' => $item->name,
-            'base_price' => $item->base_price,
-            // available = orderable, unavailable = shown greyed out (hidden never reaches here).
-            'status' => $item->status,
-            'inventory_type' => $item->inventory_type,
-            // fixed = add as-is; price = cashier types the amount (Fee item, base_price is the
-            // suggested default); name_price = cashier types name and amount (Custom item).
-            'entry_mode' => $item->entry_mode,
-            'image_url' => $item->image_url,
-            'available_stock' => $this->availableStock($item),
-            'modifiers' => $item->sellableModifiers->map(fn (Modifier $modifier): array => [
-                'id' => $modifier->id,
-                'name' => $modifier->name,
-                // A stockless variant ("Lagi") is always ₱0, takes no stock and stays off the
-                // receipt; the POS may sell the dish with it even when the dish shows 0 available.
-                'price_modifier' => $modifier->is_stockless_variant ? '0.00' : $modifier->pivot->price_modifier,
-                'is_stockless_variant' => $modifier->is_stockless_variant,
-                'group' => $modifier->group === null ? null : [
-                    'id' => $modifier->group->id,
-                    'name' => $modifier->group->name,
-                    'is_required' => $modifier->group->is_required,
-                ],
-            ])->values()->all(),
-        ];
-    }
-
-    /**
-     * Sellable units right now (on hand minus reserved; for recipes, complete servings the
-     * ingredients allow). null means "not tracked": inventory_type 'none' is unlimited, and
-     * INF can't be encoded as JSON anyway.
-     */
-    private function availableStock(Item $item): ?float
-    {
-        if ($item->inventory_type === 'none') {
-            return null;
-        }
-
-        try {
-            return $this->inventoryService->AvailableFromLoaded($item);
-        } catch (InvalidArgumentException) {
-            // A recipe item with no ingredients configured yet.
-            return null;
-        }
     }
 }

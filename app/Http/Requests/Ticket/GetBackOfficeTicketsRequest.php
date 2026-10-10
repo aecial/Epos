@@ -21,6 +21,8 @@ class GetBackOfficeTicketsRequest extends FormRequest
             'status' => ['nullable', 'in:open,paid,cancelled,merged'],
             'shift_id' => ['nullable', 'integer', 'exists:shifts,id'],
             'payment_method' => ['nullable', 'in:cash,gcash'],
+            // Only tickets taken on a phone while the server was down.
+            'offline' => ['nullable', 'in:1'],
             'date_from' => ['nullable', 'date'],
             'date_to' => ['nullable', 'date', 'after_or_equal:date_from'],
             // Matches order number, customer name or receipt number.

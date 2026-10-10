@@ -2,7 +2,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/react';
-import { Banknote, Clock, Printer, ReceiptText, Undo2 } from 'lucide-react';
+import { Banknote, Clock, CloudOff, Printer, ReceiptText, Undo2 } from 'lucide-react';
 import { type ReactNode } from 'react';
 
 type Shift = {
@@ -47,6 +47,22 @@ type Refund = {
 
 type TicketCounts = { open: number; paid: number; cancelled: number; merged: number };
 
+/** Offline activity a phone sent after this shift closed: on the shift, not in its closing totals. */
+type LateSync = {
+    tickets: {
+        id: number;
+        order_number: string;
+        customer_name: string;
+        offline_label: string | null;
+        status: string;
+        total: number;
+        synced_at: string;
+    }[];
+    transactions: { id: number; type: 'expense' | 'addition'; amount: number; reason: string; synced_at: string }[];
+    cash_sales: number;
+    drawer_change: number;
+};
+
 function formatDate(value: string | null): string {
     return value ? new Date(value).toLocaleString() : '—';
 }
@@ -89,11 +105,13 @@ export default function ShiftDetailPage({
     transactions,
     refunds,
     ticketCounts,
+    lateSync,
 }: {
     shift: Shift;
     transactions: Transaction[];
     refunds: Refund[];
     ticketCounts: TicketCounts;
+    lateSync: LateSync | null;
 }) {
     const breadcrumbs: BreadcrumbItem[] = [
         { title: 'Back Office', href: route('back-office') },
@@ -188,6 +206,57 @@ export default function ShiftDetailPage({
                         </div>
                     </div>
                 </div>
+
+                {lateSync && (lateSync.tickets.length > 0 || lateSync.transactions.length > 0) && (
+                    <div className="rounded-xl border border-amber-500/50">
+                        <div className="flex flex-wrap items-center gap-2 border-b border-amber-500/30 bg-amber-500/10 px-5 py-3">
+                            <CloudOff className="size-4 text-amber-600" />
+                            <h3 className="font-semibold">Synced after close</h3>
+                            <span className="text-muted-foreground text-xs">
+                                Taken offline during this shift but received after it closed — not in the totals above. Cash sales{' '}
+                                {peso(lateSync.cash_sales)}; the drawer should have held {peso(lateSync.drawer_change)} more.
+                            </span>
+                        </div>
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Synced</TableHead>
+                                    <TableHead>What</TableHead>
+                                    <TableHead>Status</TableHead>
+                                    <TableHead className="text-right">Amount</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {lateSync.tickets.map((ticket) => (
+                                    <TableRow key={`ticket-${ticket.id}`}>
+                                        <TableCell>{formatDate(ticket.synced_at)}</TableCell>
+                                        <TableCell>
+                                            <Link href={route('tickets.show', ticket.id)} className="font-medium underline underline-offset-2">
+                                                {ticket.order_number} · {ticket.customer_name}
+                                            </Link>
+                                            {ticket.offline_label && (
+                                                <span className="text-muted-foreground text-xs"> · printed as {ticket.offline_label}</span>
+                                            )}
+                                        </TableCell>
+                                        <TableCell className="capitalize">{ticket.status}</TableCell>
+                                        <TableCell className="text-right">{peso(ticket.total)}</TableCell>
+                                    </TableRow>
+                                ))}
+                                {lateSync.transactions.map((transaction) => (
+                                    <TableRow key={`transaction-${transaction.id}`}>
+                                        <TableCell>{formatDate(transaction.synced_at)}</TableCell>
+                                        <TableCell>{transaction.reason}</TableCell>
+                                        <TableCell className="capitalize">{transaction.type}</TableCell>
+                                        <TableCell className="text-right">
+                                            {transaction.type === 'expense' ? '−' : '+'}
+                                            {peso(transaction.amount)}
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </div>
+                )}
 
                 <div className={panelClass}>
                     <PanelTitle icon={<Banknote className="text-muted-foreground size-4" />}>Expenses & cash additions</PanelTitle>

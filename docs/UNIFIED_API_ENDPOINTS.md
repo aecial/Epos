@@ -99,12 +99,13 @@ An admin account's sessions can't be viewed or revoked through this UI, same pro
     "success": true,
     "data": {
         "token": "1|abcdef...",
-        "user": { "id": 2, "name": "Dangbi", "username": "dangbi", "role": "cashier", "status": "active" }
+        "user": { "id": 2, "name": "Dangbi", "username": "dangbi", "role": "cashier", "status": "active" },
+        "device": { "code": "P3", "name": "POS-01" }
     }
 }
 ```
 
-`password` and `passcode` are never serialized.
+`password` and `passcode` are never serialized. `device` is the POS device this login registered (§8.6): its short `code` prefixes the receipt and order numbers the phone prints while offline. A `scope: "kds"` login gets `"device": null`.
 
 **Errors:** `422` `username: These credentials do not match our records.` for bad credentials, or `username: This account is inactive.` for an inactive user.
 
@@ -241,9 +242,14 @@ Live totals (numbers) overwrite the snapshot columns:
     "total_revenue": 1250.0, "total_cash": 750.0, "total_gcash": 500.0,
     "total_additions": 500.0, "total_expenses": 200.0,
     "total_refunds": 0.0, "total_cash_refunds": 0.0,
-    "expected_cash": 6050.0
+    "expected_cash": 6050.0,
+    "devices": [
+        { "code": "P3", "name": "POS-01", "user": "Dangbi", "last_seen_at": "...", "last_synced_at": "...", "pending_actions": 0 }
+    ]
 }
 ```
+
+`devices` lists the POS devices taking part in the shift (seen since it opened, or with a ticket in it) and what each last reported about its offline outbox (§8.6), so the POS can warn "P3 hasn't synced since 2:10 pm" before closing.
 
 ### GET `/shifts/{shift}`
 
@@ -253,11 +259,12 @@ Same as above for an open shift (live totals). For a closed shift, returns the s
 
 Close a shift. **Any staff** may close (deliberate: cashiers included).
 
-**Body:** `{ "closing_cash": 8200 }` — the cash counted in the drawer.
+**Body:** `{ "closing_cash": 8200, "force": false }` — the cash counted in the drawer. `force` is optional and manager/admin only (`422` on `force` for a cashier).
 
 **Rules**
 
 - `409` `Shift is already closed.` if not open.
+- `409` while a device in the shift reports offline actions it hasn't synced (`pending_actions > 0`, e.g. `P3 (Dangbi) still has 3 offline action(s) to sync.`), unless `force: true` - for a phone that broke or won't come back. Whatever it sends later still lands on this shift and is flagged `synced_after_close`.
 - `409` if any ticket in the shift is still `open` (paid, merged and cancelled tickets do not block).
 - Runs in a transaction with the shift row locked.
 
@@ -566,6 +573,7 @@ A receipt is an **immutable snapshot** written when payment commits (one per cha
 - Split payment ⇒ two receipts, same order number and items, each with its own prorated slice. Discount shares are prorated in whole centavos; the last charge takes the remainder, so shares always add up to the ticket discount exactly.
 - Merged tickets print **one** receipt listing every order number in `order.merged_from`.
 - `notes` are **never** included.
+- A payment taken offline (§8.6) keeps the number its phone printed, `REC-YYYY-MM-DD-{device code}-NNN` (e.g. `REC-2026-10-10-P3-001`), with `sequence: null` and `device_code` set, and `order.offline_label` holds the order label printed on its slips (e.g. `P3-007`). Online receipts have `offline_label: null`.
 
 ### Receipt `payload`
 
@@ -577,6 +585,7 @@ A receipt is an **immutable snapshot** written when payment commits (one per cha
         "order_number": "#001",
         "customer_name": "john",
         "order_type": "dine_in",
+        "offline_label": null,
         "terminal_id": "POS-01",
         "merged_from": [{ "order_number": "#002", "customer_name": "john2" }]
     },
@@ -769,6 +778,128 @@ Every broadcast fires after its underlying `DB::transaction()` already committed
 
 ---
 
+## 8.6. OFFLINE SYNC (offline-first POS)
+
+A power cut takes down the NUC, the Wi-Fi and the modem, but not the phones. So the POS is **offline-first**: a phone saves every action in its own outbox (its "notebook") and sends it here - within a second while online, or when the connection comes back. Offline, the phone prints the receipt and a kitchen slip on the PT-210 itself. The server replays the notebook in order through the same services as the per-action endpoints, so the selling rules live in one place.
+
+Online-only (not through the outbox): merging tickets, refunds (request, approve, reject), removing an item with a manager passcode (`DELETE /tickets/{id}/items/{line}`), closing the shift.
+
+### GET `/sync/snapshot`
+
+What a phone keeps on hand to sell with no server. Refresh it whenever online; re-download the menu only when `menu_version` changed.
+
+```json
+{
+    "device": { "code": "P3", "name": "POS-01" },
+    "server_time": "2026-10-10T10:00:00+08:00",
+    "menu_version": "4f1c...",
+    "shift": { "id": 7, "status": "open", "starting_cash": "2000.00", "...": "..." },
+    "categories": [{ "id": 1, "name": "Itik", "type": "regular" }],
+    "items": [ "...same shape as GET /items..." ],
+    "open_tickets": [ "...the user's open tickets (a manager's: all) with items.modifiers..." ]
+}
+```
+
+- `server_time`: the phone keeps the difference from its own clock and corrects every offline `happened_at` with it.
+- `menu_version`: changes whenever an item, category, modifier or modifier group is added, edited or removed, or a modifier is attached to or detached from an item.
+- `shift` is `null` when none is open: the phone may then open one offline (`shift.open`).
+- `403` unless the token is a real POS login (`POST /auth/login`).
+
+### POST `/sync`
+
+```json
+{
+    "pending": 0,
+    "actions": [
+        {
+            "id": "6f0c2b1e-...",
+            "type": "ticket.create",
+            "offline": true,
+            "happened_at": "2026-10-10T10:05:00+08:00",
+            "data": { "ticket_uuid": "9a1d...", "terminal_id": "POS-01", "customer_name": "John", "order_type": "dine_in", "offline_label": "P3-007" }
+        }
+    ]
+}
+```
+
+- `actions`: up to 200, **in the order they happened**. `id` is a uuid the phone gives the action; `offline` is whether the phone had no server at the time; `happened_at` is required when offline.
+- `pending`: how many actions the phone still holds after this batch. A shift can't close while any device reports some (§3).
+- A malformed envelope is a `422` for the whole batch. Each action's own `data` is validated when it's applied, so a bad action is rejected on its own.
+- The phone names what it creates with its own uuids (`shift_uuid`, `ticket_uuid`, `line_uuid`, `charge_uuid`, `transaction_uuid`). Later actions refer to them by that uuid, or by the server id for things that already existed (`shift_id`, `ticket_id`, `ticket_item_id`, `transaction_id`).
+
+**Response `200`:** one result per action, in order.
+
+```json
+{
+    "success": true,
+    "data": {
+        "device": { "code": "P3", "name": "POS-01" },
+        "server_time": "2026-10-10T18:00:01+08:00",
+        "results": [
+            {
+                "id": "6f0c2b1e-...",
+                "type": "ticket.create",
+                "status": "applied",
+                "message": null,
+                "result": { "ticket_id": 41, "shift_id": 7, "order_number": "#012", "customer_name": "John2" },
+                "issues": []
+            }
+        ]
+    }
+}
+```
+
+- `status`: `applied`, `applied_with_issue` (accepted, with `issues` raised for a manager) or `rejected` (`message` says why; nothing changed).
+- **Resending is safe.** An action id the server already has returns its stored result and changes nothing, so after a lost reply the phone sends the same batch again. A uuid (ticket, line...) reused under a different action id is rejected (`Something with this id was already received from another action.`).
+- Each action is applied on its own: a rejected one doesn't undo the ones before it. Actions on a ticket whose creation was rejected are rejected too (`That ticket never reached the server.`).
+- A database failure fails the whole request (`500`). Nothing is recorded for the failed action, so the phone resends.
+- The phone replaces its temporary numbers with the results: the order number, the final customer name (john2), server ids, receipt numbers.
+
+**Action types and `data`**
+
+| Type | `data` | Result |
+| ---- | ------ | ------ |
+| `shift.open` | `shift_uuid`, `starting_cash` | `shift_id`, `joined` |
+| `ticket.create` | `ticket_uuid`, `shift_uuid` or `shift_id` (optional: the open shift), `terminal_id`, `customer_name`, `order_type`, `offline_label` (optional, e.g. `P3-007`) | `ticket_id`, `shift_id`, `order_number`, `customer_name` |
+| `ticket.add_item` | ticket ref, `line_uuid`, `item_id`, `quantity`, `modifier_ids`, `notes`, `unit_price`, `custom_name` | `ticket_id`, `ticket_item_id`, `line_total`, `ticket_total` |
+| `ticket.set_quantity` | line ref, `quantity` | `ticket_item_id`, `line_total`, `ticket_total` |
+| `ticket.void_item` | line ref, `reason` (**offline only**) | `ticket_item_id`, `ticket_total` |
+| `ticket.discount` | ticket ref, `discount_amount`, `discount_percent` | `ticket_total` |
+| `ticket.cancel` | ticket ref | `status` |
+| `ticket.charge` | ticket ref, `charges[]`: `charge_uuid`, `payment_method`, `amount`, `tendered_amount`, `payment_reference`, `receipt_number` (offline) | `status`, `charged`, `receipts[]`: `charge_uuid`, `charge_id`, `receipt_id`, `receipt_number` |
+| `shift_transaction.add` | `transaction_uuid`, shift ref (optional), `type`, `amount`, `reason` (manager/admin) | `transaction_id`, `shift_id` |
+| `shift_transaction.update` | transaction ref, `amount`, `reason` (manager/admin) | `transaction_id` |
+| `shift_transaction.delete` | transaction ref (any staff) | `transaction_id` |
+
+A cashier may act only on tickets they opened, same as the per-ticket routes; anything else is rejected `Not found.`
+
+**Online actions** (`offline: false`) follow every rule of the matching endpoint: stock is refused when short, a normal item's price can't be overridden, a closed shift takes nothing, and removing an item needs the passcode endpoint. They're recorded at the server's time, and a rejection raises no issue - the cashier saw it on the spot.
+
+**Offline actions** (`offline: true`) already happened in the restaurant, so the server accepts them, records them at `happened_at`, and raises a **sync issue** for each disagreement. Issues show in the back office's Sync Review (`/sync-issues`):
+
+| Issue | When | What the server did |
+| ----- | ---- | ------------------- |
+| `stock_short` | Sold with less stock than needed (e.g. two phones sold the last Itik) | Reserved and deducted anyway; stock went below zero |
+| `price_changed` | `unit_price` differs from the current menu price | Kept the price the phone charged |
+| `charge_mismatch` | The payment doesn't add up to the server's total | Recorded the payment; the gap became the ticket's discount, so receipts still prorate exactly |
+| `possible_double_payment` | Paid offline, but the ticket was already paid, cancelled or merged on the server | Charged nothing; the payment details are in the issue for a manager to refund |
+| `offline_void` | `ticket.void_item`: removed without a passcode | Voided with `voided_offline`, `void_reason` and the cashier in `voided_requested_by`, no approver; stock released |
+| `starting_cash_conflict` | A `shift.open` joined a shift that started with a different drawer count | Kept the existing shift's starting cash |
+| `old_shift_joined` | A `shift.open` joined a shift left open since an earlier day | Joined it |
+| `clock_wrong` | `happened_at` in the future (more than 5 min ahead) or before its shift opened | Used the sync time, or the shift's opening |
+| `synced_after_close` | Offline sales or cash entries for a shift that has since closed | Recorded them on that shift; its closing totals don't change, and the shift report lists them apart |
+| `receipt_number_taken` | The printed receipt number already exists | Gave the payment the next number in the daily sequence |
+| `rejected_action` | An offline action couldn't be applied at all | Nothing; the issue keeps the action's data |
+
+Also offline:
+
+- **`shift.open`** joins whichever shift covered `happened_at` (or the shift open now). It opens a new shift (`opened_offline`, at `happened_at`) only when there is none, so two phones never make two shifts. The phone's `shift_uuid` keeps working as a reference to the joined shift.
+- **Tickets** keep `created_at` = `happened_at`, `created_offline: true`, `offline_label` and `synced_at`. The server still assigns the real order number and the john → john2 name.
+- **Lines** arrive with `added_offline: true` and `completed_at` set: the kitchen cooked from the paper slip, so they never appear on the KDS or Kitchen Orders. Offline creates and adds aren't broadcast. Cancels and payments still are, so an order the KDS still shows drops off it.
+- **Modifiers** that were made inactive during the outage still apply.
+- **Payments:** `paid_at`/`closed_at` = `happened_at`. Each receipt keeps the `receipt_number` the phone printed (format `REC-YYYY-MM-DD-{device code}-NNN`), with `sequence: null` and `device_code` set, and the payload's `order.offline_label`.
+- **Cash entries** keep `created_at` = `happened_at` and get `synced_at`.
+
 ## 9. AUDIT TRAIL SUMMARY
 
 | Action              | Recorded                                                         |
@@ -842,6 +973,8 @@ GET  /receipts                         → history / reprint
 PUT  /shifts/{id}/close { closing_cash } → reconcile
 ```
 
+The offline-first app sends the shift, ticket, item, discount, cancel, payment and cash-entry steps above as `POST /sync` actions instead (§8.6) - the same rules apply while online - and refreshes `GET /sync/snapshot` to keep selling when the server is gone.
+
 ---
 
 ## 12. TESTED BEHAVIOR
@@ -862,13 +995,16 @@ Ticket access (another cashier gets `404` on every per-ticket route and the tick
 
 API login (named device tokens, bad/inactive logins, the 6/min throttle, logout revoking only its own token, the `401` envelope) is covered by `ApiAuthTest`. Shifts (one open at a time, live totals, the close snapshot and discrepancy across cash/GCash/split payments, additions, expenses, deleted entries and cash refunds, blocked while a ticket is open, no double close) by `ShiftApiTest`; shift transactions (manager/admin create and edit, any staff deletes, soft delete, wrong-shift `404`, frozen once closed) by `ShiftTransactionApiTest`. Ticket create (per-shift order numbers, john → john2 → john3 across terminals and cashiers, names freed once a ticket closes), discount (fixed, percent precedence, floor at ₱0, follows line changes, locked once paid) and cancel (reservations released, voided lines not released twice, open only) by `TicketApiTest`; the refund list and its filters by `RefundApiTest`.
 
+Offline sync is covered by `tests/Feature/Offline/*`: a whole outage day replayed (an offline shift, tickets, discount, cash and GCash, an offline void, an expense) landing at the times it happened, with the printed receipt numbers, the right stock and drawer, and nothing on the KDS (`OfflineDayTest`); resending a batch or finishing a cut-off one changes nothing; two phones joining one shift, both selling the last item, prices and payments that disagree, a ticket paid elsewhere meanwhile, wrong phone clocks, sales arriving after their shift closed, the close-shift guard and its manager-only `force`, online actions keeping every rule, and per-action rejection (`SyncConflictsTest`); the snapshot and `menu_version` (`SnapshotTest`); and the back-office Sync Review, badges, offline ticket marks, devices page and late-sync shift report (`SyncReviewPagesTest`).
+
 ---
 
 ## 13. NOT IMPLEMENTED YET
 
 | Item | Status |
 | ---- | ------ |
-| **Real-time / WebSockets for general POS sync** | The KDS channel (`kds.orders`, §8.5) is implemented via Laravel Reverb. `shift.{shift_id}`/`terminal.{terminal_id}` and the `inventory.updated`/`refund.*` events in `ENHANCED_SPEC.md` §10 are not - POS terminals still use the manual sync button or polling. |
+| **Real-time / WebSockets for general POS sync** | The KDS channel (`kds.orders`, §8.5) is implemented via Laravel Reverb. `shift.{shift_id}`/`terminal.{terminal_id}` and the `inventory.updated`/`refund.*` events in `ENHANCED_SPEC.md` §10 are not - POS terminals refresh `GET /sync/snapshot` (§8.6) or poll. |
+| **Offline refunds, merges and passcode voids** | Deliberately online-only: they need the server's answer (or a passcode it checks). Offline, an item can only be removed with a reason (`ticket.void_item`, flagged for review). |
 | **KDS tablet client (the actual display app)** | `GET /kds/orders`, the completion toggle and the realtime channel it will use are implemented (§8.5). The React Native display itself is not built. |
 | **Employee / category / item admin over the API** | These live in the session-authenticated back office only, not in `/api/v1`. |
 | **Per-item charge assignment (`charge_items`)** | Dropped by design; charges are amounts-only with prorated receipts. |

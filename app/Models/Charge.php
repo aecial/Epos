@@ -13,6 +13,7 @@ class Charge extends Model
     use HasFactory;
 
     protected $fillable = [
+        'client_uuid',
         'ticket_id',
         'payment_method',
         'amount',

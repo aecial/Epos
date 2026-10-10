@@ -11,6 +11,7 @@ class ShiftTransaction extends Model
     use HasFactory;
 
     protected $fillable = [
+        'client_uuid',
         'shift_id',
         'type',
         'amount',
@@ -19,12 +20,14 @@ class ShiftTransaction extends Model
         'updated_by',
         'deleted_by',
         'deleted_at',
+        'synced_at',
     ];
 
     protected function casts(): array
     {
         return [
             'deleted_at' => 'datetime',
+            'synced_at' => 'datetime',
         ];
     }
 

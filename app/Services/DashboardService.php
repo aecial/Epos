@@ -6,6 +6,7 @@ use App\Models\Charge;
 use App\Models\Ingredient;
 use App\Models\Item;
 use App\Models\Refund;
+use App\Models\SyncIssue;
 use App\Models\Ticket;
 use Carbon\CarbonInterface;
 
@@ -158,6 +159,10 @@ class DashboardService
             'pending_refunds' => [
                 'count' => Refund::query()->where('status', 'pending')->count(),
                 'oldest_requested_at' => $oldestPending?->requested_at,
+            ],
+            // Offline sales accepted despite a disagreement (stock, price, a void without passcode...).
+            'sync_issues' => [
+                'count' => SyncIssue::query()->whereNull('reviewed_at')->count(),
             ],
             'late_kitchen_orders' => [
                 'count' => $lateOrders->count(),

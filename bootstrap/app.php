@@ -8,6 +8,7 @@ use App\Exceptions\NoActiveShiftException;
 use App\Exceptions\OpenTicketsExistException;
 use App\Exceptions\RecordInUseException;
 use App\Exceptions\TooManyPasscodeAttemptsException;
+use App\Exceptions\UnsyncedDevicesException;
 use App\Http\Middleware\EnsureBackOfficeUser;
 use App\Http\Middleware\HandleInertiaRequests;
 use Illuminate\Auth\AuthenticationException;
@@ -63,6 +64,7 @@ return Application::configure(basePath: dirname(__DIR__))
             NoActiveShiftException::class,
             ActiveShiftExistsException::class,
             OpenTicketsExistException::class,
+            UnsyncedDevicesException::class,
             ChargeAmountMismatchException::class,
             InsufficientInventoryException::class,
             RecordInUseException::class,

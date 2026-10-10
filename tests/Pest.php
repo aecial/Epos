@@ -1,6 +1,19 @@
 <?php
 
+use App\Models\Category;
+use App\Models\Item;
+use App\Models\PosDevice;
+use App\Models\Shift;
+use App\Models\Ticket;
+use App\Models\TicketItem;
+use App\Models\User;
+use App\Services\PaymentService;
+use App\Services\PosDeviceService;
+use App\Services\ShiftService;
+use App\Services\TicketService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
+use Illuminate\Testing\TestResponse;
 use Tests\TestCase;
 
 /*
@@ -54,21 +67,21 @@ function something()
 | the same code paths as the API.
 */
 
-function posUser(string $role = 'cashier'): App\Models\User
+function posUser(string $role = 'cashier'): User
 {
-    return App\Models\User::factory()->create(['role' => $role]);
+    return User::factory()->create(['role' => $role]);
 }
 
-function posOpenShift(App\Models\User $by): App\Models\Shift
+function posOpenShift(User $by): Shift
 {
-    return app(App\Services\ShiftService::class)->OpenShift($by, 1000);
+    return app(ShiftService::class)->OpenShift($by, 1000);
 }
 
-function posItem(string $name, float $price, int $quantity = 50): App\Models\Item
+function posItem(string $name, float $price, int $quantity = 50): Item
 {
-    $category = App\Models\Category::firstOrCreate(['name' => 'Test Category'], ['status' => 'active', 'is_visible_to_pos' => true]);
+    $category = Category::firstOrCreate(['name' => 'Test Category'], ['status' => 'active', 'is_visible_to_pos' => true]);
 
-    return App\Models\Item::create([
+    return Item::create([
         'category_id' => $category->id,
         'name' => $name,
         'base_price' => $price,
@@ -79,18 +92,70 @@ function posItem(string $name, float $price, int $quantity = 50): App\Models\Ite
     ]);
 }
 
-function posTicket(App\Models\Shift $shift, App\Models\User $user, string $customer, string $terminal = 'POS-01'): App\Models\Ticket
+function posTicket(Shift $shift, User $user, string $customer, string $terminal = 'POS-01'): Ticket
 {
-    return app(App\Services\TicketService::class)->CreateTicket($shift, $user, $terminal, $customer, 'dine_in');
+    return app(TicketService::class)->CreateTicket($shift, $user, $terminal, $customer, 'dine_in');
 }
 
-function posAddItem(App\Models\Ticket $ticket, App\Models\Item $item, int $quantity = 1, ?string $notes = null): App\Models\TicketItem
+function posAddItem(Ticket $ticket, Item $item, int $quantity = 1, ?string $notes = null): TicketItem
 {
-    return app(App\Services\TicketService::class)->AddItem($ticket, $item->fresh(), $quantity, [], $notes);
+    return app(TicketService::class)->AddItem($ticket, $item->fresh(), $quantity, [], $notes);
 }
 
 /** @param array<int, array<string, mixed>> $charges */
-function posPay(App\Models\Ticket $ticket, App\Models\User $cashier, array $charges): App\Models\Ticket
+function posPay(Ticket $ticket, User $cashier, array $charges): Ticket
 {
-    return app(App\Services\PaymentService::class)->ChargeTicket($ticket, $cashier, $charges);
+    return app(PaymentService::class)->ChargeTicket($ticket, $cashier, $charges);
+}
+
+/*
+| Offline sync helpers - a phone signed in as $role with a real token and device code, and the
+| actions it sends to POST /api/v1/sync. An action with a time happened offline at that time.
+*/
+
+/** @return array{user: User, token: string, device: PosDevice} */
+function syncPhone(string $role = 'cashier', string $name = 'POS-01'): array
+{
+    $user = posUser($role);
+    $token = $user->createToken($name);
+    $device = app(PosDeviceService::class)->RegisterDevice($user, $token->accessToken);
+
+    return ['user' => $user, 'token' => $token->plainTextToken, 'device' => $device];
+}
+
+/**
+ * @param  array<string, mixed>  $data
+ * @return array<string, mixed>
+ */
+function syncAction(string $type, array $data, ?string $offlineAt = null): array
+{
+    return [
+        'id' => (string) Str::uuid(),
+        'type' => $type,
+        'offline' => $offlineAt !== null,
+        'happened_at' => $offlineAt === null ? null : Carbon\Carbon::parse($offlineAt, 'Asia/Manila')->toIso8601String(),
+        'data' => $data,
+    ];
+}
+
+/** @param  array<int, array<string, mixed>>  $actions */
+function syncSend(string $token, array $actions, int $pending = 0): TestResponse
+{
+    // Several phones in one test: forget the last token so Sanctum reads this one.
+    app('auth')->forgetGuards();
+
+    $response = test()->withToken($token)->postJson('/api/v1/sync', ['actions' => $actions, 'pending' => $pending]);
+
+    // auth:sanctum made Sanctum the default guard; put back the web one (and drop the token) so
+    // a later actingAs() in the same test signs into the back office as usual.
+    app('auth')->forgetGuards();
+    app('auth')->shouldUse('web');
+    test()->flushHeaders();
+
+    return $response;
+}
+
+function syncUuid(): string
+{
+    return (string) Str::uuid();
 }

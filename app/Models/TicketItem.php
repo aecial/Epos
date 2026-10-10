@@ -12,6 +12,7 @@ class TicketItem extends Model
     use HasFactory;
 
     protected $fillable = [
+        'client_uuid',
         'ticket_id',
         'merged_from_ticket_id',
         'item_id',
@@ -26,6 +27,9 @@ class TicketItem extends Model
         'voided_at',
         'voided_by',
         'voided_requested_by',
+        'voided_offline',
+        'void_reason',
+        'added_offline',
         'completed_at',
     ];
 
@@ -36,6 +40,8 @@ class TicketItem extends Model
             // Picked with a stockless variant (e.g. "Lagi"): no reserve, release, deduct or restock.
             'is_stockless' => 'boolean',
             'completed_at' => 'datetime',
+            'added_offline' => 'boolean',
+            'voided_offline' => 'boolean',
         ];
     }
 

@@ -30,6 +30,8 @@ export interface SharedData {
     flash: { error?: string | null; success?: string | null };
     /** Refunds waiting for a passcode on the POS - set for managers/admins only. */
     pendingRefunds?: number | null;
+    /** Offline sales the server accepted but no manager has reviewed - set for managers/admins only. */
+    unreviewedSyncIssues?: number | null;
     [key: string]: unknown;
 }
 

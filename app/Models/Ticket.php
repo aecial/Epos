@@ -12,9 +12,11 @@ class Ticket extends Model
     use HasFactory;
 
     protected $fillable = [
+        'client_uuid',
         'shift_id',
         'created_by',
         'terminal_id',
+        'pos_device_id',
         'customer_name',
         'order_number',
         'order_type',
@@ -30,6 +32,9 @@ class Ticket extends Model
         'cancelled_by',
         'cancelled_at',
         'closed_at',
+        'created_offline',
+        'offline_label',
+        'synced_at',
     ];
 
     protected function casts(): array
@@ -38,6 +43,8 @@ class Ticket extends Model
             'merged_at' => 'datetime',
             'cancelled_at' => 'datetime',
             'closed_at' => 'datetime',
+            'created_offline' => 'boolean',
+            'synced_at' => 'datetime',
         ];
     }
 
@@ -49,6 +56,11 @@ class Ticket extends Model
     public function shift(): BelongsTo
     {
         return $this->belongsTo(Shift::class);
+    }
+
+    public function device(): BelongsTo
+    {
+        return $this->belongsTo(PosDevice::class, 'pos_device_id');
     }
 
     public function createdBy(): BelongsTo

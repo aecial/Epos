@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Models\Refund;
+use App\Models\SyncIssue;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -50,6 +51,10 @@ class HandleInertiaRequests extends Middleware
             // Only managers/admins see the Refunds page, so only they get the count.
             'pendingRefunds' => fn (): ?int => $request->user()?->isAdminOrManager()
                 ? Refund::query()->where('status', 'pending')->count()
+                : null,
+            // Offline sales the server accepted but a manager hasn't looked at, for the Sync review badge.
+            'unreviewedSyncIssues' => fn (): ?int => $request->user()?->isAdminOrManager()
+                ? SyncIssue::query()->whereNull('reviewed_at')->count()
                 : null,
             'flash' => [
                 'error' => fn () => $request->session()->get('error'),

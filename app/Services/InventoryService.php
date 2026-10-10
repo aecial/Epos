@@ -11,16 +11,20 @@ use InvalidArgumentException;
 
 class InventoryService
 {
-    public function ReserveItem(Item $item, int $quantity): void
+    /**
+     * $allowShortfall is for sales that already happened offline: the reservation is made even
+     * when stock is short, so available stock may go below zero (SyncService flags it).
+     */
+    public function ReserveItem(Item $item, int $quantity, bool $allowShortfall = false): void
     {
         $this->assertPositiveQuantity($quantity);
 
-        DB::transaction(function () use ($item, $quantity): void {
+        DB::transaction(function () use ($item, $quantity, $allowShortfall): void {
             $lockedItem = $this->lockItem($item);
 
             match ($lockedItem->inventory_type) {
-                'direct' => $this->reserveDirectItem($lockedItem, $quantity),
-                'recipe' => $this->reserveRecipeItem($lockedItem, $quantity),
+                'direct' => $this->reserveDirectItem($lockedItem, $quantity, $allowShortfall),
+                'recipe' => $this->reserveRecipeItem($lockedItem, $quantity, $allowShortfall),
                 'none' => null,
                 default => throw new InvalidArgumentException('Unsupported inventory type.'),
             };
@@ -46,22 +50,23 @@ class InventoryService
     /**
      * Takes sold stock out. For a recipe item, returns what each ingredient gave up (the total
      * for $quantity servings) so the caller can record it; direct and untracked items return [].
+     * $allowShortfall lets an offline sale take stock below zero.
      *
      * @return array<int, array{ingredient: Ingredient, quantity: float}>
      */
-    public function DeductItem(Item $item, int $quantity): array
+    public function DeductItem(Item $item, int $quantity, bool $allowShortfall = false): array
     {
         $this->assertPositiveQuantity($quantity);
 
-        return DB::transaction(function () use ($item, $quantity): array {
+        return DB::transaction(function () use ($item, $quantity, $allowShortfall): array {
             $lockedItem = $this->lockItem($item);
 
             if ($lockedItem->inventory_type === 'recipe') {
-                return $this->deductRecipeItem($lockedItem, $quantity);
+                return $this->deductRecipeItem($lockedItem, $quantity, $allowShortfall);
             }
 
             match ($lockedItem->inventory_type) {
-                'direct' => $this->deductDirectItem($lockedItem, $quantity),
+                'direct' => $this->deductDirectItem($lockedItem, $quantity, $allowShortfall),
                 'none' => null,
                 default => throw new InvalidArgumentException('Unsupported inventory type.'),
             };
@@ -150,11 +155,11 @@ class InventoryService
         return Item::query()->lockForUpdate()->findOrFail($item->id);
     }
 
-    private function reserveDirectItem(Item $item, int $quantity): void
+    private function reserveDirectItem(Item $item, int $quantity, bool $allowShortfall): void
     {
         $available = (int) $item->quantity - (int) $item->reserved_quantity;
 
-        if ($available < $quantity) {
+        if (! $allowShortfall && $available < $quantity) {
             throw new InsufficientInventoryException("Insufficient stock for item {$item->name}.");
         }
 
@@ -172,9 +177,9 @@ class InventoryService
         $item->save();
     }
 
-    private function deductDirectItem(Item $item, int $quantity): void
+    private function deductDirectItem(Item $item, int $quantity, bool $allowShortfall): void
     {
-        if ((int) $item->quantity < $quantity || (int) $item->reserved_quantity < $quantity) {
+        if ((! $allowShortfall && (int) $item->quantity < $quantity) || (int) $item->reserved_quantity < $quantity) {
             throw new InsufficientInventoryException("Insufficient reserved stock for item {$item->name}.");
         }
 
@@ -189,10 +194,13 @@ class InventoryService
         $item->save();
     }
 
-    private function reserveRecipeItem(Item $item, int $quantity): void
+    private function reserveRecipeItem(Item $item, int $quantity, bool $allowShortfall): void
     {
         $requirements = $this->lockedRequirements($item);
-        $this->assertRecipeAvailability($requirements, $quantity);
+
+        if (! $allowShortfall) {
+            $this->assertRecipeAvailability($requirements, $quantity);
+        }
 
         foreach ($requirements as $requirement) {
             $ingredient = $requirement['ingredient'];
@@ -222,7 +230,7 @@ class InventoryService
     /**
      * @return array<int, array{ingredient: Ingredient, quantity: float}>
      */
-    private function deductRecipeItem(Item $item, int $quantity): array
+    private function deductRecipeItem(Item $item, int $quantity, bool $allowShortfall): array
     {
         // No free-stock check here: this line's servings are already part of reserved_quantity,
         // so "quantity - reserved" would count them against themselves and refuse the last ones.
@@ -234,7 +242,7 @@ class InventoryService
             $ingredient = $requirement['ingredient'];
             $required = $requirement['quantity'] * $quantity;
 
-            if ((float) $ingredient->quantity + 0.000001 < $required || (float) $ingredient->reserved_quantity + 0.000001 < $required) {
+            if ((! $allowShortfall && (float) $ingredient->quantity + 0.000001 < $required) || (float) $ingredient->reserved_quantity + 0.000001 < $required) {
                 throw new InsufficientInventoryException("Insufficient reserved stock for ingredient {$ingredient->name}.");
             }
 

@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\Concerns\ApiResponses;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Shift\CloseShiftRequest;
 use App\Http\Requests\Shift\OpenShiftRequest;
+use App\Models\PosDevice;
 use App\Models\Shift;
 use App\Services\ShiftService;
 use Illuminate\Http\JsonResponse;
@@ -41,16 +42,31 @@ class ShiftController extends Controller
 
     public function closeShift(CloseShiftRequest $request, Shift $shift): JsonResponse
     {
-        $closed = $this->shiftService->CloseShift($shift, $request->user(), (float) $request->validated('closing_cash'));
+        $closed = $this->shiftService->CloseShift(
+            $shift,
+            $request->user(),
+            (float) $request->validated('closing_cash'),
+            $request->boolean('force'),
+        );
 
         return $this->success($closed);
     }
 
     /**
-     * Merges the shift model with its live-computed totals for display while open.
+     * Merges the shift model with its live-computed totals for display while open, and the
+     * devices taking part, so the POS can say "P3 hasn't synced since 2:10 pm" before closing.
      */
     private function withLiveTotals(Shift $shift): array
     {
-        return array_merge($shift->toArray(), $this->shiftService->ComputeTotals($shift));
+        return array_merge($shift->toArray(), $this->shiftService->ComputeTotals($shift), [
+            'devices' => $this->shiftService->DevicesForShift($shift)->map(fn (PosDevice $device): array => [
+                'code' => $device->code,
+                'name' => $device->name,
+                'user' => $device->user?->name,
+                'last_seen_at' => $device->last_seen_at,
+                'last_synced_at' => $device->last_synced_at,
+                'pending_actions' => $device->pending_actions,
+            ])->values()->all(),
+        ]);
     }
 }

@@ -12,6 +12,7 @@ class Shift extends Model
     use HasFactory;
 
     protected $fillable = [
+        'client_uuid',
         'opened_by',
         'closed_by',
         'status',
@@ -26,6 +27,7 @@ class Shift extends Model
         'expected_cash',
         'discrepancy',
         'opened_at',
+        'opened_offline',
         'closed_at',
     ];
 
@@ -33,6 +35,7 @@ class Shift extends Model
     {
         return [
             'opened_at' => 'datetime',
+            'opened_offline' => 'boolean',
             'closed_at' => 'datetime',
         ];
     }

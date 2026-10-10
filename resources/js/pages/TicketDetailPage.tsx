@@ -2,7 +2,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/react';
-import { CreditCard, GitMerge, ReceiptText, ScrollText, Undo2, UtensilsCrossed } from 'lucide-react';
+import { CloudOff, CreditCard, GitMerge, ReceiptText, ScrollText, Undo2, UtensilsCrossed } from 'lucide-react';
 import { type ReactNode } from 'react';
 
 type TicketStatus = 'open' | 'paid' | 'cancelled' | 'merged';
@@ -30,6 +30,10 @@ type Ticket = {
     merged_by: string | null;
     merged_into: TicketLink | null;
     merged_from: TicketLink[];
+    created_offline: boolean;
+    offline_label: string | null;
+    synced_at: string | null;
+    device: { code: string; name: string } | null;
 };
 
 type Line = {
@@ -46,6 +50,9 @@ type Line = {
     voided_at: string | null;
     voided_by: string | null;
     voided_requested_by: string | null;
+    voided_offline: boolean;
+    void_reason: string | null;
+    added_offline: boolean;
 };
 
 type Charge = {
@@ -197,11 +204,24 @@ export default function TicketDetailPage({
                                 <span className="rounded-full border px-3 py-1 text-xs font-medium">
                                     {ticket.order_type === 'dine_in' ? 'Dine in' : 'Takeout'}
                                 </span>
+                                {ticket.created_offline && (
+                                    <span className="inline-flex items-center gap-1 rounded-full border border-slate-400/60 px-3 py-1 text-xs font-medium text-slate-600 dark:text-slate-300">
+                                        <CloudOff className="size-3" />
+                                        Taken offline{ticket.offline_label ? ` · printed as ${ticket.offline_label}` : ''}
+                                    </span>
+                                )}
                             </div>
                             <p className="text-muted-foreground text-xs">
                                 Opened {formatDate(ticket.created_at)} by {ticket.created_by ?? '—'} on {ticket.terminal_id}
                                 {' · '}
                                 {endedLine(ticket)}
+                                {ticket.created_offline && (
+                                    <>
+                                        {' · '}
+                                        Synced {formatDate(ticket.synced_at)}
+                                        {ticket.device && ` from ${ticket.device.code}`}
+                                    </>
+                                )}
                             </p>
                         </div>
                     </div>
@@ -269,6 +289,14 @@ export default function TicketDetailPage({
                                                         from {line.merged_from_order_number}
                                                     </span>
                                                 )}
+                                                {line.added_offline && (
+                                                    <span
+                                                        className="rounded-full border px-2 py-0.5 text-xs"
+                                                        title="Added while the phone was offline: the kitchen got a printed slip"
+                                                    >
+                                                        offline
+                                                    </span>
+                                                )}
                                             </div>
                                             {line.modifiers.length > 0 && (
                                                 <div className="text-muted-foreground text-xs">
@@ -288,10 +316,16 @@ export default function TicketDetailPage({
                                                 </div>
                                             )}
                                             {line.notes && <div className="text-muted-foreground text-xs italic">Kitchen note: {line.notes}</div>}
-                                            {isVoided && (
+                                            {isVoided && !line.voided_offline && (
                                                 <div className="text-xs text-red-600">
                                                     Voided {formatDate(line.voided_at)} · approved by {line.voided_by ?? '—'}, requested by{' '}
                                                     {line.voided_requested_by ?? '—'}
+                                                </div>
+                                            )}
+                                            {isVoided && line.voided_offline && (
+                                                <div className="text-xs text-red-600">
+                                                    Removed offline {formatDate(line.voided_at)} by {line.voided_requested_by ?? '—'}, no passcode ·
+                                                    reason: "{line.void_reason}"
                                                 </div>
                                             )}
                                         </TableCell>

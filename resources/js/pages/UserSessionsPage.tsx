@@ -7,7 +7,17 @@ import { LogOut, Smartphone } from 'lucide-react';
 import { useState } from 'react';
 
 type SessionUser = { id: number; name: string; username: string };
-type Session = { id: number; device_name: string; last_used_at: string | null; created_at: string };
+type Session = {
+    id: number;
+    device_name: string;
+    last_used_at: string | null;
+    created_at: string;
+    /** The POS device code (P1, P2...) printed on its offline receipts; null for a kitchen display. */
+    device_code: string | null;
+    last_synced_at: string | null;
+    /** Offline actions the phone last said it still holds. */
+    pending_actions: number;
+};
 
 function formatDate(value: string | null): string {
     if (!value) return 'Never';
@@ -50,15 +60,15 @@ export default function UserSessionsPage({ user, sessions }: { user: SessionUser
                     <Table>
                         <TableHeader>
                             <TableRow>
-                                <TableHead colSpan={4}>
+                                <TableHead colSpan={5}>
                                     <div className="flex items-center gap-3 p-5">
                                         <Smartphone className="text-muted-foreground size-5 shrink-0" />
                                         <div className="flex min-w-0 flex-1 items-center justify-between gap-4">
                                             <div>
                                                 <h2 className="font-semibold">{user.name}'s signed-in devices</h2>
                                                 <p className="text-muted-foreground text-xs">
-                                                    POS logins never expire on their own — revoke a device here if it's lost or the account
-                                                    shouldn't stay signed in.
+                                                    POS logins never expire on their own — revoke a device here if it's lost or the account shouldn't
+                                                    stay signed in.
                                                 </p>
                                             </div>
                                             {sessions.length > 0 && (
@@ -79,22 +89,41 @@ export default function UserSessionsPage({ user, sessions }: { user: SessionUser
                                 <TableHead>Device</TableHead>
                                 <TableHead>Signed in</TableHead>
                                 <TableHead>Last used</TableHead>
+                                <TableHead>Offline sync</TableHead>
                                 <TableHead>Actions</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {sessions.length === 0 && (
                                 <TableRow>
-                                    <TableCell colSpan={4} className="text-muted-foreground py-8 text-center text-sm">
+                                    <TableCell colSpan={5} className="text-muted-foreground py-8 text-center text-sm">
                                         No device is currently signed in as {user.name}.
                                     </TableCell>
                                 </TableRow>
                             )}
                             {sessions.map((session) => (
                                 <TableRow key={session.id}>
-                                    <TableCell className="font-medium">{session.device_name}</TableCell>
+                                    <TableCell className="font-medium">
+                                        {session.device_name}
+                                        {session.device_code && <div className="text-muted-foreground text-xs">Code {session.device_code}</div>}
+                                    </TableCell>
                                     <TableCell>{formatDate(session.created_at)}</TableCell>
                                     <TableCell>{formatDate(session.last_used_at)}</TableCell>
+                                    <TableCell>
+                                        {session.device_code ? (
+                                            <>
+                                                {session.last_synced_at ? `Synced ${formatDate(session.last_synced_at)}` : 'Never synced'}
+                                                {session.pending_actions > 0 && (
+                                                    <div className="text-xs font-medium text-amber-700 dark:text-amber-400">
+                                                        {session.pending_actions} offline {session.pending_actions === 1 ? 'action' : 'actions'}{' '}
+                                                        waiting
+                                                    </div>
+                                                )}
+                                            </>
+                                        ) : (
+                                            '—'
+                                        )}
+                                    </TableCell>
                                     <TableCell>
                                         <button
                                             type="button"
@@ -117,6 +146,13 @@ export default function UserSessionsPage({ user, sessions }: { user: SessionUser
                     <DialogTitle>Sign out {sessionToRevoke?.device_name}?</DialogTitle>
                     <DialogDescription>
                         That device's token is revoked immediately. Whoever is using it will need to log in again to keep using the POS.
+                        {sessionToRevoke && sessionToRevoke.pending_actions > 0 && (
+                            <span className="mt-2 block font-medium text-amber-700 dark:text-amber-400">
+                                It still holds {sessionToRevoke.pending_actions} offline{' '}
+                                {sessionToRevoke.pending_actions === 1 ? 'action' : 'actions'} that haven't reached the server. Signed out, it can't
+                                send them — let it sync first if you can.
+                            </span>
+                        )}
                     </DialogDescription>
                     <DialogFooter>
                         <DialogClose asChild>

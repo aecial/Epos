@@ -18,6 +18,7 @@ use App\Models\TicketItem;
 use App\Models\TicketItemModifier;
 use App\Models\User;
 use App\Services\Concerns\BroadcastsSafely;
+use App\Services\Sync\SyncContext;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
@@ -30,34 +31,57 @@ class TicketService
         private PasscodeService $passcodeService,
     ) {}
 
-    public function CreateTicket(Shift $shift, User $createdBy, string $terminalId, string $customerName, string $orderType): Ticket
+    /**
+     * $clientUuid is the id the phone gave the ticket. A ticket taken offline keeps the time it
+     * was opened and the label the phone printed ($offlineLabel, e.g. "P3-007") beside the real
+     * order number, and may land on a shift that closed while the phone was offline. It isn't
+     * broadcast: the kitchen worked from the phone's paper slip.
+     */
+    public function CreateTicket(Shift $shift, User $createdBy, string $terminalId, string $customerName, string $orderType, ?string $clientUuid = null, ?SyncContext $sync = null, ?string $offlineLabel = null): Ticket
     {
-        $ticket = DB::transaction(function () use ($shift, $createdBy, $terminalId, $customerName, $orderType): Ticket {
+        $offline = $sync?->offline === true;
+
+        $ticket = DB::transaction(function () use ($shift, $createdBy, $terminalId, $customerName, $orderType, $clientUuid, $sync, $offline, $offlineLabel): Ticket {
             // Locking the shift row serializes order-number and name assignment
             // across concurrent terminals for the duration of this transaction.
             $lockedShift = Shift::query()->lockForUpdate()->findOrFail($shift->id);
 
-            if (! $lockedShift->isOpen()) {
+            if (! $lockedShift->isOpen() && ! $offline) {
                 throw new NoActiveShiftException;
             }
 
             $orderNumber = $this->nextOrderNumber($lockedShift);
             $name = $this->nextAvailableName($lockedShift, trim($customerName));
 
-            return Ticket::create([
+            $ticket = new Ticket([
+                'client_uuid' => $clientUuid,
                 'shift_id' => $lockedShift->id,
                 'created_by' => $createdBy->id,
                 'terminal_id' => $terminalId,
+                'pos_device_id' => $sync?->device->id,
                 'customer_name' => $name,
                 'order_number' => $orderNumber,
                 'order_type' => $orderType,
                 'status' => 'open',
+                'created_offline' => $offline,
+                'offline_label' => $offline ? $offlineLabel : null,
+                'synced_at' => $offline ? now() : null,
                 'subtotal' => 0,
                 'total' => 0,
             ]);
+
+            if ($offline) {
+                $ticket->created_at = $sync->at;
+            }
+
+            $ticket->save();
+
+            return $ticket;
         });
 
-        $this->broadcastSafely(fn () => broadcast(new TicketCreated($ticket)));
+        if (! $offline) {
+            $this->broadcastSafely(fn () => broadcast(new TicketCreated($ticket)));
+        }
 
         return $ticket;
     }
@@ -68,19 +92,26 @@ class TicketService
      * always sells at its own base_price; the request layer rejects overrides, and this method
      * refuses them too so a direct service call can't bypass that.
      *
+     * Offline ($sync->offline) the line was already sold, so: $unitPrice may be given for any item
+     * (the price the phone charged stands), stock is reserved even if short, a modifier made
+     * inactive meanwhile still applies, and the line arrives already bumped (the kitchen had a
+     * paper slip), without a broadcast.
+     *
      * @param  array<int, int>  $modifierIds
      */
-    public function AddItem(Ticket $ticket, Item $item, int $quantity, array $modifierIds = [], ?string $notes = null, ?float $unitPrice = null, ?string $customName = null): TicketItem
+    public function AddItem(Ticket $ticket, Item $item, int $quantity, array $modifierIds = [], ?string $notes = null, ?float $unitPrice = null, ?string $customName = null, ?string $clientUuid = null, ?SyncContext $sync = null): TicketItem
     {
         if ($quantity <= 0) {
             throw new InvalidArgumentException('Quantity must be greater than zero.');
         }
 
+        $offline = $sync?->offline === true;
         $entryMode = $item->entry_mode ?? 'fixed';
         $needsPrice = in_array($entryMode, ['price', 'name_price'], true);
         $needsName = $entryMode === 'name_price';
+        $chargedPrice = $offline && ! $needsPrice && $unitPrice !== null;
 
-        if ($needsPrice !== ($unitPrice !== null) || $needsName !== ($customName !== null)) {
+        if (($needsPrice !== ($unitPrice !== null) && ! $chargedPrice) || $needsName !== ($customName !== null)) {
             throw new InvalidArgumentException("Item {$item->name} does not accept this price/name combination.");
         }
 
@@ -88,16 +119,18 @@ class TicketService
             throw new InvalidArgumentException('Price must be greater than zero.');
         }
 
-        $ticketItem = DB::transaction(function () use ($ticket, $item, $quantity, $modifierIds, $notes, $unitPrice, $customName, $entryMode): TicketItem {
+        $ticketItem = DB::transaction(function () use ($ticket, $item, $quantity, $modifierIds, $notes, $unitPrice, $customName, $entryMode, $clientUuid, $sync, $offline): TicketItem {
             $lockedTicket = Ticket::query()->lockForUpdate()->findOrFail($ticket->id);
 
             if (! $lockedTicket->isOpen()) {
                 throw new InvalidArgumentException('Cannot add items to a ticket that is not open.');
             }
 
-            $itemModifiers = $modifierIds === []
-                ? collect()
-                : $item->sellableModifiers()->whereKey($modifierIds)->get();
+            $itemModifiers = match (true) {
+                $modifierIds === [] => collect(),
+                $offline => $item->modifiers()->whereKey($modifierIds)->get(),
+                default => $item->sellableModifiers()->whereKey($modifierIds)->get(),
+            };
 
             if ($itemModifiers->count() !== count(array_unique($modifierIds))) {
                 throw new InvalidArgumentException("One or more modifiers are not available for {$item->name}.");
@@ -108,14 +141,15 @@ class TicketService
             $isStockless = $itemModifiers->contains(fn (Modifier $modifier): bool => $modifier->is_stockless_variant);
 
             if (! $isStockless) {
-                $this->inventoryService->ReserveItem($item, $quantity);
+                $this->inventoryService->ReserveItem($item, $quantity, allowShortfall: $offline);
             }
 
             $unitPrice ??= (float) $item->base_price;
             $modifierTotal = (float) $itemModifiers->sum(fn (Modifier $modifier): float => $this->modifierPrice($modifier));
             $lineTotal = round(($unitPrice + $modifierTotal) * $quantity, 2);
 
-            $ticketItem = TicketItem::create([
+            $ticketItem = new TicketItem([
+                'client_uuid' => $clientUuid,
                 'ticket_id' => $lockedTicket->id,
                 'item_id' => $item->id,
                 // Custom items are named by the cashier; the typed name is the snapshot that
@@ -124,11 +158,20 @@ class TicketService
                 'item_cost_price' => $isStockless ? 0 : $this->unitCostFor($item),
                 'line_type' => $this->lineTypeFor($item, $entryMode),
                 'is_stockless' => $isStockless,
+                'added_offline' => $offline,
                 'quantity' => $quantity,
                 'unit_price' => $unitPrice,
                 'notes' => $notes,
                 'line_total' => $lineTotal,
+                // Offline the kitchen cooked from the phone's paper slip: never show it again.
+                'completed_at' => $offline ? now() : null,
             ]);
+
+            if ($offline) {
+                $ticketItem->created_at = $sync->at;
+            }
+
+            $ticketItem->save();
 
             foreach ($itemModifiers as $modifier) {
                 TicketItemModifier::create([
@@ -145,7 +188,9 @@ class TicketService
             return $ticketItem->refresh();
         });
 
-        $this->broadcastSafely(fn () => broadcast(new TicketUpdated($ticketItem->ticket)));
+        if (! $offline) {
+            $this->broadcastSafely(fn () => broadcast(new TicketUpdated($ticketItem->ticket)));
+        }
 
         return $ticketItem;
     }
@@ -194,17 +239,57 @@ class TicketService
     }
 
     /**
+     * A line removed while the phone was offline. No passcode could be checked, so there's no
+     * approver: the cashier and their reason are kept, and SyncService puts it on the manager's
+     * review list. Stock goes back like any void.
+     */
+    public function VoidItemOffline(TicketItem $ticketItem, User $requestedBy, string $reason, SyncContext $sync): TicketItem
+    {
+        return DB::transaction(function () use ($ticketItem, $requestedBy, $reason, $sync): TicketItem {
+            $lockedItem = TicketItem::query()->lockForUpdate()->findOrFail($ticketItem->id);
+
+            if ($lockedItem->isVoided()) {
+                throw new InvalidArgumentException('Item is already voided.');
+            }
+
+            $ticket = Ticket::query()->lockForUpdate()->findOrFail($lockedItem->ticket_id);
+
+            if (! $ticket->isOpen()) {
+                throw new InvalidArgumentException('Cannot void an item on a ticket that is not open.');
+            }
+
+            if (! $lockedItem->is_stockless) {
+                $this->inventoryService->ReleaseItem($lockedItem->item, $lockedItem->quantity);
+            }
+
+            $lockedItem->update([
+                'voided_at' => $sync->at,
+                'voided_by' => null,
+                'voided_requested_by' => $requestedBy->id,
+                'voided_offline' => true,
+                'void_reason' => $reason,
+            ]);
+
+            $this->recalculateTotals($ticket);
+
+            return $lockedItem;
+        });
+    }
+
+    /**
      * Change a line's quantity up or down. No passcode: this is not a removal, so it does
      * not go through PasscodeService. Reaching zero is a void instead — the request layer
      * enforces quantity >= 1, and VoidItem (passcode-gated) is how a line is removed entirely.
      */
-    public function UpdateItemQuantity(TicketItem $ticketItem, int $newQuantity): TicketItem
+    public function UpdateItemQuantity(TicketItem $ticketItem, int $newQuantity, ?SyncContext $sync = null): TicketItem
     {
         if ($newQuantity <= 0) {
             throw new InvalidArgumentException('Quantity must be greater than zero; void the line to remove it.');
         }
 
-        $updated = DB::transaction(function () use ($ticketItem, $newQuantity): TicketItem {
+        $offline = $sync?->offline === true;
+
+        $updated = DB::transaction(function () use ($ticketItem, $newQuantity, $offline): TicketItem {
             $lockedItem = TicketItem::query()->lockForUpdate()->findOrFail($ticketItem->id);
 
             if ($lockedItem->isVoided()) {
@@ -222,7 +307,7 @@ class TicketService
             if ($lockedItem->is_stockless) {
                 // A stockless variant line never reserved anything, so there's nothing to adjust.
             } elseif ($delta > 0) {
-                $this->inventoryService->ReserveItem($lockedItem->item, $delta);
+                $this->inventoryService->ReserveItem($lockedItem->item, $delta, allowShortfall: $offline);
             } elseif ($delta < 0) {
                 $this->inventoryService->ReleaseItem($lockedItem->item, abs($delta));
             }
@@ -240,7 +325,9 @@ class TicketService
             return $lockedItem->fresh(['modifiers']);
         });
 
-        $this->broadcastSafely(fn () => broadcast(new TicketUpdated($updated->ticket)));
+        if (! $offline) {
+            $this->broadcastSafely(fn () => broadcast(new TicketUpdated($updated->ticket)));
+        }
 
         return $updated;
     }
@@ -325,9 +412,11 @@ class TicketService
         });
     }
 
-    public function CancelTicket(Ticket $ticket, User $cancelledBy): Ticket
+    public function CancelTicket(Ticket $ticket, User $cancelledBy, ?SyncContext $sync = null): Ticket
     {
-        $cancelled = DB::transaction(function () use ($ticket, $cancelledBy): Ticket {
+        $offline = $sync?->offline === true;
+
+        $cancelled = DB::transaction(function () use ($ticket, $cancelledBy, $sync, $offline): Ticket {
             $lockedTicket = Ticket::query()->lockForUpdate()->findOrFail($ticket->id);
 
             if (! $lockedTicket->isOpen()) {
@@ -349,12 +438,13 @@ class TicketService
             $lockedTicket->update([
                 'status' => 'cancelled',
                 'cancelled_by' => $cancelledBy->id,
-                'cancelled_at' => now(),
+                'cancelled_at' => $offline ? $sync->at : now(),
             ]);
 
             return $lockedTicket;
         });
 
+        // Even offline: an order the kitchen display still shows must drop off it.
         $this->broadcastSafely(fn () => broadcast(new TicketCancelled($cancelled)));
 
         return $cancelled;

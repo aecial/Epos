@@ -18,6 +18,7 @@ class Receipt extends Model
         'terminal_id',
         'receipt_date',
         'sequence',
+        'device_code',
         'receipt_number',
         'order_number',
         'customer_name',

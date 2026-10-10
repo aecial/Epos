@@ -28,6 +28,7 @@ class TicketController extends Controller
             ->withCount(['items' => fn ($query) => $query->whereNull('voided_at')])
             ->when($filters['status'] ?? null, fn ($query, string $status) => $query->where('status', $status))
             ->when($filters['shift_id'] ?? null, fn ($query, $shiftId) => $query->where('shift_id', $shiftId))
+            ->when($filters['offline'] ?? null, fn ($query) => $query->where('created_offline', true))
             ->when(
                 $filters['payment_method'] ?? null,
                 fn ($query, string $method) => $query->whereHas('charges', fn ($charges) => $charges->where('status', 'paid')->where('payment_method', $method))
@@ -75,6 +76,7 @@ class TicketController extends Controller
             'items.mergedFromTicket:id,order_number',
             'items.voidedBy:id,name',
             'items.voidedRequestedBy:id,name',
+            'device:id,code,name',
             'charges' => fn ($query) => $query->orderBy('id'),
             'charges.createdBy:id,name',
             'charges.receipt:id,charge_id,receipt_number',
@@ -97,6 +99,8 @@ class TicketController extends Controller
                 'merged_by' => $ticket->mergedBy?->name,
                 'merged_into' => $ticket->mergedInto?->only(['id', 'order_number', 'customer_name']),
                 'merged_from' => $ticket->mergedTickets->map(fn (Ticket $source): array => $source->only(['id', 'order_number', 'customer_name']))->values(),
+                'synced_at' => $ticket->synced_at,
+                'device' => $ticket->device?->only(['code', 'name']),
             ],
             'items' => $ticket->items->map(fn (TicketItem $line): array => [
                 'id' => $line->id,
@@ -116,6 +120,10 @@ class TicketController extends Controller
                 'voided_at' => $line->voided_at,
                 'voided_by' => $line->voidedBy?->name,
                 'voided_requested_by' => $line->voidedRequestedBy?->name,
+                // Removed on a phone with no server, so no passcode: the cashier's reason instead.
+                'voided_offline' => $line->voided_offline,
+                'void_reason' => $line->void_reason,
+                'added_offline' => $line->added_offline,
             ])->values(),
             'charges' => $ticket->charges->map(fn (Charge $charge): array => [
                 'id' => $charge->id,
@@ -168,6 +176,8 @@ class TicketController extends Controller
             'ended_at' => $ticket->closed_at ?? $ticket->cancelled_at ?? $ticket->merged_at,
             'created_by' => $ticket->createdBy?->name,
             'total' => (float) $ticket->total,
+            'created_offline' => $ticket->created_offline,
+            'offline_label' => $ticket->offline_label,
         ];
     }
 }

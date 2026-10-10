@@ -4,7 +4,7 @@ import { NavUser } from '@/components/nav-user';
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar';
 import { type NavItem, type SharedData } from '@/types';
 import { Link, usePage } from '@inertiajs/react';
-import { BookOpen, ChefHat, Clock, Computer, Folder, LayoutGrid, ReceiptText, ShoppingBag, Undo2, Users } from 'lucide-react';
+import { BookOpen, ChefHat, Clock, CloudAlert, Computer, Folder, LayoutGrid, ReceiptText, ShoppingBag, Undo2, Users } from 'lucide-react';
 import AppLogo from './app-logo';
 
 const mainNavItems: NavItem[] = [
@@ -48,6 +48,11 @@ const mainNavItems: NavItem[] = [
         url: '/kitchen-orders',
         icon: ChefHat,
     },
+    {
+        title: 'Sync Review',
+        url: '/sync-issues',
+        icon: CloudAlert,
+    },
 ];
 
 const footerNavItems: NavItem[] = [
@@ -64,8 +69,9 @@ const footerNavItems: NavItem[] = [
 ];
 
 export function AppSidebar() {
-    const { pendingRefunds } = usePage<SharedData>().props;
-    const items = mainNavItems.map((item) => (item.url === '/refunds' ? { ...item, badge: pendingRefunds } : item));
+    const { pendingRefunds, unreviewedSyncIssues } = usePage<SharedData>().props;
+    const badges: Record<string, number | null | undefined> = { '/refunds': pendingRefunds, '/sync-issues': unreviewedSyncIssues };
+    const items = mainNavItems.map((item) => (item.url in badges ? { ...item, badge: badges[item.url] } : item));
 
     return (
         <Sidebar collapsible="icon" variant="inset">

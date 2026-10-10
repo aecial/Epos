@@ -2,7 +2,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
-import { ChevronLeft, ChevronRight, ReceiptText, Search, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CloudOff, ReceiptText, Search, X } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -26,12 +26,15 @@ type TicketRow = {
     total: number;
     items_count: number;
     payment_methods: ('cash' | 'gcash')[];
+    created_offline: boolean;
+    offline_label: string | null;
 };
 
 type Filters = {
     status?: TicketStatus;
     shift_id?: number | string;
     payment_method?: 'cash' | 'gcash';
+    offline?: '1';
     date_from?: string;
     date_to?: string;
     search?: string;
@@ -41,6 +44,16 @@ type Pagination = { current_page: number; last_page: number; total: number };
 
 function formatDate(value: string | null): string {
     return value ? new Date(value).toLocaleString() : '—';
+}
+
+/** Taken on a phone while the server was down; `label` is the number printed on its slips. */
+function OfflineBadge({ label }: { label: string | null }) {
+    return (
+        <span className="inline-flex items-center gap-1 rounded-full border border-slate-400/60 px-2 py-0.5 text-xs font-medium text-slate-600 dark:text-slate-300">
+            <CloudOff className="size-3" />
+            Offline{label ? ` · ${label}` : ''}
+        </span>
+    );
 }
 
 function peso(value: number | null): string {
@@ -123,6 +136,17 @@ export default function TicketManagementPage({ tickets, filters, pagination }: {
                             <option value="">Any</option>
                             <option value="cash">Cash</option>
                             <option value="gcash">GCash</option>
+                        </select>
+                    </label>
+                    <label className="flex flex-col gap-1 text-xs font-medium">
+                        Taken
+                        <select
+                            value={filters.offline ?? ''}
+                            onChange={(event) => applyFilters({ offline: (event.target.value || undefined) as Filters['offline'] })}
+                            className="field"
+                        >
+                            <option value="">Online or offline</option>
+                            <option value="1">Offline only</option>
                         </select>
                     </label>
                     <label className="flex flex-col gap-1 text-xs font-medium">
@@ -209,6 +233,11 @@ export default function TicketManagementPage({ tickets, filters, pagination }: {
                                         <Link href={route('tickets.show', ticket.id)} onClick={(event) => event.stopPropagation()}>
                                             {ticket.order_number}
                                         </Link>
+                                        {ticket.created_offline && (
+                                            <div className="mt-1">
+                                                <OfflineBadge label={ticket.offline_label} />
+                                            </div>
+                                        )}
                                     </TableCell>
                                     <TableCell>
                                         <div>{ticket.customer_name}</div>

@@ -5,29 +5,41 @@ namespace App\Services;
 use App\Exceptions\ActiveShiftExistsException;
 use App\Exceptions\NoActiveShiftException;
 use App\Exceptions\OpenTicketsExistException;
+use App\Exceptions\UnsyncedDevicesException;
 use App\Models\Charge;
+use App\Models\PosDevice;
 use App\Models\Refund;
 use App\Models\Shift;
 use App\Models\ShiftTransaction;
 use App\Models\Ticket;
 use App\Models\User;
+use App\Services\Sync\SyncContext;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 
 class ShiftService
 {
-    public function OpenShift(User $openedBy, float $startingCash): Shift
+    /**
+     * $clientUuid is the id the phone gave the shift. A shift opened offline is opened at the time
+     * it happened on the phone; SyncService decides beforehand whether it joins an existing one.
+     */
+    public function OpenShift(User $openedBy, float $startingCash, ?string $clientUuid = null, ?SyncContext $sync = null): Shift
     {
         if (Shift::query()->where('status', 'open')->exists()) {
             throw new ActiveShiftExistsException;
         }
 
+        $offline = $sync?->offline === true;
+
         try {
             return Shift::create([
+                'client_uuid' => $clientUuid,
                 'opened_by' => $openedBy->id,
                 'status' => 'open',
                 'starting_cash' => $startingCash,
-                'opened_at' => now(),
+                'opened_at' => $offline ? $sync->at : now(),
+                'opened_offline' => $offline,
             ]);
         } catch (QueryException $e) {
             // Backstop: the is_open generated-column unique index catches a race the
@@ -114,13 +126,43 @@ class ShiftService
         ];
     }
 
-    public function CloseShift(Shift $shift, User $closedBy, float $closingCash): Shift
+    /**
+     * The POS devices that took part in this shift (signed in or sold since it opened), with what
+     * each last reported: when it last synced and how many offline actions it still holds.
+     *
+     * @return Collection<int, PosDevice>
+     */
+    public function DevicesForShift(Shift $shift): Collection
     {
-        return DB::transaction(function () use ($shift, $closedBy, $closingCash): Shift {
+        return PosDevice::query()
+            ->with('user:id,name')
+            ->where(fn ($query) => $query
+                ->where('last_seen_at', '>=', $shift->opened_at)
+                ->orWhereIn('id', Ticket::query()->where('shift_id', $shift->id)->whereNotNull('pos_device_id')->select('pos_device_id')))
+            ->orderBy('code')
+            ->get();
+    }
+
+    /**
+     * $force (manager/admin only, checked by the request) closes even though a device reports
+     * offline actions it hasn't sent - e.g. a phone that broke. Whatever it sends later still
+     * lands on this shift, flagged "synced after close".
+     */
+    public function CloseShift(Shift $shift, User $closedBy, float $closingCash, bool $force = false): Shift
+    {
+        return DB::transaction(function () use ($shift, $closedBy, $closingCash, $force): Shift {
             $lockedShift = Shift::query()->lockForUpdate()->findOrFail($shift->id);
 
             if (! $lockedShift->isOpen()) {
                 throw new NoActiveShiftException('Shift is already closed.');
+            }
+
+            $unsynced = $this->DevicesForShift($lockedShift)->where('pending_actions', '>', 0);
+
+            if (! $force && $unsynced->isNotEmpty()) {
+                throw new UnsyncedDevicesException($unsynced
+                    ->map(fn (PosDevice $device): string => "{$device->code} ({$device->user->name}) still has {$device->pending_actions} offline action(s) to sync.")
+                    ->implode(' '));
             }
 
             $hasOpenTickets = Ticket::query()
