@@ -156,7 +156,9 @@ class ItemService
     {
         return Item::query()
             ->where('status', '!=', 'hidden')
-            ->whereHas('category', fn ($query) => $query->where('is_visible_to_pos', true))
+            // Same categories GET /categories shows: active and visible to the POS. TicketService
+            // refuses to sell anything else online (MenuRuleViolations).
+            ->whereHas('category', fn ($query) => $query->where('is_visible_to_pos', true)->where('status', 'active'))
             ->with([
                 'category:id,name,type',
                 'ingredients',

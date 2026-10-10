@@ -294,6 +294,10 @@ class SyncService
                 $this->flagShortStock($item, $quantity, $ticket, $device);
             }
 
+            foreach ($this->ticketService->MenuRuleViolations($item, $modifierIds) as $type => $message) {
+                $this->raise($type, "Sold offline on {$device->code}: {$message}", ['item' => $item->name], ticket: $ticket);
+            }
+
             if ($unitPrice !== null && ($item->entry_mode ?? 'fixed') === 'fixed' && $this->cents($unitPrice) !== $this->cents($item->base_price)) {
                 $this->raise('price_changed', "{$item->name} was sold offline at ₱".number_format($unitPrice, 2).'; the menu says ₱'.number_format((float) $item->base_price, 2).'.', [
                     'item' => $item->name,
@@ -487,11 +491,14 @@ class SyncService
             'ticket_id' => $paidTicket->id,
             'status' => $paidTicket->status,
             'charged' => true,
+            // The printable receipt comes back with the payment, so the POS prints straight away
+            // (and a replayed action returns the same receipt).
             'receipts' => $paidTicket->charges->map(fn ($charge): array => [
                 'charge_uuid' => $charge->client_uuid,
                 'charge_id' => $charge->id,
                 'receipt_id' => $charge->receipt?->id,
                 'receipt_number' => $charge->receipt?->receipt_number,
+                'payload' => $charge->receipt?->payload,
             ])->values()->all(),
         ];
     }

@@ -134,7 +134,7 @@ Optional query: `category_id` (must exist).
 Returns every item the POS is allowed to show, **sorted by name**:
 
 - `hidden` items are never returned.
-- Items in a category with `is_visible_to_pos = false` are never returned.
+- Items in a category with `is_visible_to_pos = false`, or an `inactive` category, are never returned (the same categories `GET /categories` lists).
 - `available` items are orderable; `unavailable` items are returned so the POS can grey them out.
 
 ```json
@@ -404,6 +404,13 @@ Add a line and **reserve stock**. Any staff. Ticket must be `open`.
 - `notes`: optional, max 500. **KDS/back-office only — never printed on a receipt.**
 - `unit_price`: numeric, `> 0`, at most 2 decimals, max 999999.99 — **required** for `entry_mode` `price` and `name_price`, **forbidden** for every other item (a terminal can never override a menu price)
 - `custom_name`: 1–100 characters, single line — **required** for `name_price`, **forbidden** otherwise
+
+**Only what the menu offers can be sold** (`409` with the message):
+
+- The item must be `available` (`Fried Itik is unavailable right now.`), and neither `hidden` nor in a category that's inactive or hidden from the POS (`Fried Itik is not on the POS menu.`).
+- Every **required** modifier group the item offers needs a pick (`Fried Itik needs a choice of Size.`). A required group with no active modifiers on that item asks for nothing.
+
+The same applies to an online `ticket.add_item` through `/sync`. An **offline** one is kept and flagged (`item_unavailable`, `required_choice_missing`, §8.6), because the sale already happened.
 
 Line price = `(unit_price or base_price + Σ modifier price_modifier) × quantity`. The item name (the typed `custom_name` for a Custom item), cost price, unit price, `line_type` and modifier names/prices are **snapshotted** onto the line so later menu edits don't change history. A line picked with a stockless variant is saved with `is_stockless: true` (and the modifier with `is_stockless_variant: true`): it never reserves, deducts or restocks (quantity change, void, cancel, payment and refund all skip it), its cost is ₱0, the variant's price is ₱0, and the variant is omitted from the receipt payload's `items[].modifiers`.
 
@@ -866,7 +873,7 @@ What a phone keeps on hand to sell with no server. Refresh it whenever online; r
 | `ticket.void_item` | line ref, `reason` (**offline only**) | `ticket_item_id`, `ticket_total` |
 | `ticket.discount` | ticket ref, `discount_amount`, `discount_percent` | `ticket_total` |
 | `ticket.cancel` | ticket ref | `status` |
-| `ticket.charge` | ticket ref, `charges[]`: `charge_uuid`, `payment_method`, `amount`, `tendered_amount`, `payment_reference`, `receipt_number` (offline) | `status`, `charged`, `receipts[]`: `charge_uuid`, `charge_id`, `receipt_id`, `receipt_number` |
+| `ticket.charge` | ticket ref, `charges[]`: `charge_uuid`, `payment_method`, `amount`, `tendered_amount`, `payment_reference`, `receipt_number` (offline) | `status`, `charged`, `receipts[]`: `charge_uuid`, `charge_id`, `receipt_id`, `receipt_number`, `payload` (the printable receipt, §7 - print it straight away) |
 | `shift_transaction.add` | `transaction_uuid`, shift ref (optional), `type`, `amount`, `reason` (any staff) | `transaction_id`, `shift_id` |
 | `shift_transaction.update` | transaction ref, `amount`, `reason` (any staff) | `transaction_id` |
 | `shift_transaction.delete` | transaction ref (any staff) | `transaction_id` |
@@ -880,6 +887,8 @@ A cashier may act only on tickets they opened, same as the per-ticket routes; an
 | Issue | When | What the server did |
 | ----- | ---- | ------------------- |
 | `stock_short` | Sold with less stock than needed (e.g. two phones sold the last Itik) | Reserved and deducted anyway; stock went below zero |
+| `item_unavailable` | Sold an item that's unavailable, hidden, or in an inactive/hidden category (the phone had an older menu) | Kept the line |
+| `required_choice_missing` | Sold without a pick from a required modifier group (e.g. Size) | Kept the line |
 | `price_changed` | `unit_price` differs from the current menu price | Kept the price the phone charged |
 | `charge_mismatch` | The payment doesn't add up to the server's total | Recorded the payment; the gap became the ticket's discount, so receipts still prorate exactly |
 | `possible_double_payment` | Paid offline, but the ticket was already paid, cancelled or merged on the server | Charged nothing; the payment details are in the issue for a manager to refund |
@@ -993,7 +1002,7 @@ KDS (feed ordering/filtering/field omissions, completion toggle persistence and 
 
 Ticket access (another cashier gets `404` on every per-ticket route and the ticket is untouched, a manager/admin can view/add to/pay any ticket, a cashier lists only their own tickets in any status while a manager/admin lists all, merges can't pull in another cashier's ticket in the request or the service, a manager/admin can merge across cashiers, KDS and receipts still see everything) is covered by `TicketOwnershipTest`.
 
-API login (named device tokens, bad/inactive logins, the 6/min throttle, logout revoking only its own token, the `401` envelope) is covered by `ApiAuthTest`. Shifts (one open at a time, live totals, the close snapshot and discrepancy across cash/GCash/split payments, additions, expenses, deleted entries and cash refunds, blocked while a ticket is open, no double close) by `ShiftApiTest`; shift transactions (any staff creates, edits and deletes, soft delete, wrong-shift `404`, frozen once closed) by `ShiftTransactionApiTest`. Ticket create (per-shift order numbers, john → john2 → john3 across terminals and cashiers, names freed once a ticket closes), discount (fixed, percent precedence, floor at ₱0, follows line changes, locked once paid) and cancel (reservations released, voided lines not released twice, open only) by `TicketApiTest`; the refund list and its filters by `RefundApiTest`.
+API login (named device tokens, bad/inactive logins, the 6/min throttle, logout revoking only its own token, the `401` envelope) is covered by `ApiAuthTest`. Shifts (one open at a time, live totals, the close snapshot and discrepancy across cash/GCash/split payments, additions, expenses, deleted entries and cash refunds, blocked while a ticket is open, no double close) by `ShiftApiTest`; shift transactions (any staff creates, edits and deletes, soft delete, wrong-shift `404`, frozen once closed) by `ShiftTransactionApiTest`. Ticket create (per-shift order numbers, john → john2 → john3 across terminals and cashiers, names freed once a ticket closes), discount (fixed, percent precedence, floor at ₱0, follows line changes, locked once paid) and cancel (reservations released, voided lines not released twice, open only) by `TicketApiTest`; the refund list and its filters by `RefundApiTest`. Selling only what the menu offers (unavailable, hidden and hidden-category items refused online, required modifier groups, the same rules through online `/sync`, offline sales kept and flagged) and the receipt returned with a synced payment are covered by `MenuRulesTest`.
 
 Offline sync is covered by `tests/Feature/Offline/*`: a whole outage day replayed (an offline shift, tickets, discount, cash and GCash, an offline void, an expense) landing at the times it happened, with the printed receipt numbers, the right stock and drawer, and nothing on the KDS (`OfflineDayTest`); resending a batch or finishing a cut-off one changes nothing; two phones joining one shift, both selling the last item, prices and payments that disagree, a ticket paid elsewhere meanwhile, wrong phone clocks, sales arriving after their shift closed, the close-shift guard and its manager-only `force`, online actions keeping every rule, and per-action rejection (`SyncConflictsTest`); the snapshot and `menu_version` (`SnapshotTest`); and the back-office Sync Review, badges, offline ticket marks, devices page and late-sync shift report (`SyncReviewPagesTest`).
 

@@ -14,6 +14,8 @@ class SyncIssue extends Model
 {
     public const TYPES = [
         'stock_short',
+        'item_unavailable',
+        'required_choice_missing',
         'price_changed',
         'charge_mismatch',
         'possible_double_payment',

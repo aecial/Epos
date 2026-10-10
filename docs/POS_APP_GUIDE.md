@@ -34,6 +34,28 @@ Think of each phone as a **waiter with a notebook**:
 | HTTP | `fetch` or Axios with a request timeout (about 10 s) |
 | Printer | A Bluetooth ESC/POS library that works with the Goojrpt PT-210 (58 mm). Test the exact library on the real printer early |
 
+### Allow plain `http://` (or the installed app can't reach the NUC)
+
+The NUC serves `http://` on the local network. Phones block that by default in **installed** (release) builds, even when it works in development:
+
+- **Android:** in `app.json`, add the `expo-build-properties` plugin with `{ "android": { "usesCleartextTraffic": true } }`.
+- **iOS:**
+  - in `ios.infoPlist`, set `NSAppTransportSecurity` → `NSAllowsLocalNetworking: true`. If requests to the NUC's IP address still fail, use `NSAllowsArbitraryLoads: true` instead; it's acceptable for a business-owned app that only talks to its own server;
+  - add an `NSLocalNetworkUsageDescription` text, since iOS asks permission for the local network.
+- **Bluetooth (printer):** Android 12+ needs the `BLUETOOTH_SCAN` and `BLUETOOTH_CONNECT` permissions, asked for at runtime.
+
+Build an installed release early and test it against the NUC. Don't wait until the end to find out.
+
+### Testing on real phones while developing
+
+The phone and the development PC must be on the same Wi-Fi:
+
+1. Start the server listening on the network, not just the PC: `php artisan serve --host=0.0.0.0 --port=8000` (MySQL must be running).
+2. Start the WebSocket server: `php artisan reverb:start` (it listens on the network on port 8080).
+3. Allow ports 8000 and 8080 through Windows Firewall, e.g. `New-NetFirewallRule -DisplayName "Epos dev" -Direction Inbound -Protocol TCP -LocalPort 8000,8080 -Action Allow` in an admin PowerShell.
+4. In the app, the base URL is the PC's address from `ipconfig` (IPv4, e.g. `http://192.168.1.20:8000/api/v1`), never `localhost` (on the phone, that's the phone itself).
+5. Check from the phone's browser that `http://<pc-ip>:8000/up` loads before debugging the app.
+
 ---
 
 ## 3. Talking to the server
@@ -80,6 +102,7 @@ Think of each phone as a **waiter with a notebook**:
   - `cashier`: sells and sees only their own tickets.
   - `manager`/`admin`: sees all tickets.
   - Any role can record cash additions and expenses.
+- **One shared account on every phone** (the restaurant's choice) works: every phone sees every ticket, and each phone is still told apart by its own device code and `terminal_id`. **During an outage, finish each order on the phone that has it.** Every phone downloaded every open ticket, so two phones could otherwise both pay the same order. The server would catch that as a "possible double payment", but it's better never to need it.
 - **Sign-out (`POST /auth/logout`) is blocked while the outbox isn't empty.** Show "Connect to the server to send N waiting sales before signing out". Switching users is the same.
 - **On a `401`:** show the login screen, but keep the outbox. It is sent after someone signs in again.
 
@@ -134,7 +157,8 @@ Think of each phone as a **waiter with a notebook**:
     - `fixed`: add as-is.
     - `price` (Fee): the cashier types the amount.
     - `name_price` (Custom): the cashier types a name and an amount.
-- **Modifiers:** a group with `is_required: true` must have a pick before adding. `is_stockless_variant: true` (e.g. "Lagi") is always ₱0 and takes no stock; see the printing rules in §13.
+- **Modifiers:** a group with `is_required: true` must have a pick before adding. Online the server refuses the item otherwise ("Fried Itik needs a choice of Size."); offline the sale is kept but flagged for a manager. `is_stockless_variant: true` (e.g. "Lagi") is always ₱0 and takes no stock; see the printing rules in §14.
+- **Only `available` items can be sold.** Online the server refuses an unavailable or hidden item, or one whose category was switched off, even if the phone's menu is old ("Burger is unavailable right now."). Offline it's kept and flagged.
 
 ---
 
@@ -244,7 +268,7 @@ Refer to things the phone created by their **uuid**, and to things that came fro
 | `ticket.void_item` | line ref, `reason` — **offline only** | `ticket_item_id`, `ticket_total` |
 | `ticket.discount` | ticket ref, `discount_amount` and/or `discount_percent` (0–100) | `ticket_total` |
 | `ticket.cancel` | ticket ref | `status` |
-| `ticket.charge` | ticket ref, `charges`: [{ `charge_uuid`, `payment_method` (`cash`/`gcash`), `amount`, `tendered_amount` (cash only), `payment_reference` (required for gcash), `receipt_number` (offline) }] | `status`, `charged`, `receipts`: [{ `charge_uuid`, `charge_id`, `receipt_id`, `receipt_number` }] |
+| `ticket.charge` | ticket ref, `charges`: [{ `charge_uuid`, `payment_method` (`cash`/`gcash`), `amount`, `tendered_amount` (cash only), `payment_reference` (required for gcash), `receipt_number` (offline) }] | `status`, `charged`, `receipts`: [{ `charge_uuid`, `charge_id`, `receipt_id`, `receipt_number`, `payload` }]: `payload` is the printable receipt, so print it straight away |
 | `shift_transaction.add` | `transaction_uuid`, shift ref (optional), `type` (`expense`/`addition`), `amount`, `reason` — any staff | `transaction_id`, `shift_id` |
 | `shift_transaction.update` | transaction ref, `amount`, `reason` — any staff | `transaction_id` |
 | `shift_transaction.delete` | transaction ref — any staff | `transaction_id` |
@@ -255,7 +279,8 @@ Refer to things the phone created by their **uuid**, and to things that came fro
 - **Names:** the server adds a number to a name already open in the shift (john → john2), across all phones. Show the returned `customer_name`.
 - **Ticket access:** a cashier may only act on tickets they opened (others are rejected `Not found.`).
 - **Quantity 0 isn't allowed;** removing a line is a void (online: passcode, §12; offline: `ticket.void_item` with a reason).
-- **Offline, the server accepts what already happened** (stock below zero, the price you charged, a closed shift's late sales) and flags each disagreement for a manager. You don't need to handle those flags.
+- **Online, the server refuses what the menu doesn't offer:** an unavailable, hidden or switched-off item, or a missing pick from a required group. Show its message and remove the line.
+- **Offline, the server accepts what already happened** (stock below zero, the price you charged, an item that was switched off, a missing required pick, a closed shift's late sales) and flags each disagreement for a manager. You don't need to handle those flags.
 
 ---
 
@@ -321,7 +346,7 @@ total            = max(0, subtotal − discount)
 
 ## 14. Printing (Goojrpt PT-210, 58 mm)
 
-**Receipt.** After a payment, print one per payment, from the receipt payload or the same data held locally:
+**Receipt.** After a payment, print one per payment. **Online:** print the `payload` returned in the `ticket.charge` result (§10); it's exactly what the server stored, with the server's receipt number. **Offline:** print the same layout from local data, with the phone's offline receipt number (§9):
 
 - No restaurant name, address or contact (the owner's choice).
 - Receipt number, date and time (Manila), order number, plus `· P3-007` when it was taken offline, customer, dine-in/takeout, cashier.

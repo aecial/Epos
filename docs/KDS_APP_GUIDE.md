@@ -28,6 +28,24 @@ The authoritative API contract is `docs/UNIFIED_API_ENDPOINTS.md` in the Laravel
 | Network status | `@react-native-community/netinfo` plus the WebSocket connection state |
 | State | A map `ticket_id → card`, kept sorted by `created_at` (Zustand or a reducer) |
 
+### Allow plain `http://` and `ws://` (or the installed app can't reach the NUC)
+
+The NUC serves `http://` (API) and `ws://` (Reverb) on the local network. Tablets block plain traffic by default in **installed** builds, even when development works:
+
+- **Android:** the `expo-build-properties` plugin with `{ "android": { "usesCleartextTraffic": true } }`.
+- **iOS:** in `ios.infoPlist`, set `NSAppTransportSecurity` → `NSAllowsLocalNetworking: true` (use `NSAllowsArbitraryLoads: true` if requests to the NUC's IP still fail), plus an `NSLocalNetworkUsageDescription`.
+
+Build an installed release early and test it against the NUC.
+
+### Testing on a real tablet while developing
+
+The tablet and the development PC must be on the same Wi-Fi:
+
+1. `php artisan serve --host=0.0.0.0 --port=8000` (MySQL running) and `php artisan reverb:start` (port 8080).
+2. Allow ports 8000 and 8080 through Windows Firewall: `New-NetFirewallRule -DisplayName "Epos dev" -Direction Inbound -Protocol TCP -LocalPort 8000,8080 -Action Allow` (admin PowerShell).
+3. Use the PC's IPv4 address from `ipconfig` for both the API and Reverb host, never `localhost`.
+4. To see live updates, place orders from a POS phone (or the API) while the KDS is open. The back office's Kitchen Orders page shows the same cards, so you can compare the two.
+
 ---
 
 ## 3. Sign in with a kitchen-only token

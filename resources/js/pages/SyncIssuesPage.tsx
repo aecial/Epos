@@ -11,6 +11,8 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 type IssueType =
     | 'stock_short'
+    | 'item_unavailable'
+    | 'required_choice_missing'
     | 'price_changed'
     | 'charge_mismatch'
     | 'possible_double_payment'
@@ -43,6 +45,16 @@ type Pagination = { current_page: number; last_page: number; total: number };
 /** What each kind of note means, and what a manager usually does about it. */
 const typeInfo: Record<IssueType, { label: string; tone: string; action: string }> = {
     stock_short: { label: 'Stock below zero', tone: 'bg-amber-500', action: 'Recount the stock and correct it on the item or raw material.' },
+    item_unavailable: {
+        label: 'Sold while off the menu',
+        tone: 'bg-amber-500',
+        action: 'The phone had an older menu. Check the item is really out, or turn it back on.',
+    },
+    required_choice_missing: {
+        label: 'Required choice missing',
+        tone: 'bg-amber-500',
+        action: 'Ask the cashier which option was served (e.g. the size).',
+    },
     price_changed: { label: 'Price differed', tone: 'bg-amber-500', action: 'The phone had an older menu; the price it charged was kept.' },
     charge_mismatch: { label: 'Payment differed', tone: 'bg-amber-500', action: 'The gap was booked as a discount. Check with the cashier.' },
     possible_double_payment: {

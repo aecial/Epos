@@ -119,6 +119,12 @@ class TicketService
             throw new InvalidArgumentException('Price must be greater than zero.');
         }
 
+        // Online, sell only what the menu offers. Offline the sale already happened, so it stands
+        // and SyncService flags what broke the menu's rules instead.
+        if (! $offline && ($violations = $this->MenuRuleViolations($item, $modifierIds)) !== []) {
+            throw new InvalidArgumentException(reset($violations));
+        }
+
         $ticketItem = DB::transaction(function () use ($ticket, $item, $quantity, $modifierIds, $notes, $unitPrice, $customName, $entryMode, $clientUuid, $sync, $offline): TicketItem {
             $lockedTicket = Ticket::query()->lockForUpdate()->findOrFail($ticket->id);
 
@@ -236,6 +242,42 @@ class TicketService
         $this->broadcastSafely(fn () => broadcast(new TicketUpdated($voided->ticket)));
 
         return $voided;
+    }
+
+    /**
+     * Why $item can't be sold with these modifiers, keyed by sync issue type; empty when it can.
+     * The same rules the POS menu follows: the item is available and its category is active and
+     * shown on the POS (`item_unavailable`), and every required modifier group the item offers
+     * has a pick (`required_choice_missing`; a required group with no active modifiers on this
+     * item asks for nothing).
+     *
+     * @param  array<int, int>  $modifierIds
+     * @return array<string, string>
+     */
+    public function MenuRuleViolations(Item $item, array $modifierIds): array
+    {
+        $violations = [];
+        $category = $item->category;
+
+        if ($item->status !== 'available' || $category === null || ! $category->is_visible_to_pos || $category->status !== 'active') {
+            $violations['item_unavailable'] = $item->status === 'unavailable'
+                ? "{$item->name} is unavailable right now."
+                : "{$item->name} is not on the POS menu.";
+        }
+
+        $missingGroups = $item->sellableModifiers()
+            ->with('group:id,name,is_required')
+            ->get()
+            ->filter(fn (Modifier $modifier): bool => $modifier->group?->is_required === true)
+            ->groupBy('modifier_group_id')
+            ->reject(fn ($groupModifiers): bool => $groupModifiers->pluck('id')->intersect($modifierIds)->isNotEmpty())
+            ->map(fn ($groupModifiers): string => $groupModifiers->first()->group->name);
+
+        if ($missingGroups->isNotEmpty()) {
+            $violations['required_choice_missing'] = "{$item->name} needs a choice of {$missingGroups->implode(', ')}.";
+        }
+
+        return $violations;
     }
 
     /**
