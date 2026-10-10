@@ -34,6 +34,8 @@ database/
 docs/
   ENHANCED_SPEC.md        ← Product spec (implementation status marked)
   UNIFIED_API_ENDPOINTS.md ← The implemented /api/v1 contract
+  POS_APP_GUIDE.md        ← How to build the React Native POS (offline-first)
+  KDS_APP_GUIDE.md        ← How to build the React Native kitchen display
   MERGED_DATABASE_SCHEMA.sql  ← Reference only (drifted); use migrations
 ```
 

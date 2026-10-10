@@ -794,7 +794,7 @@ What a phone keeps on hand to sell with no server. Refresh it whenever online; r
     "server_time": "2026-10-10T10:00:00+08:00",
     "menu_version": "4f1c...",
     "shift": { "id": 7, "status": "open", "starting_cash": "2000.00", "...": "..." },
-    "categories": [{ "id": 1, "name": "Itik", "type": "regular" }],
+    "categories": [{ "id": 1, "name": "Itik", "type": "menu" }],
     "items": [ "...same shape as GET /items..." ],
     "open_tickets": [ "...the user's open tickets (a manager's: all) with items.modifiers..." ]
 }
