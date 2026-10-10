@@ -224,15 +224,17 @@ class InventoryService
      */
     private function deductRecipeItem(Item $item, int $quantity): array
     {
+        // No free-stock check here: this line's servings are already part of reserved_quantity,
+        // so "quantity - reserved" would count them against themselves and refuse the last ones.
+        // Like a direct item, it needs the stock on hand and the reservation to cover it.
         $requirements = $this->lockedRequirements($item);
-        $this->assertRecipeAvailability($requirements, $quantity);
         $deducted = [];
 
         foreach ($requirements as $requirement) {
             $ingredient = $requirement['ingredient'];
             $required = $requirement['quantity'] * $quantity;
 
-            if ((float) $ingredient->reserved_quantity + 0.000001 < $required) {
+            if ((float) $ingredient->quantity + 0.000001 < $required || (float) $ingredient->reserved_quantity + 0.000001 < $required) {
                 throw new InsufficientInventoryException("Insufficient reserved stock for ingredient {$ingredient->name}.");
             }
 

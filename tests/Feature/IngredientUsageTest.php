@@ -111,3 +111,22 @@ test('a rejected refund returns nothing', function () {
 
     expect((float) Ingredient::firstWhere('name', 'Pork')->quantity)->toBe(9.6);
 });
+
+test('the last servings an ingredient allows can still be paid, one order at a time', function () {
+    $cashier = posUser();
+    $shift = posOpenShift($cashier);
+    $sisig = usageSisig();
+    // 2 eggs left: room for exactly two Sisig, each on its own open order.
+    Ingredient::firstWhere('name', 'Egg')->update(['quantity' => 2]);
+    $john = posTicket($shift, $cashier, 'john');
+    posAddItem($john, $sisig, 1);
+    $mary = posTicket($shift, $cashier, 'mary');
+    posAddItem($mary, $sisig, 1);
+
+    posPay($john->fresh(), $cashier, [['payment_method' => 'cash', 'amount' => 180, 'tendered_amount' => 180]]);
+    posPay($mary->fresh(), $cashier, [['payment_method' => 'cash', 'amount' => 180, 'tendered_amount' => 180]]);
+
+    $egg = Ingredient::firstWhere('name', 'Egg');
+    expect((float) $egg->quantity)->toBe(0.0)
+        ->and((float) $egg->reserved_quantity)->toBe(0.0);
+});
