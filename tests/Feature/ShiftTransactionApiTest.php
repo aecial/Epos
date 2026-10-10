@@ -17,7 +17,7 @@ function shiftTransactionApiOpenShift(): Shift
     return posOpenShift(posUser());
 }
 
-test('a manager or admin records an addition and an expense, and they move the expected cash', function (string $role) {
+test('any staff member records an addition and an expense, and they move the expected cash', function (string $role) {
     $shift = shiftTransactionApiOpenShift();
     $manager = posUser($role);
     Sanctum::actingAs($manager, ['*']);
@@ -35,20 +35,20 @@ test('a manager or admin records an addition and an expense, and they move the e
     expect($totals['total_additions'])->toBe(500.0)
         ->and($totals['total_expenses'])->toBe(120.5)
         ->and($totals['expected_cash'])->toBe(1379.5);
-})->with(['manager', 'admin']);
+})->with(['cashier', 'manager', 'admin']);
 
-test('a cashier cannot record or edit an entry', function () {
+test('a cashier edits an entry someone else recorded, and is recorded as the one who changed it', function () {
     $shift = shiftTransactionApiOpenShift();
     $entry = ShiftTransaction::create(['shift_id' => $shift->id, 'type' => 'expense', 'amount' => 50, 'reason' => 'Ice', 'created_by' => posUser('manager')->id]);
-    Sanctum::actingAs(posUser(), ['*']);
+    $cashier = posUser();
+    Sanctum::actingAs($cashier, ['*']);
 
-    $this->postJson("/api/v1/shifts/{$shift->id}/transactions", ['type' => 'expense', 'amount' => 50, 'reason' => 'Ice'])
-        ->assertForbidden();
-    $this->putJson("/api/v1/shifts/{$shift->id}/transactions/{$entry->id}", ['amount' => 5, 'reason' => 'Ice'])
-        ->assertForbidden();
+    $this->putJson("/api/v1/shifts/{$shift->id}/transactions/{$entry->id}", ['amount' => 60, 'reason' => 'Ice x2'])
+        ->assertOk()
+        ->assertJsonPath('data.updated_by', $cashier->id);
 
-    expect(ShiftTransaction::count())->toBe(1)
-        ->and((float) $entry->fresh()->amount)->toBe(50.0);
+    expect((float) $entry->fresh()->amount)->toBe(60.0)
+        ->and($entry->fresh()->created_by)->not->toBe($cashier->id);
 });
 
 test('an entry needs a known type, a positive amount and a reason', function (array $body, array $errors) {

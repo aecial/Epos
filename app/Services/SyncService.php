@@ -502,8 +502,6 @@ class SyncService
      */
     private function addTransaction(array $data, User $user, PosDevice $device, bool $offline, CarbonImmutable $at): array
     {
-        $this->assertManager($user);
-
         $data = $this->validate($data, [
             'transaction_uuid' => ['required', 'uuid'],
             'shift_uuid' => ['sometimes', 'nullable', 'uuid'],
@@ -539,8 +537,6 @@ class SyncService
      */
     private function updateTransaction(array $data, User $user): array
     {
-        $this->assertManager($user);
-
         $data = $this->validate($data, [
             ...$this->transactionReferenceRules(),
             'amount' => ['required', 'numeric', 'gt:0'],
@@ -818,13 +814,6 @@ class SyncService
         return filled($data['transaction_uuid'] ?? null)
             ? ShiftTransaction::query()->where('client_uuid', $data['transaction_uuid'])->first() ?? throw new ModelNotFoundException('That cash entry never reached the server.')
             : ShiftTransaction::query()->findOrFail($data['transaction_id']);
-    }
-
-    private function assertManager(User $user): void
-    {
-        if (! $user->isAdminOrManager()) {
-            throw new AuthorizationException('Only a manager or admin can record cash additions and expenses.');
-        }
     }
 
     private function rejectionMessage(\Throwable $e): string

@@ -264,7 +264,7 @@ VOID / CANCEL (line voided or ticket cancelled before payment):
 
 ### Shift Expenses & Cash Additions
 
-During an open shift, managers/admins can add cash additions (external funds) or record expenses from any POS terminal:
+During an open shift, any staff member can add cash additions (external funds) or record expenses from any POS terminal; each entry keeps who recorded it:
 
 **Cash Additions** (e.g., owner deposits cash, cash from delivery):
 
@@ -345,7 +345,7 @@ This matrix reflects what the code enforces today. "Manage" means the back-offic
 | Manage Ingredients, Ingredient Groups, Recipes | ✅    | ✅      | ❌      |
 | Open Shift                                     | ✅    | ✅      | ✅      |
 | Close Shift                                    | ✅    | ✅      | ✅      |
-| Add/Edit Shift Expenses & Cash Additions       | ✅    | ✅      | ❌      |
+| Add/Edit Shift Expenses & Cash Additions       | ✅    | ✅      | ✅      |
 | Create Tickets, Add Items, Discount, Merge, Cancel | ✅ | ✅      | ✅      |
 | Take Payment (charge a ticket)                 | ✅    | ✅      | ✅      |
 | Void an Item on an Open Ticket                 | passcode | passcode | needs a manager/admin passcode |
@@ -436,7 +436,7 @@ Each POS device has a fixed `terminal_id` (e.g. `POS-01`) that it sends when cre
 - Filter by date range / payment method; search by order number, customer name or receipt number (all supported by `GET /receipts`)
 - Tap to view/reprint (`POST /receipts/{id}/reprint` logs the duplicate; the POS adds the "DUPLICATE RECEIPT" watermark)
 
-#### 8. **Shift/Settings Screen** (Expense/addition controls: Manager/Admin only; closing a shift is open to every role)
+#### 8. **Shift/Settings Screen** (expenses, additions and closing the shift are open to every role)
 
 - Current shift info
 - Close shift button (confirmation modal; enter counted `closing_cash`; blocked while any ticket is still open)
@@ -677,7 +677,7 @@ Legend: `[x]` implemented and tested · `[~]` implemented on the server/API, cli
 - [x] Menu management (items, categories, modifier groups & modifiers)
 - [x] Inventory: direct / recipe / none items, ingredient groups, ingredients, recipes
 - [x] Shift open/close with a single-open-shift DB guard
-- [x] Shift expenses & cash additions (manager/admin) — API; soft delete
+- [x] Shift expenses & cash additions (any staff) — API; soft delete
 - [x] Shift cash reconciliation with expected totals, cash refunds and discrepancy
 - [x] Ticket creation with auto-duplicate names and per-shift order numbers
 - [x] Item add/remove from ticket (inventory reserve/release)
@@ -893,7 +893,7 @@ Automated (Pest) coverage today is marked ✅; the rest is manual or still to wr
 - [x] View receipt history (all terminals visible), filters, search, reprint log
 - [x] WebSocket broadcasts on ticket/item changes (KDS channel) — `KdsBroadcastTest`; general POS broadcasts (`shift.{shift_id}`) still unbuilt
 - [x] Close shift, verify totals (cash, GCash, split, additions, expenses, deleted entries, cash refunds, discrepancy; blocked while tickets are open; can't close twice) — `ShiftApiTest`
-- [x] Shift expenses & cash additions (manager/admin records and edits, any staff removes, soft delete, frozen once the shift closes) — `ShiftTransactionApiTest`
+- [x] Shift expenses & cash additions (any staff records, edits and removes, soft delete, frozen once the shift closes) — `ShiftTransactionApiTest`
 - [x] Refund list for the POS (status/shift filters, newest first, with lines) — `RefundApiTest`
 - [ ] Printer offline, fallback to digital receipt — _POS app_
 - [x] Offline sync — a whole outage day replayed at the times it happened, with printed receipt numbers, stock and drawer right and nothing on the KDS; resending changes nothing (`OfflineDayTest`); two phones on one shift, the last item sold twice, prices/payments that disagree, a ticket paid elsewhere, wrong clocks, sales after close, the close guard and `force`, online actions keeping every rule (`SyncConflictsTest`); the snapshot (`SnapshotTest`); Sync Review, badges, offline ticket marks, devices and the late-sync shift report (`SyncReviewPagesTest`)

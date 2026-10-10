@@ -8,7 +8,8 @@ class UpdateShiftTransactionRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return auth()->check() && auth()->user()->isAdminOrManager();
+        // Same as recording one: any staff member; the entry keeps who last changed it.
+        return auth()->check();
     }
 
     public function rules(): array

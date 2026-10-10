@@ -78,7 +78,8 @@ Think of each phone as a **waiter with a notebook**:
 - **`device_name`:** use a stable, readable name (the terminal's name). Managers see it on the Devices page.
 - **Roles:**
   - `cashier`: sells and sees only their own tickets.
-  - `manager`/`admin`: sees all tickets and records cash additions and expenses.
+  - `manager`/`admin`: sees all tickets.
+  - Any role can record cash additions and expenses.
 - **Sign-out (`POST /auth/logout`) is blocked while the outbox isn't empty.** Show "Connect to the server to send N waiting sales before signing out". Switching users is the same.
 - **On a `401`:** show the login screen, but keep the outbox. It is sent after someone signs in again.
 
@@ -244,8 +245,8 @@ Refer to things the phone created by their **uuid**, and to things that came fro
 | `ticket.discount` | ticket ref, `discount_amount` and/or `discount_percent` (0–100) | `ticket_total` |
 | `ticket.cancel` | ticket ref | `status` |
 | `ticket.charge` | ticket ref, `charges`: [{ `charge_uuid`, `payment_method` (`cash`/`gcash`), `amount`, `tendered_amount` (cash only), `payment_reference` (required for gcash), `receipt_number` (offline) }] | `status`, `charged`, `receipts`: [{ `charge_uuid`, `charge_id`, `receipt_id`, `receipt_number` }] |
-| `shift_transaction.add` | `transaction_uuid`, shift ref (optional), `type` (`expense`/`addition`), `amount`, `reason` — manager/admin | `transaction_id`, `shift_id` |
-| `shift_transaction.update` | transaction ref, `amount`, `reason` — manager/admin | `transaction_id` |
+| `shift_transaction.add` | `transaction_uuid`, shift ref (optional), `type` (`expense`/`addition`), `amount`, `reason` — any staff | `transaction_id`, `shift_id` |
+| `shift_transaction.update` | transaction ref, `amount`, `reason` — any staff | `transaction_id` |
 | `shift_transaction.delete` | transaction ref — any staff | `transaction_id` |
 
 **Things to know:**
@@ -271,7 +272,7 @@ Refer to things the phone created by their **uuid**, and to things that came fro
 | **Open tickets** | My open tickets (a manager: all); cancel; merge | `ticket.cancel`; merge is online-only (§12) |
 | **Receipts** | History from every terminal, search, reprint | Online only: `GET /receipts`, `GET /receipts/{id}`, `POST /receipts/{id}/reprint` |
 | **Refunds** | Request; approve/reject with a manager passcode | Online only (§12) |
-| **Shift** | Live totals, expenses and additions (manager), close shift | `GET /shifts/active`; `shift_transaction.*`; close is online-only (§12) |
+| **Shift** | Live totals, expenses and additions (any staff), close shift | `GET /shifts/active`; `shift_transaction.*`; close is online-only (§12) |
 
 **Stock:**
 

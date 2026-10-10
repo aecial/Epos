@@ -4,6 +4,7 @@ use App\Models\Charge;
 use App\Models\Receipt;
 use App\Models\Shift;
 use App\Models\ShiftAlias;
+use App\Models\ShiftTransaction;
 use App\Models\SyncIssue;
 use App\Models\Ticket;
 use App\Models\TicketItem;
@@ -237,13 +238,23 @@ test('a cashier cannot reach another cashier\'s ticket through sync', function (
     expect((float) $ticket->fresh()->discount_amount)->toBe(0.0);
 });
 
-test('only a manager records cash entries through sync', function () {
+test('a cashier records and edits cash entries through sync', function () {
     $phone = syncPhone();
-    posOpenShift($phone['user']);
+    $shift = posOpenShift($phone['user']);
+    $entry = syncUuid();
 
-    syncSend($phone['token'], [syncAction('shift_transaction.add', ['transaction_uuid' => syncUuid(), 'type' => 'expense', 'amount' => 50, 'reason' => 'Ice'])])
-        ->assertJsonPath('data.results.0.status', 'rejected')
-        ->assertJsonPath('data.results.0.message', 'Only a manager or admin can record cash additions and expenses.');
+    syncSend($phone['token'], [
+        syncAction('shift_transaction.add', ['transaction_uuid' => $entry, 'type' => 'expense', 'amount' => 50, 'reason' => 'Ice']),
+        syncAction('shift_transaction.update', ['transaction_uuid' => $entry, 'amount' => 75, 'reason' => 'Ice x2']),
+    ])
+        ->assertJsonPath('data.results.0.status', 'applied')
+        ->assertJsonPath('data.results.1.status', 'applied');
+
+    expect(ShiftTransaction::sole())
+        ->shift_id->toBe($shift->id)
+        ->created_by->toBe($phone['user']->id)
+        ->reason->toBe('Ice x2')
+        ->and((float) ShiftTransaction::sole()->amount)->toBe(75.0);
 });
 
 test('a phone clock in the future or before the shift opened is corrected and flagged', function () {

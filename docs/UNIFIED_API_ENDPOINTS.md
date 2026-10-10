@@ -301,7 +301,7 @@ Only **cash** refunds reduce expected cash; a GCash refund never touched the dra
 
 ## 4. SHIFT TRANSACTIONS (Expenses & Cash Additions)
 
-**Manager/admin only** for create and update. Only on an **open** shift.
+**Any staff** may create, edit and delete (cashiers included: the restaurant's phones may share one cashier account). Each entry keeps who recorded it (`created_by`), last changed it (`updated_by`) and removed it (`deleted_by`). Only on an **open** shift.
 
 ### GET `/shifts/{shift}/transactions`
 
@@ -317,15 +317,15 @@ All non-deleted transactions for the shift, newest first. Any staff. (Soft-delet
 - `amount`: numeric `> 0`
 - `reason`: required string, max 255
 
-`201` with the transaction (records `created_by`). `409` if the shift is closed. `403` for a cashier.
+`201` with the transaction (records `created_by`). `409` if the shift is closed.
 
 ### PUT `/shifts/{shift}/transactions/{transaction}`
 
-Body: `amount`, `reason` (type cannot change). Records `updated_by`. `404` if the transaction belongs to a different shift; `409` if the shift is closed. `403` for a cashier.
+Body: `amount`, `reason` (type cannot change). Records `updated_by`. `404` if the transaction belongs to a different shift; `409` if the shift is closed.
 
 ### DELETE `/shifts/{shift}/transactions/{transaction}`
 
-Soft delete (`deleted_at`, `deleted_by`); excluded from totals afterwards. `409` if the shift is closed. **Note:** unlike create/update, this action deliberately has no role check — any authenticated staff member can remove a mistaken entry. `404` if the transaction belongs to a different shift.
+Soft delete (`deleted_at`, `deleted_by`); excluded from totals afterwards. `409` if the shift is closed. `404` if the transaction belongs to a different shift.
 
 ---
 
@@ -867,8 +867,8 @@ What a phone keeps on hand to sell with no server. Refresh it whenever online; r
 | `ticket.discount` | ticket ref, `discount_amount`, `discount_percent` | `ticket_total` |
 | `ticket.cancel` | ticket ref | `status` |
 | `ticket.charge` | ticket ref, `charges[]`: `charge_uuid`, `payment_method`, `amount`, `tendered_amount`, `payment_reference`, `receipt_number` (offline) | `status`, `charged`, `receipts[]`: `charge_uuid`, `charge_id`, `receipt_id`, `receipt_number` |
-| `shift_transaction.add` | `transaction_uuid`, shift ref (optional), `type`, `amount`, `reason` (manager/admin) | `transaction_id`, `shift_id` |
-| `shift_transaction.update` | transaction ref, `amount`, `reason` (manager/admin) | `transaction_id` |
+| `shift_transaction.add` | `transaction_uuid`, shift ref (optional), `type`, `amount`, `reason` (any staff) | `transaction_id`, `shift_id` |
+| `shift_transaction.update` | transaction ref, `amount`, `reason` (any staff) | `transaction_id` |
 | `shift_transaction.delete` | transaction ref (any staff) | `transaction_id` |
 
 A cashier may act only on tickets they opened, same as the per-ticket routes; anything else is rejected `Not found.`
@@ -993,7 +993,7 @@ KDS (feed ordering/filtering/field omissions, completion toggle persistence and 
 
 Ticket access (another cashier gets `404` on every per-ticket route and the ticket is untouched, a manager/admin can view/add to/pay any ticket, a cashier lists only their own tickets in any status while a manager/admin lists all, merges can't pull in another cashier's ticket in the request or the service, a manager/admin can merge across cashiers, KDS and receipts still see everything) is covered by `TicketOwnershipTest`.
 
-API login (named device tokens, bad/inactive logins, the 6/min throttle, logout revoking only its own token, the `401` envelope) is covered by `ApiAuthTest`. Shifts (one open at a time, live totals, the close snapshot and discrepancy across cash/GCash/split payments, additions, expenses, deleted entries and cash refunds, blocked while a ticket is open, no double close) by `ShiftApiTest`; shift transactions (manager/admin create and edit, any staff deletes, soft delete, wrong-shift `404`, frozen once closed) by `ShiftTransactionApiTest`. Ticket create (per-shift order numbers, john → john2 → john3 across terminals and cashiers, names freed once a ticket closes), discount (fixed, percent precedence, floor at ₱0, follows line changes, locked once paid) and cancel (reservations released, voided lines not released twice, open only) by `TicketApiTest`; the refund list and its filters by `RefundApiTest`.
+API login (named device tokens, bad/inactive logins, the 6/min throttle, logout revoking only its own token, the `401` envelope) is covered by `ApiAuthTest`. Shifts (one open at a time, live totals, the close snapshot and discrepancy across cash/GCash/split payments, additions, expenses, deleted entries and cash refunds, blocked while a ticket is open, no double close) by `ShiftApiTest`; shift transactions (any staff creates, edits and deletes, soft delete, wrong-shift `404`, frozen once closed) by `ShiftTransactionApiTest`. Ticket create (per-shift order numbers, john → john2 → john3 across terminals and cashiers, names freed once a ticket closes), discount (fixed, percent precedence, floor at ₱0, follows line changes, locked once paid) and cancel (reservations released, voided lines not released twice, open only) by `TicketApiTest`; the refund list and its filters by `RefundApiTest`.
 
 Offline sync is covered by `tests/Feature/Offline/*`: a whole outage day replayed (an offline shift, tickets, discount, cash and GCash, an offline void, an expense) landing at the times it happened, with the printed receipt numbers, the right stock and drawer, and nothing on the KDS (`OfflineDayTest`); resending a batch or finishing a cut-off one changes nothing; two phones joining one shift, both selling the last item, prices and payments that disagree, a ticket paid elsewhere meanwhile, wrong phone clocks, sales arriving after their shift closed, the close-shift guard and its manager-only `force`, online actions keeping every rule, and per-action rejection (`SyncConflictsTest`); the snapshot and `menu_version` (`SnapshotTest`); and the back-office Sync Review, badges, offline ticket marks, devices page and late-sync shift report (`SyncReviewPagesTest`).
 
