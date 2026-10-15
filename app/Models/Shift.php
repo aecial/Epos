@@ -29,6 +29,7 @@ class Shift extends Model
         'opened_at',
         'opened_offline',
         'closed_at',
+        'sales_report_sent_at',
     ];
 
     protected function casts(): array
@@ -37,6 +38,7 @@ class Shift extends Model
             'opened_at' => 'datetime',
             'opened_offline' => 'boolean',
             'closed_at' => 'datetime',
+            'sales_report_sent_at' => 'datetime',
         ];
     }
 

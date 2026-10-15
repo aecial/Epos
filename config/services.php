@@ -35,4 +35,10 @@ return [
         ],
     ],
 
+    // Shift reports posted to the owner's group chat (TelegramShiftReportService).
+    'telegram' => [
+        'bot_token' => env('TELEGRAM_BOT_TOKEN'),
+        'chat_id' => env('TELEGRAM_CHAT_ID'),
+    ],
+
 ];
