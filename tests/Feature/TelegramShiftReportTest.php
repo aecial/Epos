@@ -42,6 +42,8 @@ function telegramMenu(): array
     $pantry = IngredientGroup::create(['name' => 'Pantry']);
     $itik = Ingredient::create(['ingredient_group_id' => $meats->id, 'name' => 'Itik', 'unit' => 'piece', 'quantity' => 50, 'cost_per_unit' => 180]);
     $oil = Ingredient::create(['ingredient_group_id' => $pantry->id, 'name' => 'Cooking Oil', 'unit' => 'liter', 'quantity' => 20, 'cost_per_unit' => 90]);
+    $garlic = Ingredient::create(['ingredient_group_id' => $pantry->id, 'name' => 'Garlic', 'unit' => 'gram', 'quantity' => 5000, 'cost_per_unit' => 0.2]);
+    $vinegar = Ingredient::create(['ingredient_group_id' => $pantry->id, 'name' => 'Vinegar', 'unit' => 'ml', 'quantity' => 5000, 'cost_per_unit' => 0.05]);
 
     $itikDishes = Category::create(['name' => 'Itik Dishes', 'status' => 'active', 'is_visible_to_pos' => true]);
     $drinks = Category::create(['name' => 'Drinks', 'status' => 'active', 'is_visible_to_pos' => true]);
@@ -62,8 +64,8 @@ function telegramMenu(): array
     $sisig->modifiers()->attach($lagi->id, ['price_modifier' => 0, 'status' => 'active', 'display_order' => 1]);
 
     return [
-        'fried' => $recipe('Fried Itik', 350, [[$itik, 1], [$oil, 0.25]]),
-        'adobo' => $recipe('Adobong Itik', 320, [[$itik, 1]]),
+        'fried' => $recipe('Fried Itik', 350, [[$itik, 1], [$oil, 0.25], [$garlic, 485]]),
+        'adobo' => $recipe('Adobong Itik', 320, [[$itik, 1], [$vinegar, 250]]),
         'sisig' => $sisig,
         'lagi' => $lagi,
         'coke' => Item::create(['category_id' => $drinks->id, 'name' => 'Coke', 'base_price' => 40, 'cost_price' => 25, 'quantity' => 100, 'inventory_type' => 'direct', 'status' => 'available']),
@@ -134,8 +136,9 @@ test('a closed shift is posted once: items by category, variants and special ite
         ->toContain(implode("\n", ['<b>Drinks</b>', 'Coke — 4']))
         ->toContain(implode("\n", ['<b>Itik Dishes</b>', 'Fried Itik — 3', 'Sisig Itik · Lagi — 2', 'Adobong Itik — 1', 'Sisig Itik — 1']))
         ->toContain(implode("\n", ['<b>Special</b>', 'Birthday Cake Slicing — 1', 'Corkage — 1']))
-        // 3 Fried + 1 Adobo + 1 normal Sisig = 5 Itik; Lagi took none. 3 Fried x 0.25 L oil.
-        ->toContain(implode("\n", ['<b>RAW MATERIALS USED</b>', '', '<b>Meats</b>', 'Itik — 5 pcs', '', '<b>Pantry</b>', 'Cooking Oil — 0.75 L']))
+        // 3 Fried + 1 Adobo + 1 normal Sisig = 5 Itik; Lagi took none. 3 Fried x 0.25 L oil and
+        // 485 g garlic (1,455 g reads as kg); 1 Adobo x 250 ml vinegar stays in ml.
+        ->toContain(implode("\n", ['<b>RAW MATERIALS USED</b>', '', '<b>Meats</b>', 'Itik — 5 pcs', '', '<b>Pantry</b>', 'Cooking Oil — 0.75 L', 'Garlic — 1.455 kg', 'Vinegar — 250 ml']))
         ->not->toContain('Adobong Itik — 5');
 
     // Categories in name order, special ones last.

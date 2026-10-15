@@ -247,8 +247,15 @@ class TelegramShiftReportService
         return $opened->format('M j, g:i A').' – '.$closed->format('M j, g:i A');
     }
 
+    /**
+     * "2.25 pcs", "0.5 kg", "750 g". A thousand grams or ml or more reads as kg or L ("1.455 kg").
+     */
     private function quantity(float $quantity, string $unit): string
     {
+        if (in_array($unit, ['gram', 'ml'], true) && $quantity >= 1000) {
+            [$quantity, $unit] = [$quantity / 1000, $unit === 'gram' ? 'kg' : 'liter'];
+        }
+
         $number = rtrim(rtrim(number_format($quantity, 3, '.', ','), '0'), '.');
         $label = match ($unit) {
             'piece' => $quantity == 1 ? 'pc' : 'pcs',
