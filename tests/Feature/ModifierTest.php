@@ -12,7 +12,7 @@ function authorizeModifierRequest(string $role): bool
     $user = User::factory()->create(['role' => $role]);
     auth()->setUser($user);
 
-    $request = new CreateModifierRequest();
+    $request = new CreateModifierRequest;
     $request->setUserResolver(fn () => auth()->user());
 
     return $request->authorize();
@@ -38,7 +38,7 @@ test('admin can read a single modifier', function () {
 
     $this->actingAs(User::factory()->create(['role' => 'admin']));
 
-    $this->get('/modifiers/' . $modifier->id)
+    $this->get('/modifiers/'.$modifier->id)
         ->assertOk()
         ->assertJsonPath('name', 'Medium');
 });
@@ -66,7 +66,7 @@ test('fried itik has chop and whole modifiers in the itik category', function ()
 
     $this->actingAs(User::factory()->create(['role' => 'admin']));
 
-    $this->get('/items/' . $item->id)
+    $this->get('/items/'.$item->id)
         ->assertOk()
         ->assertJsonPath('name', 'Fried Itik');
 

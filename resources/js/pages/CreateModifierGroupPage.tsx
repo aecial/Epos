@@ -9,7 +9,7 @@ export default function CreateModifierGroupPage() {
         { title: 'Modifier Management', href: route('modifier-management') },
         { title: 'Create Modifier Group', href: route('create-modifier-group') },
     ];
-    const form = useForm({ name: '', is_required: false });
+    const form = useForm({ name: '', is_required: false as boolean });
 
     const submit = (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();

@@ -17,7 +17,7 @@ beforeEach(function () {
 });
 
 test('service creates an item', function () {
-    $service = new ItemService();
+    $service = new ItemService;
 
     $item = $service->CreateItem(['category_id' => $this->category->id, 'name' => 'Fried Itik', 'base_price' => 295, 'cost_price' => 150, 'quantity' => 10, 'status' => 'available']);
 
@@ -25,9 +25,8 @@ test('service creates an item', function () {
 });
 
 test('service returns all items', function () {
-    
 
-    $service = new ItemService();
+    $service = new ItemService;
 
     $service->CreateItem(['category_id' => $this->category->id, 'name' => 'Fried Itik', 'base_price' => 295, 'cost_price' => 150, 'quantity' => 10, 'status' => 'available']);
 
@@ -36,7 +35,6 @@ test('service returns all items', function () {
     $names = $service->ReadAllItem()->pluck('name')->all();
 
     expect($names)->toContain('Fried Itik', 'Sisig Itik');
-
 
 });
 
@@ -47,7 +45,7 @@ test('service filters items by category', function () {
         'is_visible_to_pos' => true,
     ]);
 
-    $service = new ItemService();
+    $service = new ItemService;
 
     $service->CreateItem(['category_id' => $this->category->id, 'name' => 'Fried Itik', 'base_price' => 295, 'cost_price' => 150, 'quantity' => 10, 'status' => 'available']);
     $service->CreateItem(['category_id' => $otherCategory->id, 'name' => 'Pork Sisig', 'base_price' => 209, 'cost_price' => 120, 'quantity' => 10, 'status' => 'available']);
@@ -60,7 +58,7 @@ test('service filters items by category', function () {
 test('service can read a single item', function () {
     $item = Item::create(['category_id' => $this->category->id, 'name' => 'Fried Itik', 'base_price' => 295, 'cost_price' => 150, 'quantity' => 10, 'status' => 'available']);
 
-    $service = new ItemService();
+    $service = new ItemService;
 
     $result = $service->ReadItem($item);
 
@@ -70,7 +68,7 @@ test('service can read a single item', function () {
 test('service can update an item', function () {
     $item = Item::create(['category_id' => $this->category->id, 'name' => 'Fried Itik', 'base_price' => 295, 'cost_price' => 150, 'quantity' => 10, 'status' => 'available']);
 
-    $service = new ItemService();
+    $service = new ItemService;
 
     $updated = $service->UpdateItem(['base_price' => 300], $item);
 
@@ -80,7 +78,7 @@ test('service can update an item', function () {
 test('service can delete an item', function () {
     $item = Item::create(['category_id' => $this->category->id, 'name' => 'Fried Itik', 'base_price' => 295, 'cost_price' => 150, 'quantity' => 10, 'status' => 'available']);
 
-    $service = new ItemService();
+    $service = new ItemService;
 
     expect($service->DeleteItem($item))->toBeTrue()->and(Item::count())->toBe(0);
 });

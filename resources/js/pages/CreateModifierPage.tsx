@@ -13,7 +13,7 @@ export default function CreateModifierPage({ modifierGroups }: { modifierGroups:
         { title: 'Create Modifier', href: route('create-modifier') },
     ];
     const form = useForm({
-        modifier_group_id: modifierGroups[0]?.id ?? '',
+        modifier_group_id: (modifierGroups[0]?.id ?? '') as number | '',
         name: '',
         status: 'active' as ModifierStatus,
         is_stockless_variant: false as boolean,

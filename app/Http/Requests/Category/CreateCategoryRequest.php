@@ -11,7 +11,6 @@ class CreateCategoryRequest extends FormRequest
     /**
      * Determine if the user is authorized to make this request.
      */
-
     public function authorize(): bool
     {
         /** @var User|null $user */
@@ -31,7 +30,7 @@ class CreateCategoryRequest extends FormRequest
             'name' => ['required', 'string', 'max:255', 'unique:categories,name'],
             'status' => ['sometimes', 'in:active,inactive'],
             'type' => ['sometimes', 'in:menu,special'],
-            'is_visible_to_pos' => ['sometimes', 'boolean']
+            'is_visible_to_pos' => ['sometimes', 'boolean'],
         ];
     }
 }

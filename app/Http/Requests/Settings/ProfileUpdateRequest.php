@@ -11,7 +11,7 @@ class ProfileUpdateRequest extends FormRequest
     /**
      * Get the validation rules that apply to the request.
      *
-    * @return array<string, array<mixed>|string>
+     * @return array<string, array<mixed>|string>
      */
     public function rules(): array
     {

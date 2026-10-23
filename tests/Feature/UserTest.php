@@ -27,7 +27,7 @@ test('admin can update a user', function () {
     $user = User::factory()->create(['role' => 'cashier']);
 
     $this->actingAs($admin)
-        ->patch('/users/' . $user->id, [
+        ->patch('/users/'.$user->id, [
             'name' => 'Updated Cashier',
             'username' => 'updated.cashier',
             'password' => 'newpassword123',
@@ -49,7 +49,7 @@ test('admin can delete a user', function () {
     $user = User::factory()->create(['role' => 'cashier']);
 
     $this->actingAs($admin)
-        ->delete('/users/' . $user->id)
+        ->delete('/users/'.$user->id)
         ->assertRedirect(route('employee-management', absolute: false));
 
     $this->assertDatabaseMissing('users', ['id' => $user->id]);
@@ -76,7 +76,7 @@ test('only managers can have a passcode when updating users', function () {
     $manager = User::factory()->create(['role' => 'manager', 'passcode' => '1234']);
 
     $this->actingAs($admin)
-        ->patch('/users/' . $manager->id, [
+        ->patch('/users/'.$manager->id, [
             'role' => 'manager',
             'passcode' => '2468',
         ])
@@ -85,7 +85,7 @@ test('only managers can have a passcode when updating users', function () {
     expect(Hash::check('2468', $manager->refresh()->passcode))->toBeTrue();
 
     $this->actingAs($admin)
-        ->patch('/users/' . $manager->id, [
+        ->patch('/users/'.$manager->id, [
             'role' => 'cashier',
             'passcode' => '1357',
         ])

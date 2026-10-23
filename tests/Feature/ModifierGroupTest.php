@@ -9,7 +9,7 @@ function authorizeModifierGroupRequest(string $role): bool
     $user = User::factory()->create(['role' => $role]);
     auth()->setUser($user);
 
-    $request = new CreateModifierGroupRequest();
+    $request = new CreateModifierGroupRequest;
     $request->setUserResolver(fn () => auth()->user());
 
     return $request->authorize();
@@ -32,7 +32,7 @@ test('admin can read a single modifier group', function () {
 
     $this->actingAs(User::factory()->create(['role' => 'admin']));
 
-    $this->get('/modifier-groups/' . $group->id)
+    $this->get('/modifier-groups/'.$group->id)
         ->assertOk()
         ->assertJsonPath('name', 'Size');
 });
