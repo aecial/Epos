@@ -180,6 +180,85 @@ class SalesReportService
     }
 
     /**
+     * Names and quantities only, for the given paid tickets (one shift's, or the late ones synced
+     * after it closed) - the Telegram shift report. Items use the ItemsSold rows (a stockless
+     * variant is its own "Dish · Lagi" row, custom lines one row per typed name), grouped by menu
+     * category with special categories last; raw materials are what the recipe lines recorded at
+     * payment, grouped by ingredient group. Refunds aren't taken off.
+     *
+     * @param  array<int, int>  $ticketIds
+     * @return array{categories: array<int, array{name: string, items: array<int, array{name: string, quantity: int}>}>, rawMaterials: array<int, array{name: string, items: array<int, array{name: string, quantity: float, unit: string}>}>}
+     */
+    public function SoldOnTickets(array $ticketIds): array
+    {
+        $rows = [];
+
+        $lines = TicketItem::query()
+            ->whereIn('ticket_id', $ticketIds)
+            ->whereNull('voided_at')
+            ->orderBy('id')
+            ->with('stocklessVariants:id,ticket_item_id,modifier_id,name')
+            ->get(['id', 'ticket_id', 'item_id', 'item_name', 'line_type', 'is_stockless', 'quantity']);
+
+        foreach ($lines as $line) {
+            $row = &$this->rowFor($rows, $line);
+            $row['quantity'] += (int) $line->quantity;
+            unset($row);
+        }
+
+        $items = Item::query()
+            ->with('category:id,name,type')
+            ->whereKey(collect($rows)->pluck('item_id')->filter()->unique())
+            ->get(['id', 'category_id'])
+            ->keyBy('id');
+
+        $categories = collect($rows)
+            ->groupBy(fn (array $row): string => $items[$row['item_id']]->category->name ?? 'Other')
+            ->map(fn (Collection $categoryRows, string $name): array => [
+                'name' => $name,
+                'special' => $categoryRows->contains(fn (array $row): bool => ($items[$row['item_id']]->category->type ?? null) === 'special'),
+                'items' => $categoryRows
+                    ->sortBy([['quantity', 'desc'], ['name', 'asc']])
+                    ->map(fn (array $row): array => ['name' => $row['name'], 'quantity' => $row['quantity']])
+                    ->values()
+                    ->all(),
+            ])
+            ->sortBy([['special', 'asc'], ['name', 'asc']])
+            ->map(fn (array $category): array => ['name' => $category['name'], 'items' => $category['items']])
+            ->values();
+
+        $used = TicketItemIngredient::query()
+            ->join('ticket_items', 'ticket_items.id', '=', 'ticket_item_ingredients.ticket_item_id')
+            ->whereIn('ticket_items.ticket_id', $ticketIds)
+            ->whereNull('ticket_items.voided_at')
+            ->groupBy('ticket_item_ingredients.ingredient_id')
+            ->selectRaw('ticket_item_ingredients.ingredient_id, SUM(ticket_item_ingredients.quantity_used) as used')
+            ->pluck('used', 'ingredient_id');
+
+        $rawMaterials = Ingredient::query()
+            ->with('ingredientGroup:id,name')
+            ->whereKey($used->keys())
+            ->get()
+            ->groupBy(fn (Ingredient $ingredient): string => $ingredient->ingredientGroup->name ?? 'Other')
+            ->map(fn (Collection $ingredients, string $group): array => [
+                'name' => $group,
+                'items' => $ingredients
+                    ->sortBy('name')
+                    ->map(fn (Ingredient $ingredient): array => [
+                        'name' => $ingredient->name,
+                        'quantity' => round((float) $used[$ingredient->id], 3),
+                        'unit' => $ingredient->unit,
+                    ])
+                    ->values()
+                    ->all(),
+            ])
+            ->sortKeys()
+            ->values();
+
+        return ['categories' => $categories->all(), 'rawMaterials' => $rawMaterials->all()];
+    }
+
+    /**
      * The per-dish accumulator under an ingredient, created on first use.
      *
      * @param  array<int, array<int, array<string, mixed>>>  $materials

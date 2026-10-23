@@ -10,6 +10,11 @@ use Illuminate\Support\Facades\Schedule;
 // ticket get cleared mid-service; confirm this time against real operating hours.
 Schedule::command('kds:clear-completed')->dailyAt('03:00');
 
+// Closed shifts' items sold and raw materials used, to the Telegram group (TelegramShiftReportService).
+// Every minute so a closed shift shows up quickly and late offline sales follow; does nothing until
+// TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID are set.
+Schedule::command('telegram:shift-reports')->everyMinute()->withoutOverlapping();
+
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');

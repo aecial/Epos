@@ -35,6 +35,7 @@ class Ticket extends Model
         'created_offline',
         'offline_label',
         'synced_at',
+        'sales_report_sent_at',
     ];
 
     protected function casts(): array
@@ -45,6 +46,7 @@ class Ticket extends Model
             'closed_at' => 'datetime',
             'created_offline' => 'boolean',
             'synced_at' => 'datetime',
+            'sales_report_sent_at' => 'datetime',
         ];
     }
 
